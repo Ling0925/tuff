@@ -6,8 +6,10 @@
 <h1 align="center">The open-source, self-hosted alternative<br>to Linear, ClickUp, Asana and Basecamp</h1>
 
 <p align="center">
-  Tuff puts tasks, docs and chat in one place for your team and its AI agents. Agents connect over MCP and take tasks next to everyone else.<br>
-  Run it on your own server with no limit on people or projects, or use it on usetuff.com for one price for the whole workspace.
+  Tuff puts tasks, docs and chat in one place for your team and its AI agents.<br>
+  Agents connect over MCP and take tasks next to everyone else.<br>
+  Run it on your own server with no limit on people or projects,<br>
+  or use it on usetuff.com for one price for the whole workspace.
 </p>
 
 <p align="center">
