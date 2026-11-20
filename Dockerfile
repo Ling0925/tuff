@@ -118,10 +118,26 @@ COPY --from=build /app/web/dist ./web/dist
 # volume is mounted here in production — without one an upload is lost on
 # the next deploy, which is a data-loss bug wearing a deployment's clothes.
 ENV STORAGE_DIR=/data/storage
+# Where your own server dumps the database before it migrates
+# (`server/src/backup.ts`): compose mounts the `db-backups` volume here,
+# and a new volume takes this folder's owner and mode. The service's
+# edition never dumps, whatever this says.
+#
+# No `VOLUME /backups` here, though it would keep a dump past a container
+# made without a volume: Railway refuses to build a Dockerfile with
+# `VOLUME` in it, and usetuff.com and the Railway template are built from
+# this one. The app looks instead: a /backups that is not a mount point
+# gets no dump, and the log and Server settings say why.
+ENV BACKUP_DIR=/backups
+# `pg_dump` for that dump, and `pg_restore` to put one back: Alpine's
+# client for Postgres 17, the major version the compose file runs. A
+# `pg_dump` older than the server refuses it, and the start says so
+# before anything is migrated. About 7 MB with libpq.
 # And the base image's npm, npx, yarn and corepack go: nothing here runs
 # them, and npm's own bundled dependencies are most of what a scanner
 # reports against a Node image.
-RUN mkdir -p /data/storage && chown -R node:node /data \
+RUN apk add --no-cache postgresql17-client \
+ && mkdir -p /data/storage /backups && chown -R node:node /data /backups && chmod 700 /backups \
  && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
            /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
            /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-*

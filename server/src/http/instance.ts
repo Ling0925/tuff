@@ -126,6 +126,20 @@ instanceApi.delete('/instance/owners/:actorId', async (c) => {
 })
 
 /*
+ * The notice after an update, dismissed for every owner.
+ * It only hides the line: the
+ * backup it named stays where it is until its retention runs out.
+ */
+instanceApi.delete('/instance/update', async (c) => {
+  const ctx = c.get('ctx')
+  if (mayNot(ctx)) return c.json(hidden, 404)
+  const [r] = await withActor(ctx.actorId, ctx.workspaceId, (tx) => tx<{ ok: boolean }[]>`select instance_update_dismiss() as ok`)
+  if (!r?.ok) return c.json(hidden, 404)
+  const w = await whole(ctx)
+  return w ? c.json(await answer(ctx, w)) : c.json(hidden, 404)
+})
+
+/*
  * A letter to the owner who pressed, and nobody else: the address is the
  * account's own, never one typed here, so this cannot be made to mail a
  * stranger. Five a quarter of an hour.

@@ -3,9 +3,22 @@
  * `ServerVersion` in shared-schema. The server decides what is newer; the screen only draws it.
  */
 
-import type { ServerVersion } from '@tracker/shared-schema'
+import type { ServerUpdate, ServerVersion } from '@tracker/shared-schema'
 
-export type { ServerVersion }
+export type { ServerUpdate, ServerVersion }
+
+/**
+ * What the notice after an update says about the backup:
+ * where it is, that nothing in
+ * the database changed so none was needed, or why none was taken: the
+ * operator skipped it, no folder was set, the folder is not a volume, or
+ * the database's Postgres is newer than the image's `pg_dump`.
+ */
+export function backupState(u: ServerUpdate): 'taken' | 'unchanged' | 'skipped' | 'no_folder' | 'not_a_volume' | 'postgres_newer' {
+  if (u.backup) return 'taken'
+  if (u.migrations === 0) return 'unchanged'
+  return u.no_backup ?? 'no_folder'
+}
 
 /** The one command that updates a server — `scripts/update.sh`. */
 export const UPDATE_COMMAND = 'scripts/update.sh'

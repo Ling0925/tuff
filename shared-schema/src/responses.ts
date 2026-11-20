@@ -478,6 +478,29 @@ export const ServerRelease = z.object({
   security: z.boolean(),
 })
 /**
+ * What the last update of a server of one's own did, for its owners: the
+ * versions, the backup taken before migrating, and how many migrations
+ * ran.
+ */
+export const ServerUpdate = z.object({
+  /** The version it ran before, `X.Y.Z`; null when that is not known. */
+  from: z.string().nullable(),
+  /** The version it runs since, `X.Y.Z`. */
+  to: z.string(),
+  at: z.string(),
+  /** The dump's path inside the app's container; null when none was taken. */
+  backup: z.string().nullable(),
+  /** Why migrations ran with no backup: `SKIP_PRE_MIGRATION_BACKUP`, no
+      `BACKUP_DIR`, a folder that is not a volume, or a Postgres newer than
+      the image's `pg_dump`. Null when one was taken, or nothing migrated. */
+  no_backup: z.enum(['skipped', 'no_folder', 'not_a_volume', 'postgres_newer']).nullable(),
+  /** How many migrations ran; 0 when the update changed nothing in the database. */
+  migrations: z.number().int(),
+  /** The release's notes on GitHub; null for a build that is not a release. */
+  notes: z.string().nullable(),
+})
+export type ServerUpdate = z.infer<typeof ServerUpdate>
+/**
  * The version a server of one's own runs, and a newer one when there is —
  * for its owners only: `GET /api/instance` and `GET /api/me`'s `server`.
  */
@@ -491,6 +514,8 @@ export const ServerVersion = z.object({
   /** A release newer than `current`, or null: none heard of, none newer,
       or a build at `0.0.0`. */
   latest: ServerRelease.nullable(),
+  /** The last update, until an owner dismisses it, or null. */
+  updated: ServerUpdate.nullable(),
 })
 export const Instance = z.object({
   /** Whether somebody without an invitation may make an account. */

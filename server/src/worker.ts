@@ -305,13 +305,22 @@ await guardRls(sql, 'worker', process.env.NODE_ENV === 'production' && edition.r
  * called a function the migration half a minute later would make. Up to
  * five minutes, then on regardless — a worker that never starts is worse
  * than one error line.
+ *
+ * On your own server, for as long as it takes: there the server backs the
+ * database up before it migrates, which takes as long as the database is
+ * large, and compose starts the worker beside the app rather than after
+ * it is healthy. A worker that
+ * went on after five minutes would run this build against the schema
+ * before it. Said once a minute while it waits.
  */
 const wanted = newestMigration()
-for (let waited = 0; wanted && waited < 300_000 && !stopping; waited += 5_000) {
+const cap = edition.backups ? Number.POSITIVE_INFINITY : 300_000
+for (let waited = 0; wanted && waited < cap && !stopping; waited += 5_000) {
   const [row] = await withoutActor((tx) => tx<{ name: string | null }[]>`select max(name) as name from schema_migration`).catch(() => [
     { name: null },
   ])
   if (row?.name && row.name >= wanted) break
+  if (waited > 0 && waited % 60_000 === 0) console.log(`[worker] Waiting for the database to be migrated to ${wanted}…`)
   await new Promise((r) => setTimeout(r, 5_000))
 }
 

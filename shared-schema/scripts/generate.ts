@@ -83,6 +83,7 @@ const RESPONSES: Record<string, z.ZodType> = {
   SetupMail: S.SetupMail,
   ServerVersion: S.ServerVersion,
   ServerRelease: S.ServerRelease,
+  ServerUpdate: S.ServerUpdate,
   WayIn: S.WayIn,
   WaysIn: S.WaysIn,
   WayInStart: S.WayInStart,

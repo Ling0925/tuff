@@ -23,7 +23,8 @@ import { mayListen, mayWatch, tokenHears } from './listening.js'
 import { here } from './presence.js'
 import { typed } from './typing.js'
 import * as coedit from './coedit.js'
-import { migrate } from './db/migrate.js'
+import { BackupFailed, migrateWithBackup, noteVersion } from './backup.js'
+import { running } from './updates.js'
 import { edition } from './edition.js'
 import { serverClaimed, signUpOpen } from './instance.js'
 import { readMarkdown } from './mcp/markdownPool.js'
@@ -419,8 +420,15 @@ edition.sockets({ app, upgradeWebSocket, holding })
  * server that is up against the wrong schema is worse than one that is
  * down: the first serves wrong answers and the second is noticed.
  */
+/* On your own server a backup comes first, when anything is pending, and
+   a backup that fails stops the start with nothing applied — `backup.ts`,
+   The service never dumps. */
 if (process.env.MIGRATE_ON_START === '1') {
-  const applied = await migrate(env.databaseUrl, (sql) => edition.migrated(sql))
+  const { applied } = await migrateWithBackup(env.databaseUrl, edition).catch((e: unknown) => {
+    /* Said whole in the log already: no stack over it. */
+    if (e instanceof BackupFailed) process.exit(1)
+    throw e
+  })
   console.log(applied.length ? `migrated: ${applied.join(', ')}` : 'schema already current')
 }
 
@@ -432,6 +440,9 @@ if (process.env.MIGRATE_ON_START === '1') {
   const owner = postgres(env.databaseUrl, { max: 1, onnotice: () => {} })
   try {
     await edition.ready(owner)
+    /* The version this start runs, remembered for the next update's
+       notice and backup name; on the service, nothing. */
+    await noteVersion(owner, edition, running.version)
   } finally {
     await owner.end()
   }

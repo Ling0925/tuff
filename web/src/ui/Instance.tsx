@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, Refused } from '../data/api.js'
 import { ahead, know, known } from '../data/ahead.js'
 import { INSTANCE as W } from '../words/instance.js'
-import { checkState, releaseLink, UPDATE_COMMAND, type ServerVersion } from '../data/release.js'
+import { backupState, checkState, releaseLink, UPDATE_COMMAND, type ServerUpdate, type ServerVersion } from '../data/release.js'
 import { Button, Field, Hairline, InboxCode, Panel, SectionHead, Switch, quietLook } from './kit.jsx'
 import { PasswordField } from './Access.jsx'
 import { Line } from './WorkspaceSettings.jsx'
@@ -52,6 +52,19 @@ export function Instance({ meId }: { meId: string }) {
     } catch {
       setWhole(was)
       setSignUpSaid(W.failed)
+    }
+  }
+
+  /* The notice after an update goes now, for every owner; the server's
+     answer replaces it, or it comes back. */
+  async function dismiss() {
+    if (!whole?.version?.updated) return
+    const was = whole
+    keep({ ...whole, version: { ...whole.version, updated: null } })
+    try {
+      keep(await api<Whole>('/instance/update', { method: 'DELETE' }))
+    } catch {
+      keep(was)
     }
   }
 
@@ -203,7 +216,7 @@ export function Instance({ meId }: { meId: string }) {
         </Panel>
       </section>
 
-      {whole.version && <Version v={whole.version} />}
+      {whole.version && <Version v={whole.version} onDismiss={() => void dismiss()} />}
     </div>
   )
 }
@@ -373,7 +386,7 @@ function MailForm({ setup, onSaved }: { setup: MailSetup; onSaved: (w: Whole) =>
  * as the owner's face in the bar. When the daily check is off, one line
  * says so.
  */
-export function Version({ v }: { v: ServerVersion }) {
+export function Version({ v, onDismiss }: { v: ServerVersion; onDismiss?: () => void }) {
   const state = checkState(v)
   const latest = v.latest
   const notes = latest ? releaseLink(latest.url) : null
@@ -385,6 +398,7 @@ export function Version({ v }: { v: ServerVersion }) {
           label={<span data-testid="instance-version-current">{W.running(v.current)}</span>}
           hint={state === 'off' ? W.checkOff : state === 'unreleased' ? W.unreleased : W.checkOn}
         />
+        {v.updated && <Updated u={v.updated} onDismiss={onDismiss} />}
         {latest && (
           <>
             <Hairline inset={16} />
@@ -404,25 +418,84 @@ export function Version({ v }: { v: ServerVersion }) {
                   </span>
                 }
               >
-                {notes && (
-                  <a
-                    data-control
-                    data-testid="instance-version-notes"
-                    href={notes}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="inline-flex shrink-0 items-center gap-2 rounded-full px-4 text-sm font-medium transition-transform active:scale-[0.97]"
-                    style={{ height: 'var(--control-h)', ...quietLook }}
-                  >
-                    {W.releaseNotes}
-                  </a>
-                )}
+                {notes && <NotesLink href={notes} testId="instance-version-notes" />}
               </Line>
             </div>
           </>
         )}
       </Panel>
     </section>
+  )
+}
+
+/** A release's notes on GitHub, as a quiet button that opens a new tab. */
+function NotesLink({ href, testId }: { href: string; testId: string }) {
+  return (
+    <a
+      data-control
+      data-testid={testId}
+      href={href}
+      target="_blank"
+      rel="noreferrer noopener"
+      className="inline-flex shrink-0 items-center gap-2 rounded-full px-4 text-sm font-medium transition-transform active:scale-[0.97]"
+      style={{ height: 'var(--control-h)', ...quietLook }}
+    >
+      {W.releaseNotes}
+    </a>
+  )
+}
+
+/**
+ * The last update, until an owner dismisses it: the two versions, where
+ * the backup taken before migrating is — or why there is none — and how
+ * many database changes it made.
+ */
+function Updated({ u, onDismiss }: { u: ServerUpdate; onDismiss?: (() => void) | undefined }) {
+  const notes = u.notes ? releaseLink(u.notes) : null
+  const backup = backupState(u)
+  return (
+    <>
+      <Hairline inset={16} />
+      <div data-testid="instance-version-updated" data-backup={backup}>
+        <Line
+          label={u.from && u.from !== u.to ? W.updatedFromTo(u.from, u.to) : W.updatedTo(u.to)}
+          hint={
+            backup === 'unchanged' ? (
+              W.noChanges
+            ) : (
+              <span className="flex flex-col gap-1">
+                <span>{W.changes(u.migrations)}</span>
+                {backup === 'taken' ? (
+                  <span className="flex flex-wrap items-center gap-1">
+                    {W.backupAt}
+                    <code className="select-all break-all text-ink-2" data-testid="instance-version-backup">
+                      {u.backup}
+                    </code>
+                  </span>
+                ) : (
+                  <span>
+                    {backup === 'skipped'
+                      ? W.backupSkipped
+                      : backup === 'not_a_volume'
+                        ? W.backupNotAVolume
+                        : backup === 'postgres_newer'
+                          ? W.backupPostgresNewer
+                          : W.noBackup}
+                  </span>
+                )}
+              </span>
+            )
+          }
+        >
+          {notes && <NotesLink href={notes} testId="instance-version-updated-notes" />}
+          {onDismiss && (
+            <Button data-testid="instance-version-dismiss" onClick={onDismiss}>
+              {W.dismiss}
+            </Button>
+          )}
+        </Line>
+      </div>
+    </>
   )
 }
 

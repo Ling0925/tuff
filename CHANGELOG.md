@@ -11,7 +11,8 @@ and Tuff uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html):
 
 The database is migrated forward when the app starts, and migrations never
 run backwards. To go back to an older version, restore the backup taken
-before the update: `scripts/update.sh` takes one and prints the commands.
+before the update: the app takes one before it migrates, and
+`scripts/update.sh` prints the commands.
 
 ## [Unreleased]
 
@@ -35,8 +36,15 @@ The first public release of Tuff for your own server.
 - A released image for linux/amd64 and linux/arm64,
   `ghcr.io/usetuff/tuff`, signed with cosign, with build provenance and
   an SBOM.
-- `scripts/update.sh`, which backs up the database, moves to a new
-  release and waits until it is healthy.
+- A backup before every migration: the app dumps the database into the
+  `db-backups` volume before it applies any, and doesn't start if the
+  dump fails. Kept 30 days (`BACKUP_RETENTION_DAYS`);
+  `SKIP_PRE_MIGRATION_BACKUP=1` skips it. After an update, Server settings
+  says which version you came from and where the backup is, or why none
+  was taken. `scripts/restore.sh` puts one back, keeping the database it
+  replaces.
+- `scripts/update.sh`, which moves to a new release, waits until it is
+  healthy, and names the backup the server took.
 - `/health` reports the running version.
 - Server settings shows the running version and says when a newer one is
   out. A security release also puts a red dot on the owner's picture. The

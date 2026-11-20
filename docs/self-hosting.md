@@ -56,7 +56,7 @@ up a server as below.
 | Service    | What it does |
 | ---------- | ------------ |
 | `postgres` | The database, on the `pgdata-prod` volume. Not published on any port. |
-| `app`      | The API and the web app, on port 8787 inside the network. Migrates the database when it starts. Runs `ghcr.io/usetuff/tuff:$TUFF_VERSION`. |
+| `app`      | The API and the web app, on port 8787 inside the network. Migrates the database when it starts, after backing it up to the `db-backups` volume ([Backups](#backups)). Runs `ghcr.io/usetuff/tuff:$TUFF_VERSION`. |
 | `worker`   | The same image, running the background work: mail, digests, webhooks, push, and the clear-out that really deletes what was deleted. |
 | `caddy`    | HTTPS, and the only thing reachable from outside. |
 
@@ -265,11 +265,13 @@ make yourself. Without them, Settings says they are not set up here.
 | `TUFF_IMAGE` | `ghcr.io/usetuff/tuff` | Where the image is pulled from, for a registry of your own that mirrors it. |
 | `TRY_LOCALHOST` | off | Only for [trying Tuff on your computer](#try-it-on-your-computer), which sets it. Never on a server: with any `APP_URL` but `http://localhost` or `http://127.0.0.1` the app refuses to start. |
 | `UPDATE_CHECK` | on | `off` stops the daily request for the latest release — see [Hearing of a new version](#hearing-of-a-new-version). |
+| `BACKUP_RETENTION_DAYS` | `30` | How long the backups taken before migrating are kept. At least 1; empty or not a number is the default. See [Backups](#backups). |
+| `SKIP_PRE_MIGRATION_BACKUP` | off | `1` migrates without backing up first. Only if you have backups of your own. |
 
 The compose file sets `DATABASE_URL`, `DATABASE_URL_APP`,
 `DATABASE_URL_WORKER`, `NODE_ENV`, `STORAGE_DIR`, `WEB_DIR`,
-`MIGRATE_ON_START` and `PORT` itself, and a line in `.env` with one of
-those names is ignored.
+`MIGRATE_ON_START`, `BACKUP_DIR` and `PORT` itself, and a line in `.env`
+with one of those names is ignored.
 
 ## Behind a proxy of your own
 
@@ -435,16 +437,24 @@ first all the same.
    you name, and shows the changelog between yours and it;
 2. asks before going on (`--yes` skips the question, `--dry-run` stops here);
 3. pulls the new image while the old one keeps serving;
-4. backs up the database to `backups/tuff-<old version>-<date>.dump`,
-   readable only by you;
-5. sets `TUFF_VERSION` in `.env` and runs `docker compose up -d`;
-6. waits up to five minutes (`TUFF_UPDATE_WAIT`, in seconds) for the app to
-   be healthy and report the new version.
+4. sets `TUFF_VERSION` in `.env` and runs `docker compose up -d`;
+5. waits up to five minutes (`TUFF_UPDATE_WAIT`, in seconds) for the app to
+   be healthy and report the new version, and says which backup the
+   server took.
 
-If the app doesn't come up, it prints the commands to go back to the
-version you had, with the database as it was: stop the app and the worker,
-put the old `TUFF_VERSION` back, drop and recreate the database, restore
-the backup, and start again.
+The backup is the server's own: when the new version has migrations, the
+app backs the database up before applying any of them, and doesn't start
+if it can't ([Backups](#backups)). After the update, Server settings says
+which version you came from, where the backup is, and links to the release
+notes, until you dismiss it.
+
+If the app doesn't come up, `update.sh` prints the commands to go back to
+the version you had, with the database as it was: stop the app and the
+worker, put the old `TUFF_VERSION` back, restore the server's backup with
+`scripts/restore.sh` if the database was migrated, and start again. It
+reads whether anything was migrated from the database itself; when nothing
+was, the version is all there is to put back. While the app is still
+backing up or migrating, `update.sh` keeps waiting past its five minutes.
 
 **Checking out the tag is part of updating.** The image holds the app; the
 compose file, `Caddyfile` and the scripts come from this checkout, and the
@@ -458,11 +468,9 @@ migrated. So `update.sh` refuses to move to an older release unless you pass
 `--force`, which is for after you've restored a backup taken on that
 release.
 
-Updating by hand is the same steps:
+Updating by hand is the same steps, and the server backs up the same way:
 
 ```bash
-mkdir -p -m 700 backups
-(umask 077; docker compose exec -T postgres pg_dump -U tracker -d tracker --format=custom > backups/tuff-$(date +%F).dump)
 # set TUFF_VERSION=1.2.0 in .env
 docker compose pull
 docker compose up -d
@@ -532,12 +540,91 @@ COMPOSE_FILE=docker-compose.prod.yml:docker-compose.build.yml
 ```
 
 then `docker compose up -d --build`. The first build takes a few minutes.
-To update, back up, then `git fetch --tags && git checkout v1.2.0` and
-`docker compose up -d --build` again. `update.sh` refuses to run on a
+To update, `git fetch --tags && git checkout v1.2.0` and
+`docker compose up -d --build` again; the app backs the database up before
+it migrates, as a released image does. `update.sh` refuses to run on a
 server built this way, since the version it would set isn't what you
 built.
 
 ## Backups
+
+### Before every migration
+
+When the app starts and the database has migrations it hasn't applied —
+after an update, almost always — it backs the database up first, with
+`pg_dump` in Postgres's own format, into the `db-backups` volume:
+
+```
+/backups/tuff-1.2.0-m301-20261120-101500.dump   # the version it ran before, its newest migration, the date and time (UTC)
+```
+
+- **Only when something is pending.** A restart of the same version takes
+  no backup. Nor does a new database on its first start.
+- **One per update.** The pending migrations go in one transaction, so one
+  that fails leaves the database as the backup has it. If the app is
+  started again after that — its restart policy does it every minute — it
+  uses the backup it already took instead of taking another, and says so.
+- **A failed backup stops the start.** If the dump fails or comes out
+  empty — a full disk is the usual cause — no migration is applied, the app
+  doesn't start, and its log (`docker compose logs app`) says why and what
+  to do. The database is as it was, so going back to your old
+  `TUFF_VERSION` is safe. Compose stops the old container before it starts
+  the new one, so the server is down until you do one or the other; the
+  app's restart policy keeps retrying, and each try applies nothing.
+- **When a backup can't be kept or made, the app migrates without one and
+  says so** in its log and in Server settings: when `/backups` isn't a
+  volume (a compose file from before this, or a platform that gives the
+  container no volume there), since a backup there would be lost with the
+  container; and when the database runs a newer major version of Postgres
+  than the image's `pg_dump` (17), which can't read it.
+- **Kept 30 days**, and the newest two always, whatever their age. Older
+  ones are deleted when the app next migrates. `BACKUP_RETENTION_DAYS` in
+  `.env` changes it.
+- **`SKIP_PRE_MIGRATION_BACKUP=1`** in `.env` migrates without one, for a
+  server whose database is backed up some other way. The log says no backup
+  was taken. **On Railway**, the template sets it: the container's disk
+  doesn't outlive a deploy, a service gets one volume, and Railway's own
+  Postgres backups are the backup there.
+
+To list them, or copy one off the machine:
+
+```bash
+docker compose exec postgres ls -l /backups
+docker compose cp app:/backups/tuff-1.2.0-m301-20261120-101500.dump .
+```
+
+They live on the same disk as the database. They undo an update that went
+wrong; they don't protect you from losing the machine. Copy them, or the
+backups below, somewhere else.
+
+### Restoring one
+
+One command, with the backup's name:
+
+```bash
+scripts/restore.sh tuff-1.2.0-m301-20261120-101500.dump
+```
+
+It checks the file is a whole dump before it changes anything, stops the
+app and the worker, renames the database to
+`tracker_before_restore_<date>`, and restores the backup as `tracker` with
+`pg_restore --create`, so the database's own settings and rights come back
+with it. Nothing is dropped: if the restore fails, or you stop it with
+Ctrl-C, the database is renamed back. It works on the compose project
+`.env` names, whatever `COMPOSE_PROJECT_NAME` your shell has, and says
+which before it starts. Then put `TUFF_VERSION` in `.env` back to the version in the file's
+name (and check out its tag), and run `docker compose up -d`. Once you've
+checked everything is there, drop the old database with the command
+`restore.sh` prints:
+
+```bash
+docker compose exec postgres dropdb -U tracker tracker_before_restore_20261120_103000
+```
+
+`update.sh` prints the `restore.sh` command with the right file name when an
+update fails after migrating.
+
+### Whenever you like
 
 The database, in Postgres's own format:
 
@@ -561,18 +648,12 @@ so the database and its roles exist, then
 ```bash
 docker compose cp backups/tuff-files-2026-01-31/. app:/data/storage
 docker compose exec -u root app chown -R node:node /data/storage
-docker compose stop app worker
-docker compose exec -T postgres dropdb -U tracker --force tracker
-docker compose exec -T postgres createdb -U tracker -O tracker tracker
-docker compose exec -T postgres pg_restore -U tracker -d tracker < backups/tuff-2026-01-31.dump
+scripts/restore.sh backups/tuff-2026-01-31.dump
 docker compose up -d
 ```
 
-The app and the worker are stopped while the dump goes in, so neither reads
-a table that is being replaced. The database is dropped and made again
-rather than restored over, so nothing a later release added is left behind.
-The same steps take a server back after an update that went wrong:
-`update.sh` prints them with its own backup's name.
+`restore.sh` takes a file on this machine as well as a name in the
+`db-backups` volume, and does the same with it.
 
 ## Rotating the secrets
 

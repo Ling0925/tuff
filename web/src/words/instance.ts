@@ -55,6 +55,35 @@ export const INSTANCE = say({
   howToUpdate: ['To update, run this on the server:', 'Pour mettre à jour, exécutez cette commande sur le serveur :'],
   releaseNotes: ['Release notes', 'Notes de version'],
   updateAvailable: ['A security update is available', 'Une mise à jour de sécurité est disponible'],
+  /* After an update. */
+  updatedFromTo: [
+    (from: string, to: string) => `Updated from version ${from} to ${to}`,
+    (from: string, to: string) => `Mis à jour de la version ${from} vers la version ${to}`,
+  ],
+  updatedTo: [(to: string) => `Updated to version ${to}`, (to: string) => `Mis à jour vers la version ${to}`],
+  backupAt: ['Backup from before the update:', 'Sauvegarde d’avant la mise à jour :'],
+  noChanges: ['No database changes, so no backup was needed.', 'Aucune modification de la base de données, donc aucune sauvegarde.'],
+  backupSkipped: [
+    'No backup was taken: SKIP_PRE_MIGRATION_BACKUP is set.',
+    'Aucune sauvegarde n’a été faite : SKIP_PRE_MIGRATION_BACKUP est défini.',
+  ],
+  noBackup: [
+    'No backup was taken: no backup folder is set (BACKUP_DIR).',
+    'Aucune sauvegarde n’a été faite : aucun dossier de sauvegarde n’est défini (BACKUP_DIR).',
+  ],
+  backupNotAVolume: [
+    'No backup was taken: the backup folder isn’t a volume, so a backup there would be lost with the container.',
+    'Aucune sauvegarde n’a été faite : le dossier des sauvegardes n’est pas un volume, elle aurait été perdue avec le conteneur.',
+  ],
+  backupPostgresNewer: [
+    'No backup was taken: the database runs a newer Postgres than this version can back up.',
+    'Aucune sauvegarde n’a été faite : la base de données utilise une version de Postgres plus récente que celle que cette version sait sauvegarder.',
+  ],
+  changes: [
+    (n: number) => (n === 1 ? '1 database change' : `${n} database changes`),
+    (n: number) => (n === 1 ? '1 modification de la base de données' : `${n} modifications de la base de données`),
+  ],
+  dismiss: ['Dismiss', 'Ignorer'],
 
   tooMany: ['Too many attempts. Try again in a few minutes.', 'Trop de tentatives. Réessayez dans quelques minutes.'],
   failed: ['Couldn’t save that. Try again.', 'Impossible d’enregistrer. Réessayez.'],

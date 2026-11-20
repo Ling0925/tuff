@@ -59,7 +59,9 @@ services:
       POSTGRES_USER: tracker
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (scripts/setup.sh writes it)}
       POSTGRES_DB: tracker
-    volumes: ['pgdata-prod:/var/lib/postgresql/data']
+    # The app's backups too, read-only, so restoring one is a single
+    # `exec` here — `docs/self-hosting.md`, "Backups".
+    volumes: ['pgdata-prod:/var/lib/postgresql/data', 'db-backups:/backups:ro']
     # No published port. The database is reachable from the other
     # containers on the compose network and from nowhere else — a Postgres
     # on the public internet is found by scanners within the hour.
@@ -100,11 +102,21 @@ services:
       # The setup link's token (scripts/setup.sh writes it), told to the
       # database on every start while nobody owns the server.
       SETUP_TOKEN: ${SETUP_TOKEN:-}
+      # Before it migrates anything, the app dumps the database here
+      # (`db-backups`), and does not start if it can't. Kept
+      # BACKUP_RETENTION_DAYS (30); SKIP_PRE_MIGRATION_BACKUP=1 in `.env`
+      # skips it. `docs/self-hosting.md`, "Backups".
+      BACKUP_DIR: /backups
     # Uploads, unless a bucket is configured. A named volume and not a bind
     # mount: without one, every rebuild loses every file anybody has
     # attached — which looks like a working install right up to the moment
     # somebody looks for a document.
-    volumes: ['uploads:/data/storage']
+    volumes: ['uploads:/data/storage', 'db-backups:/backups']
+    # The image's check, with five minutes to come up: the backup and the
+    # migrations run before the app answers, and a large database takes a
+    # while to dump. Failures inside the start period don't count.
+    healthcheck:
+      start_period: 5m
     depends_on:
       postgres: { condition: service_healthy }
 
@@ -127,9 +139,13 @@ services:
       disable: true
     depends_on:
       postgres: { condition: service_healthy }
-      # Healthy, not started: by then the app has migrated, and the
-      # worker's role has the password it is about to sign in with.
-      app: { condition: service_healthy }
+      # Started, not healthy: the app backs the database up before it
+      # migrates, which takes as long as the database is large, and
+      # `docker compose up -d` waiting on its health gave up on a long
+      # backup. The worker waits for the migrations itself, for as long as
+      # they take. On a first start it may sign in before the app has given
+      # its role a password; it is restarted until it can.
+      app: { condition: service_started }
 
   # TLS, and the only thing on the public internet.
   #
@@ -157,5 +173,7 @@ volumes:
   # folder — with its password `tracker`.
   pgdata-prod:
   uploads:
+  # The database as it was before each migration, 30 days of them.
+  db-backups:
   caddy_data:
   caddy_config:

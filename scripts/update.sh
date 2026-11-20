@@ -10,10 +10,15 @@
 #
 # In order: it finds the release (the latest one from GitHub, unless you
 # name one), shows what changed since yours, pulls the new image while the
-# old one keeps serving, backs the database up to backups/, sets
-# TUFF_VERSION in .env, restarts, and waits until the app is healthy and
-# reports the new version. If it isn't, it prints the exact commands to go
-# back to the version you had, with your data as it was.
+# old one keeps serving, sets TUFF_VERSION in .env, restarts, and waits
+# until the app is healthy and reports the new version. If it isn't, it
+# prints the exact commands to go back to the version you had, with your
+# data as it was.
+#
+# The backup is the server's: before the new version applies a migration,
+# the app dumps the database into the db-backups volume
+# (/backups/tuff-<old version>-m<migration>-<date>-<time>.dump), and doesn't start if
+# the dump fails. This script says which dump it took.
 #
 # Migrations only go forward. The app migrates the database when it starts,
 # so an older release can't run on a database a newer one has migrated:
@@ -69,7 +74,7 @@ env_value() { sed -n "s/^$1=//p" .env | tail -1 | sed -e 's/^"\(.*\)"$/\1/' -e "
 case "$(env_value COMPOSE_FILE)" in
   *docker-compose.build.yml*)
     die "This server builds Tuff from this checkout (docker-compose.build.yml is in COMPOSE_FILE), so
-there is no image for this script to move. Back up (docs/self-hosting.md), then:
+there is no image for this script to move. The app backs the database up before it migrates. Run:
   git fetch --tags && git checkout v<version>
   docker compose up -d --build
 Or, to run the released images instead, take docker-compose.build.yml out of COMPOSE_FILE in .env
@@ -145,13 +150,13 @@ if [ "$dry" = 1 ]; then
 fi
 if [ "$yes" != 1 ]; then
   [ -t 0 ] || die "Not asking without a terminal. Run it with --yes to update without asking."
-  printf 'Update to %s? It backs up the database first. [y/N] ' "$target"
+  printf 'Update to %s? [y/N] ' "$target"
   read -r answer
   case "$answer" in y|Y|yes|YES) ;; *) say "Nothing was changed."; exit 0 ;; esac
 fi
 
 # The target's version, for compose only: .env is not changed until the
-# image is here and the backup is taken.
+# image is here.
 dc_target() { TUFF_VERSION=$target docker compose "$@"; }
 
 # ------------------------------------------------------------- the image
@@ -159,17 +164,52 @@ bold "Pulling $target"
 dc_target pull --quiet app worker || die "Couldn't pull the image for $target. Nothing was changed; the server is as it was."
 
 # ---------------------------------------------------------------- backup
-bold "Backing up the database"
-[ -n "$(docker compose ps --status running -q postgres 2>/dev/null)" ] \
-  || die "The database isn't running, so it can't be backed up. Start it with \`docker compose up -d postgres\` and run this again."
-mkdir -p backups && chmod 700 backups
-backup=backups/tuff-${current:-unknown}-$(date +%Y%m%d-%H%M%S).dump
-(
-  umask 077
-  docker compose exec -T postgres pg_dump -U tracker -d tracker --format=custom > "$backup"
-) || { rm -f "$backup"; die "The backup failed, so nothing was changed. The server is as it was."; }
-[ "$(head -c 5 "$backup")" = PGDMP ] || { rm -f "$backup"; die "The backup isn't a database dump, so nothing was changed."; }
-say "  $backup ($(du -h "$backup" | cut -f1))"
+# The server's own: before it applies a migration, the app dumps the
+# database into the db-backups volume, which the postgres container can
+# read too. What is there now, so the dump this update takes can be named
+# afterwards.
+case "$(env_value SKIP_PRE_MIGRATION_BACKUP)" in
+  1|true|TRUE|yes|YES|on|ON) skipping=1 ;;
+  *) skipping=0 ;;
+esac
+dumps() {
+  docker compose exec -T postgres sh -c 'ls -1 /backups 2>/dev/null' 2>/dev/null \
+    | tr -d '\r' | grep -E '^tuff-[A-Za-z0-9.]+-m[0-9]+-[0-9]{8}-[0-9]{6}\.dump$' | sort || true
+}
+# The backup this update stands on. First what the app said since it was
+# started — "Backed up the database to …", or "… already holds the database
+# from before this update" when a start before took it, which no listing
+# of new files would show — and the first it named; else the oldest dump
+# that wasn't there before, by the date and time in its name.
+said_dump() {
+  [ -n "${started:-}" ] || return 0
+  docker compose logs --no-color --since "$started" app 2>/dev/null \
+    | sed -n -e 's#.*\[backup\] Backed up the database to /backups/\([^ ]*\.dump\) (.*#\1#p' \
+             -e 's#.*\[backup\] /backups/\([^ ]*\.dump\) already holds the database.*#\1#p' \
+    | head -1
+}
+taken() {
+  local d
+  d=$(said_dump)
+  [ -n "$d" ] && { printf '%s\n' "$d"; return; }
+  comm -13 <(printf '%s\n' "$before") <(dumps) | sort -t- -k4,4 -k5,5 | head -1
+}
+# The newest migration the database has. Whether anything was migrated is
+# read here, never guessed from whether a backup appeared.
+schema_head() {
+  docker compose exec -T postgres psql -U tracker -d tracker -qAtc 'select max(name) from schema_migration' 2>/dev/null \
+    | tr -d '\r' || true
+}
+before=$(dumps)
+head_before=$(schema_head)
+if [ "$skipping" = 1 ]; then
+  bold "No backup: SKIP_PRE_MIGRATION_BACKUP is set in .env"
+  say "  The server won't back the database up before migrating. Have a backup of your own."
+else
+  bold "Backup"
+  say "  If $target changes the database, the server backs it up first, to /backups in the"
+  say "  db-backups volume, and doesn't start if the backup fails. Nothing to do here."
+fi
 
 # ------------------------------------------------------------ the switch
 # .env rewritten whole, through a file beside it that only you can read,
@@ -189,29 +229,48 @@ set_version() {
 set_version "$target"
 
 rollback() {
-  local why=$1
+  local why=$1 dump head_now migrated=0
+  dump=$(taken)
+  head_now=$(schema_head)
+  [ -n "$head_now" ] && [ "$head_now" != "$head_before" ] && migrated=1
   printf '\n\033[31m%s\033[0m\n\n' "$why" >&2
   cat >&2 <<EOF
 What the app said last:
   docker compose logs --tail 100 app
 
-To go back to ${current:-the version you had}, with the database as it was before this update:
-
-  docker compose stop app worker
 EOF
+  if [ "$migrated" = 1 ] && [ -n "$dump" ]; then
+    printf 'The database was migrated (%s → %s). The server backed it up first: /backups/%s\n' "${head_before:-?}" "$head_now" "$dump" >&2
+    printf 'To go back to %s, with the database as it was before this update:\n\n' "${current:-the version you had}" >&2
+  elif [ "$migrated" = 1 ]; then
+    printf 'The database was migrated (%s → %s), and the server took no backup first — the log says\n' "${head_before:-?}" "$head_now" >&2
+    printf 'why. Restore your own backup from before the update, then go back to %s:\n\n' "${current:-the version you had}" >&2
+  else
+    printf 'Nothing in the database was migrated (it is at %s, as before), so it is as it was.\n' "${head_now:-?}" >&2
+    printf 'To go back to %s:\n\n' "${current:-the version you had}" >&2
+  fi
+  if [ "$migrated" = 1 ] && [ -n "$dump" ]; then
+    printf '  scripts/restore.sh %s\n' "$dump" >&2
+  else
+    printf '  docker compose stop app worker\n' >&2
+  fi
   if [ -n "$current" ]; then
     printf '  sed -i.bak "s/^TUFF_VERSION=.*/TUFF_VERSION=%s/" .env && rm .env.bak\n' "$current" >&2
   else
     printf '  # take the TUFF_VERSION line out of .env, add docker-compose.build.yml to COMPOSE_FILE,\n  # and check out the commit you ran before (git log)\n' >&2
   fi
   cat >&2 <<EOF
-  docker compose exec -T postgres dropdb -U tracker --force tracker
-  docker compose exec -T postgres createdb -U tracker -O tracker tracker
-  docker compose exec -T postgres pg_restore -U tracker -d tracker < $backup
   docker compose up -d
 
-The database is dropped and made again rather than restored over, because
-$target's migrations may have added tables the backup knows nothing about.
+EOF
+  if [ "$migrated" = 1 ] && [ -n "$dump" ]; then
+    cat >&2 <<EOF
+restore.sh stops the app and the worker, keeps the database as it is now under
+another name, and restores the backup as a new one, so nothing $target added
+is left behind and nothing is lost if the restore fails.
+EOF
+  fi
+  cat >&2 <<EOF
 Uploaded files are not touched by an update. If you report this, include the
 log above: https://github.com/$REPO/issues
 EOF
@@ -219,15 +278,26 @@ EOF
 }
 
 bold "Starting $target"
+started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 docker compose up -d || rollback "docker compose couldn't start $target."
 
 # ---------------------------------------------------------------- health
 # Healthy, and saying the new version: a healthy container still running
 # the old image would pass the first test alone.
-say "Waiting for it to answer (up to ${WAIT}s; the database is migrated first)…"
+#
+# The app backs the database up and migrates it before it answers, and on a
+# large database that outlasts any fixed wait. So past the deadline it
+# keeps waiting while the app's last word since this start is that it is
+# backing up or migrating, and gives up only once it isn't.
+busy() {
+  docker compose logs --no-color --since "$started" app 2>/dev/null \
+    | grep -E '\[backup\]|\[migrate\]|migrated:|schema already current' | tail -1 \
+    | grep -qE 'Backing up the database|Applying [0-9]+ migration'
+}
+say "Waiting for it to answer (up to ${WAIT}s, and longer while it backs up or migrates)…"
 deadline=$(( $(date +%s) + WAIT ))
-running=''
-while [ "$(date +%s)" -lt "$deadline" ]; do
+running='' said=0
+while :; do
   id=$(docker compose ps -q app 2>/dev/null || true)
   state=$( [ -n "$id" ] && docker inspect -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' "$id" 2>/dev/null || true)
   if [ "$state" = "running healthy" ]; then
@@ -237,13 +307,30 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
     [ "$running" = "$target" ] && break
   fi
   case "$state" in exited*|dead*) break ;; esac
+  if [ "$(date +%s)" -ge "$deadline" ]; then
+    case "$state" in running*) busy || break ;; *) break ;; esac
+    if [ $(( $(date +%s) - said )) -ge 60 ]; then
+      say "  Still backing up or migrating the database…"
+      said=$(date +%s)
+    fi
+  fi
   sleep 3
 done
-[ "$running" = "$target" ] || rollback "Tuff $target didn't become healthy${running:+ (it says it is $running)} within ${WAIT}s."
+[ "$running" = "$target" ] || rollback "Tuff $target didn't become healthy${running:+ (it says it is $running)}."
 
 worker=$(docker compose ps --status running -q worker 2>/dev/null || true)
 
 bold "Tuff is on $target."
-say "  Backup from before: $backup"
+dump=$(taken)
+keep=$(env_value BACKUP_RETENTION_DAYS)
+[[ "$keep" =~ ^[1-9][0-9]*$ ]] || keep=30
+head_now=$(schema_head)
+if [ -n "$dump" ]; then
+  say "  Backup from before: /backups/$dump, in the db-backups volume (kept $keep days)"
+elif [ -n "$head_now" ] && [ "$head_now" = "$head_before" ]; then
+  say "  Nothing in the database changed, so no backup was needed."
+else
+  say "  The database was migrated with no backup taken first: \`docker compose logs app | grep backup\` says why."
+fi
 [ -n "$worker" ] || say "  The worker isn't running: check \`docker compose ps\` and \`docker compose logs worker\`."
 say "  Old images can be removed with \`docker image prune\`."

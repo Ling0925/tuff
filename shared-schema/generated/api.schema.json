@@ -3831,13 +3831,24 @@
               "type": "null"
             }
           ]
+        },
+        "updated": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ServerUpdate"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
         "current",
         "commit",
         "check",
-        "latest"
+        "latest",
+        "updated"
       ]
     },
     "ServerRelease": {
@@ -3865,6 +3876,66 @@
         "url",
         "published_at",
         "security"
+      ]
+    },
+    "ServerUpdate": {
+      "title": "ServerUpdate",
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "to": {
+          "type": "string"
+        },
+        "at": {
+          "type": "string"
+        },
+        "backup": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "no_backup": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "skipped",
+                "no_folder",
+                "not_a_volume",
+                "postgres_newer"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "migrations": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "from",
+        "to",
+        "at",
+        "backup",
+        "no_backup",
+        "migrations",
+        "notes"
       ]
     },
     "WayIn": {

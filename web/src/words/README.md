@@ -84,6 +84,7 @@ reads as a translation. One word for one thing, everywhere.
 | Leave (a project, a channel) | Quitter (*Quitter le projet*) | Slack, Asana |
 | Try again | Réessayez. | Google, Microsoft |
 | Version · Release notes · Security update | Version · Notes de version · Mise à jour de sécurité | Apple, Microsoft |
+| Backup · Dismiss (a notice) | Sauvegarde · Ignorer | Apple, Microsoft |
 
 ## How it is written
 

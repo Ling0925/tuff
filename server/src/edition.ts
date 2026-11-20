@@ -4,6 +4,7 @@ import { env } from './env.js'
 import { createHash } from 'node:crypto'
 import { mailOn, savedMail } from './mail.js'
 import { releaseCheck } from './updates.js'
+import { sayDatabaseRights } from './db/rights.js'
 
 /* The value of the schema's plan column that holds a workspace to nothing:
    no ceiling on people, and no rule that reads it refuses anything. */
@@ -125,6 +126,9 @@ export const edition: Edition = {
   operators: false,
   /* The first account owns the server and sign-up is closed after it. */
   instance: true,
+  /* A dump into `BACKUP_DIR` before anything pending is migrated —
+     `backup.ts`. */
+  backups: true,
   /* A server nobody watches the log of does not start without its
      isolation — `rlsGuard.ts`. */
   rlsFailClosed: true,
@@ -149,6 +153,9 @@ export const edition: Edition = {
      migrated some other way still has its rules turned on. */
   migrated: (sql) => startInstance(sql, false),
   ready: async (sql) => {
+    /* The database's own rights, which no dump restored without
+       `--create` brings back — `db/rights.ts`. */
+    await sayDatabaseRights(sql)
     await nothingHeldBack(sql)
     await startInstance(sql, true)
     /* The mail saved in Server settings, read before the first page asks. */

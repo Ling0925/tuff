@@ -1195,7 +1195,13 @@ test('owners hear of a newer release on Server settings and /api/me; nobody else
     /* Nothing heard yet: the version, and no notice. */
     let read = await call('/api/instance', { token })
     assert.equal(read.status, 200)
-    assert.deepEqual(read.body.version, { current: '1.2.0', commit: read.body.version.commit, check: true, latest: null })
+    assert.deepEqual(read.body.version, {
+      current: '1.2.0',
+      commit: read.body.version.commit,
+      check: true,
+      latest: null,
+      updated: read.body.version.updated,
+    })
 
     /* What the worker heard — a security release. */
     await owner`select instance_release_heard('1.3.0', 'https://github.com/usetuff/tuff/releases/tag/v1.3.0',
@@ -1275,6 +1281,159 @@ test('owners hear of a newer release on Server settings and /api/me; nobody else
     asCommunity()
     await owner`delete from instance_owner where actor_id = ${mine.actor_id}`.catch(() => {})
   }
+})
+
+/* ------------------------------------- after an update */
+
+test('owners are told of an update, where its backup is, and dismiss it; nobody else sees it, and the service has none', async () => {
+  asCommunity()
+  const { noteVersion } = await import('../src/backup.js')
+  await owner`update instance_setting set community = true, ran_version = null, update_to = null`
+  const mine = await script()
+  await owner`insert into instance_owner (actor_id) values (${mine.actor_id}) on conflict do nothing`
+  const token = await bearerOf(mine.actor_id)
+  const other = await script()
+  const dump = '/backups/tuff-1.2.0-20261120-101500.dump'
+  try {
+    /* A first start remembers its version and tells nobody anything. */
+    await noteVersion(owner, edition, '1.2.0')
+    const [ran] = await owner<{ v: string; at: Date }[]>`select ran_version as v, ran_at as at from instance_setting`
+    assert.equal(ran!.v, '1.2.0')
+    assert.ok(ran!.at.getTime() > Date.now() - 60_000, 'and when, which tells a later backup it is stale')
+    assert.equal((await call('/api/instance', { token })).body.version.updated, null)
+
+    /* The migrating start of 1.3.0, then its serving start. */
+    await owner`select instance_migrated('1.3.0', ${dump}, null, 3)`
+    await noteVersion(owner, edition, '1.3.0')
+    const read = await call('/api/instance', { token })
+    assert.equal(read.status, 200)
+    const u = read.body.version.updated
+    assert.equal(u.from, '1.2.0')
+    assert.equal(u.to, '1.3.0')
+    assert.equal(u.backup, dump)
+    assert.equal(u.no_backup, null)
+    assert.equal(u.migrations, 3)
+    assert.equal(u.notes, 'https://github.com/usetuff/tuff/releases/tag/v1.3.0')
+    assert.ok(Date.parse(u.at) > Date.now() - 60_000)
+    const me = await call('/api/me', { token })
+    assert.equal(me.body.server.updated.backup, dump)
+
+    /* Anybody else: nothing, and they cannot dismiss it either. */
+    const theirs = await call('/api/me', { token: other.access_token })
+    assert.equal('server' in theirs.body, false)
+    assert.equal((await call('/api/instance', { token: other.access_token })).status, 404)
+    assert.equal((await call('/api/instance/update', { method: 'DELETE', token: other.access_token })).status, 404)
+    const [asOther] = await withActor(
+      other.actor_id,
+      (tx) => tx<{ u: unknown; ok: boolean }[]>`
+      select instance_update() as u, instance_update_dismiss() as ok`,
+    )
+    assert.equal(asOther!.u, null)
+    assert.equal(asOther!.ok, false)
+    assert.equal((await call('/api/instance', { token })).body.version.updated.to, '1.3.0', 'still there')
+    /* Nor can a request write one: the table owner's alone. */
+    await assert.rejects(
+      withActor(mine.actor_id, (tx) => tx`select instance_migrated('9.9.9', null, 'skipped', 1)`),
+      /permission denied/,
+    )
+    await assert.rejects(
+      withActor(mine.actor_id, (tx) => tx`select instance_ran('9.9.9')`),
+      /permission denied/,
+    )
+
+    /* Dismissed, for every owner. */
+    const dismissed = await call('/api/instance/update', { method: 'DELETE', token })
+    assert.equal(dismissed.status, 200)
+    assert.equal(dismissed.body.version.updated, null)
+    assert.equal((await call('/api/me', { token })).body.server.updated, null)
+
+    /* A new version with nothing to migrate is an update all the same: no backup, no changes. */
+    await noteVersion(owner, edition, '1.4.0')
+    let later = (await call('/api/instance', { token })).body.version.updated
+    assert.deepEqual(
+      { from: later.from, to: later.to, backup: later.backup, no_backup: later.no_backup, migrations: later.migrations },
+      { from: '1.3.0', to: '1.4.0', backup: null, no_backup: null, migrations: 0 },
+    )
+    /* The same version again is not. */
+    await call('/api/instance/update', { method: 'DELETE', token })
+    await noteVersion(owner, edition, '1.4.0')
+    assert.equal((await call('/api/instance', { token })).body.version.updated, null)
+
+    /* Skipped, and a build that is not a release: no notes to link to. */
+    await owner`select instance_migrated('0.0.0', null, 'not_a_volume', 2)`
+    later = (await call('/api/instance', { token })).body.version.updated
+    assert.equal(later.from, '1.4.0')
+    assert.equal(later.no_backup, 'not_a_volume')
+    assert.equal(later.backup, null)
+    assert.equal(later.notes, null)
+
+    /* Its definers keep pg_temp last on their path, as every definer must
+       (definer-search-path.test.ts asks it of the shared database). */
+    const paths = await owner<{ name: string; config: string }[]>`
+      select p.proname as name, array_to_string(p.proconfig, ',') as config from pg_proc p
+      where p.proname in ('instance_migrated', 'instance_ran', 'instance_update', 'instance_update_dismiss') and p.prosecdef`
+    assert.equal(paths.length, 4)
+    for (const p of paths) assert.match(p.config, /search_path=.*,\s*pg_temp$/, p.name)
+
+    /* The database keeps versions as versions. */
+    await assert.rejects(owner`select instance_migrated('v1.5.0', null, null, 1)`, /check constraint/)
+
+    /* On the service: no screen, no key, and its starts write nothing. */
+    Object.assign(edition, service)
+    assert.equal((await call('/api/instance', { token })).status, 404)
+    assert.equal('server' in (await call('/api/me', { token })).body, false)
+    await owner`update instance_setting set update_to = null`
+    await noteVersion(owner, edition, '2.0.0')
+    const [row] = await owner<{ v: string; to: string | null }[]>`select ran_version as v, update_to as to from instance_setting`
+    assert.equal(row!.v, '1.4.0', 'the service’s start does not even remember its version')
+    assert.equal(row!.to, null)
+  } finally {
+    asCommunity()
+    await owner`update instance_setting set ran_version = null, update_to = null`.catch(() => {})
+    await owner`delete from instance_owner where actor_id = ${mine.actor_id}`.catch(() => {})
+  }
+})
+
+test('every start of your own server says the database’s own rights again, which a restore without --create would lose', async () => {
+  asCommunity()
+  const temp = async () =>
+    (
+      await owner<{ app: boolean; worker: boolean; pub: boolean }[]>`
+      select has_database_privilege('tracker_app', current_database(), 'TEMPORARY') as app,
+             has_database_privilege('tracker_worker', current_database(), 'TEMPORARY') as worker,
+             has_database_privilege('public', current_database(), 'TEMPORARY') as pub`
+    )[0]!
+  /* What a database made by `createdb` and restored into has: Postgres's defaults. */
+  await owner.unsafe(`grant temporary on database ${DB} to public`)
+  await owner`grant create on schema public to public`
+  assert.equal((await temp()).app, true, 'the default lets the application make temporary tables')
+  await logged(() => edition.ready(owner))
+  assert.deepEqual({ ...(await temp()) }, { app: false, worker: false, pub: false })
+  const [s] = await owner<{ create: boolean; connect: boolean }[]>`
+    select has_schema_privilege('tracker_app', 'public', 'CREATE') as create,
+           has_database_privilege('tracker_app', current_database(), 'CONNECT') as connect`
+  assert.equal(s!.create, false)
+  assert.equal(s!.connect, true)
+  /* The owner of the tables keeps what its definers need. */
+  const [mine] = await owner<{ t: boolean }[]>`select has_database_privilege(current_user, current_database(), 'TEMPORARY') as t`
+  assert.equal(mine!.t, true)
+
+  /* An ordinary start writes nothing: the database's row is left as it was. */
+  const { sayDatabaseRights } = await import('../src/db/rights.js')
+  const row = async () => (await owner<{ x: string }[]>`select xmin::text as x from pg_database where datname = current_database()`)[0]!.x
+  const before = await row()
+  await sayDatabaseRights(owner)
+  assert.equal(await row(), before)
+
+  /* Two starts at once, both finding something missing: neither fails. */
+  await owner.unsafe(`grant temporary on database ${DB} to public`)
+  const second = postgres(at(shared), { max: 1, onnotice: () => {} })
+  try {
+    await logged(() => Promise.all([sayDatabaseRights(owner), sayDatabaseRights(second), sayDatabaseRights(owner)]))
+  } finally {
+    await second.end()
+  }
+  assert.equal((await temp()).pub, false)
 })
 
 /* ------------------------------------------- nothing held back, no plans */

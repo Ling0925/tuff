@@ -78,6 +78,10 @@ const AS_OWNER = new Set([
   // The community edition's `ready`, arming the setup link's hash — the
   // app role must never be able to set it.
   'instance_setup_armed',
+  // What an update did, written by the migrating start and the serving
+  // start as the owner (`backup.ts`); no request may write it.
+  'instance_migrated',
+  'instance_ran',
 ])
 
 function sources(d: string, out: string[] = []): string[] {

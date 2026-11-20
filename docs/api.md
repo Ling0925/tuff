@@ -784,6 +784,7 @@ whether the address has an account here — an owner's to know.
 | POST | `/api/instance/owners` | `instance`; `{ email }` — an account that exists; `201` with `Instance` when added, `200` when it already was one, `404 not_found` when no account has the address, `409 unconfirmed` when its address is not confirmed |
 | DELETE | `/api/instance/owners/:actorId` | `instance`; `Instance`, or `204` when you took yourself off; `409 last_owner` for the last; removals are taken one at a time, so two owners removing each other leave one |
 | POST | `/api/instance/test-letter` | `instance`; a letter to the caller's own address and nobody else's → `InstanceLetter` `{ sent, mail }`; five a quarter of an hour (`429`) |
+| DELETE | `/api/instance/update` | `instance`; dismisses the notice of the last update (`ServerVersion.updated`, below) for every owner → `Instance`. The backup it named is not touched |
 
 **Mail set up from the screen** (migration 301). `instance_mail` holds one row: `via` (`smtp` or
 `resend`), `smtp_host`, `smtp_port` (25, 465, 587 or 2525 only),
@@ -848,7 +849,7 @@ from a build at `0.0.0`. It keeps the answer on `instance_setting`
 answers an instance owner and nobody else. The service never asks and never
 reads it. `ServerVersion` is:
 
-`{ current, commit, check, latest: { version, url, published_at, security } | null }`
+`{ current, commit, check, latest: { version, url, published_at, security } | null, updated: ServerUpdate | null }`
 
 — `current` the running `VERSION` (`0.0.0` before any release), `commit`
 seven characters or `unknown`, `check` false with `UPDATE_CHECK=off`,
@@ -859,6 +860,36 @@ database refuses anything else), `security` whether its notes have a
 `### Security` section. `GET /api/me` carries the same object as `server`
 for an instance owner — the bar marks a security release on their face —
 and has no `server` key at all for anybody else, or on the service.
+
+**After an update** (migration 302). On a server of one's own the
+migrating start dumps the database before it applies anything pending
+(`pg_dump --format=custom` into `BACKUP_DIR`, `/backups` in the image), once
+per update, and does not start when a dump into a volume fails; the service
+never dumps (`docs/self-hosting.md`, "Backups"). The migrations themselves
+take a session lock (asked for, for up to half an hour) and wait ten
+seconds at most for any other lock; on a server of one's own, on a
+database migrated before, they go in one transaction unless one of them
+cannot — the service migrates one file at a time. What the update did is kept on
+`instance_setting` — `ran_version` and `ran_at` (the version the last
+serving start ran, and when), `update_from`, `update_to`, `update_at`,
+`update_backup`, `update_no_backup`, `update_migrations` — written as the table owner by
+`instance_migrated` (after migrating) and `instance_ran` (every serving
+start: a changed version with nothing to migrate is an update too), read
+through `instance_update()`, which answers an instance owner and nobody
+else, and cleared through `instance_update_dismiss()`. `ServerUpdate` is:
+
+`{ from: string | null, to, at, backup: string | null, no_backup: 'skipped' | 'no_folder' | 'not_a_volume' | 'postgres_newer' | null, migrations, notes: string | null }`
+
+— `from` the version that ran before (null when not known: the first
+update to a release that remembers it), `to` the version since, `backup`
+the dump's path inside the app's container (null when none was taken),
+`no_backup` why migrations ran without one — `SKIP_PRE_MIGRATION_BACKUP`
+set, no `BACKUP_DIR`, a `BACKUP_DIR` that is not a mount point, or a
+Postgres newer than the image's `pg_dump` (null when one was taken, or
+nothing migrated), `migrations` how many were applied, `notes`
+`https://github.com/usetuff/tuff/releases/tag/v<to>` for a released `to`
+and null at `0.0.0`. Null once an owner dismisses it
+(`DELETE /api/instance/update`); a later update replaces it.
 
 ## Projects
 

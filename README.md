@@ -254,19 +254,22 @@ scripts/update.sh 1.2.0
 
 Checking out the tag brings the compose file and the scripts that go with
 that release; the app itself comes from the image. `update.sh` shows what
-changed, backs up the database to `backups/`, sets `TUFF_VERSION` in
-`.env`, restarts, and waits until the new version is healthy. If it isn't,
-it prints the commands to go back. Without a version it takes the latest
-release.
+changed, sets `TUFF_VERSION` in `.env`, restarts, and waits until the new
+version is healthy. If it isn't, it prints the commands to go back. Without
+a version it takes the latest release.
 
-The app migrates the database when it starts, and migrations only go
-forward: to go back to an older version, restore the backup taken before
-the update. Releases follow [semantic versioning](https://semver.org), and
+The app migrates the database when it starts, and backs it up first, to
+the `db-backups` volume: no migration runs if the backup fails. Server
+settings then says where the backup is. Migrations only go forward: to go
+back to an older version, restore the backup taken before the update with
+`scripts/restore.sh`. Releases follow [semantic versioning](https://semver.org), and
 [the changelog](CHANGELOG.md) says when a version needs anything from you.
 
 ## Backups
 
-The database:
+Before every migration the app backs the database up by itself, and keeps
+those backups 30 days ([Backups](docs/self-hosting.md#backups)). They live
+on the same disk, so take your own as well. The database:
 
 ```bash
 mkdir -p -m 700 backups

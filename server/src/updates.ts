@@ -31,6 +31,19 @@ export type ServerVersion = {
   check: boolean
   /** A release newer than this one, or null when there is none to tell. */
   latest: Release | null
+  /** The last update, until an owner dismisses it — `backup.ts`. */
+  updated: ServerUpdate | null
+}
+
+/** What the last update did — `ServerUpdate` in shared-schema. */
+export type ServerUpdate = {
+  from: string | null
+  to: string
+  at: string
+  backup: string | null
+  no_backup: 'skipped' | 'no_folder' | 'not_a_volume' | 'postgres_newer' | null
+  migrations: number
+  notes: string | null
 }
 
 /** The version this server runs. A test sets it; nothing else does. */
@@ -174,14 +187,32 @@ export const releaseCheck = {
 export async function serverVersion(actorId: string, workspaceId: string): Promise<ServerVersion> {
   const check = env.updateCheck
   let latest: Release | null = null
+  let updated: Omit<ServerUpdate, 'notes'> | null = null
   if (edition.instance) {
-    const [r] = await withActor(actorId, workspaceId, (tx) => tx<{ r: Release | null }[]>`select instance_release() as r`)
+    const [r] = await withActor(
+      actorId,
+      workspaceId,
+      (tx) => tx<{ r: Release | null; u: Omit<ServerUpdate, 'notes'> | null }[]>`
+        select instance_release() as r, instance_update() as u`,
+    )
     latest = r?.r ?? null
+    updated = r?.u ?? null
   }
   return {
     current: running.version,
     commit: running.commit,
     check,
     latest: latest && isNewer(latest.version, running.version) ? latest : null,
+    updated: updated && { ...updated, notes: releaseNotes(updated.to) },
   }
+}
+
+/**
+ * The release page of a version, for the notice after an update — only
+ * for a version that was released, never `0.0.0`. Built here from a
+ * version the database holds to `X.Y.Z`, so it is always under
+ * `usetuff/tuff`'s releases.
+ */
+export function releaseNotes(version: string): string | null {
+  return released(version) ? `https://github.com/usetuff/tuff/releases/tag/v${version}` : null
 }

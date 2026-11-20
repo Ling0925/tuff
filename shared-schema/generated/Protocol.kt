@@ -477,6 +477,9 @@ data class Contract (
     @SerialName("ServerRelease")
     val serverRelease: ServerRelease? = null,
 
+    @SerialName("ServerUpdate")
+    val serverUpdate: ServerUpdate? = null,
+
     @SerialName("ServerVersion")
     val serverVersion: ServerVersion? = null,
 
@@ -2126,7 +2129,8 @@ data class ServerVersion (
     val check: Boolean,
     val commit: String,
     val current: String,
-    val latest: ServerRelease? = null
+    val latest: ServerRelease? = null,
+    val updated: ServerUpdate? = null
 )
 
 @Serializable
@@ -2138,6 +2142,28 @@ data class ServerRelease (
     val url: String,
     val version: String
 )
+
+@Serializable
+data class ServerUpdate (
+    val at: String,
+    val backup: String? = null,
+    val from: String? = null,
+    val migrations: Long,
+
+    @SerialName("no_backup")
+    val noBackup: NoBackup? = null,
+
+    val notes: String? = null,
+    val to: String
+)
+
+@Serializable
+enum class NoBackup(val value: String) {
+    @SerialName("no_folder") NoFolder("no_folder"),
+    @SerialName("not_a_volume") NotAVolume("not_a_volume"),
+    @SerialName("postgres_newer") PostgresNewer("postgres_newer"),
+    @SerialName("skipped") Skipped("skipped");
+}
 
 @Serializable
 data class InstanceLetter (

@@ -105,6 +105,13 @@ export type Edition = {
    */
   instance: boolean
   /**
+   * Whether migrating dumps the database first — `backup.ts`,
+   * On your own server, into
+   * `BACKUP_DIR` before anything pending is applied. Off on the service,
+   * whose platform keeps backups of its own.
+   */
+  backups: boolean
+  /**
    * Whether a production server refuses to start when the role it queries
    * as is one row-level security does not bind — a superuser, `BYPASSRLS`,
    * or the tables' owner (`rlsGuard.ts`). On your own server, where a
