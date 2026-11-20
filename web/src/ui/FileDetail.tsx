@@ -213,6 +213,27 @@ export function FileDetail({
    * arrives here, and your paragraph is gone.
    */
   const touched = useRef(false)
+  /**
+   * Whether the name in the field is one the person typed since it last had
+   * the caret — `touched`, for the title.
+   *
+   * Leaving the field wrote whatever it held, and what it held could be a
+   * copy kept from before: named, left, opened again a moment later, the
+   * kept read still said "Untitled", chose it to be typed over, and a click
+   * into the body before the server's answer landed wrote "Untitled" back
+   * over the name. Only a name somebody typed is written, and a
+   * read that lands while they are typing keeps theirs.
+   */
+  const nameTyped = useRef(false)
+  /* What this screen keeps of the document, told the name the person gave
+     it, so the next opening draws that and not the one it was made with. */
+  const keepName = useCallback(
+    (name: string) => {
+      const had = recall<Read>(`file:${fileId}`)
+      if (had) remember<Read>(`file:${fileId}`, { ...had, file: { ...had.file, name } })
+    },
+    [fileId],
+  )
   /** The body, for the title to hand the caret down to. */
   const into = useRef<EditorHandle | null>(null)
   const titleField = useRef<HTMLTextAreaElement | null>(null)
@@ -245,6 +266,7 @@ export function FileDetail({
   // biome-ignore lint/correctness/useExhaustiveDependencies: a different file is a different draft
   useEffect(() => {
     touched.current = false
+    nameTyped.current = false
     setUnsaved(false)
   }, [fileId])
 
@@ -285,7 +307,7 @@ export function FileDetail({
        and asked from there it grew in a round trip after it. */
     const [r] = await Promise.all([api<Read>(`/files/${fileId}`), readLinks('file', fileId).catch(() => [])])
     remember<Read>(`file:${fileId}`, r)
-    setFile(r.file)
+    setFile((f) => (nameTyped.current && f ? { ...r.file, name: f.name } : r.file))
     setComments(r.comments)
     if (touched.current) return
     setText(r.file.body ?? null)
@@ -955,11 +977,19 @@ export function FileDetail({
                 className="block w-full resize-none overflow-hidden bg-transparent text-xl leading-[1.3] font-medium outline-none text-ink"
                 value={file.name}
                 disabled={!canWrite}
-                onChange={(e) => setFile({ ...file, name: e.target.value.replace(/\s*\n\s*/g, ' ') })}
+                onChange={(e) => {
+                  nameTyped.current = true
+                  setFile({ ...file, name: e.target.value.replace(/\s*\n\s*/g, ' ') })
+                }}
                 // From the field, not from state, for the reason `save` explains.
                 onBlur={(e) => {
+                  /* Nothing typed, nothing written: what the field holds may
+                     be a kept copy the server has moved on from. */
+                  if (!nameTyped.current) return
                   const name = e.target.value.trim()
                   if (!name) return
+                  nameTyped.current = false
+                  keepName(name)
                   void api(`/files/${file.id}`, {
                     method: 'PATCH',
                     body: JSON.stringify({ name }),

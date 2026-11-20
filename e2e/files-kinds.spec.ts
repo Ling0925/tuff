@@ -356,3 +356,28 @@ test('a long list reads further as it is scrolled, and nothing above moves', asy
   await expect(theirRows).toHaveCount(1, { timeout: 15_000 })
   await expect(theirRows.first()).toContainText('Link 003')
 })
+
+/* Named, left and opened again at once — the copy this screen kept
+   from before said "Untitled", chose it to be typed over, and a click into
+   the body wrote "Untitled" back over the name. */
+test('a document named and opened again at once keeps its name, and a click into it writes nothing over it', async ({ page }) => {
+  await openFiles(page)
+  const name = `Named ${Date.now()}`
+  await add(page, 'new-document', name)
+  const renames: string[] = []
+  page.on('request', (r) => {
+    if (r.method() === 'PATCH' && /\/api\/files\/[^/]+$/.test(r.url())) {
+      const said = r.postDataJSON() as { name?: string } | null
+      if (said?.name !== undefined) renames.push(said.name)
+    }
+  })
+  /* Straight back in, and straight into the body. */
+  await page.locator('[data-file]').filter({ hasText: name }).first().click()
+  const title = page.getByTestId('file-name')
+  await expect(title).toHaveValue(name, { timeout: 15_000 })
+  await page.locator('.prose-body .ProseMirror').first().click()
+  await page.waitForTimeout(800)
+  expect(renames).toEqual([])
+  await page.reload()
+  await expect(page.getByTestId('file-name')).toHaveValue(name, { timeout: 15_000 })
+})
