@@ -20,19 +20,36 @@ The first public release of Tuff for your own server.
 
 ### Added
 
-- Projects with tasks, a board, chat, docs and announcements, and an
-  activity feed for each project.
-- My tasks, Members, search across everything with ⌘K, and notifications.
-- Chat in project channels and direct messages, with threads.
-- An MCP server for AI agents, with the same permissions as people.
+- Projects with four tools: Tasks (a list and a board, with labels, due
+  dates, sub-tasks and blockers), Chat, Files and Announcements, and an
+  Activity feed for each project.
+- Files: documents written together, pictures, uploads and links. Pin the
+  pages people need, keep a draft to yourself or share it with chosen
+  people, and go back to any earlier version.
+- My Tasks, People & Agents, search across everything with ⌘K, and
+  notifications.
+- Chat in project channels and direct messages, with threads, mentions and
+  reactions, and a chat opened beside the board.
+- An MCP server for AI agents, with the permissions you give them. An agent
+  asks with choices when it needs a decision, and the question waits in
+  Needs you.
+- GitHub, with a GitHub App of your own: pull requests show on their task
+  and move it, and a repository's issues and a project's tasks stay in sync
+  both ways.
 - Email sign-in with a second factor, and Google, Apple or GitHub sign-in
   with your own keys.
-- Mail through your own SMTP server or Resend.
+- A setup link for the first opening: set up email from the screen (your
+  own SMTP server or Resend, with a test email) or skip it, then create the
+  owner's account. No commands.
 - Push notifications in the browser and the installed web app.
 - Importing from Asana, Jira, Linear, Slack and GitHub Issues.
 - English and French.
 - Server settings for the server's owner: who else is an owner, whether
-  anyone can sign up, and a test email.
+  anyone can sign up, and email.
+- `scripts/setup.sh --try`: Tuff on your own computer, to see it before
+  you set up a server.
+- A one-click template on Railway: the app, the worker, Postgres and a
+  bucket for files, every secret generated.
 - A released image for linux/amd64 and linux/arm64,
   `ghcr.io/usetuff/tuff`, signed with cosign, with build provenance and
   an SBOM.
