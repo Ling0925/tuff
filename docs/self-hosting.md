@@ -54,7 +54,7 @@ up a server as below.
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/tuff?referralCode=ncZYV6)
 
 The template makes four things on your Railway account: **tuff**, the app,
-on a `*.up.railway.app` address; **worker**, from the same image; Railway's
+on an address Railway gives it; **worker**, from the same image; Railway's
 **Postgres**; and a **Bucket** for uploaded files. Each secret is generated
 for your deploy, and nothing is asked. The first deploy builds the image
 from this repository, which takes about three minutes.

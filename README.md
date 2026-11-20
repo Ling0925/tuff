@@ -166,8 +166,8 @@ computer, so it isn't a way to run Tuff for a team.
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/tuff?referralCode=ncZYV6)
 
 One click makes the app, the worker, Postgres and a bucket for files on
-your Railway account, with every secret generated, and gives Tuff a
-`*.up.railway.app` address. When the first deploy finishes, open the
+your Railway account, with every secret generated, and gives Tuff an
+address on Railway. When the first deploy finishes, open the
 **tuff** service's deploy log and find *Nobody owns this server yet*: its
 link is your setup link. Turn on backups for the Postgres service on
 Railway. Tuff takes none of its own there.
