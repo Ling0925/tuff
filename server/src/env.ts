@@ -151,6 +151,35 @@ export function readSetupToken(raw: string | undefined): string {
   return v
 }
 
+/**
+ * `TRY_LOCALHOST`: Tuff tried on one computer over plain http, which
+ * `scripts/try.sh` alone writes. On, the file pass
+ * and the sign-up binding are set without `Secure`, so WebKit keeps them on
+ * `http://localhost`. So it is on only where nothing crosses a network:
+ * `APP_URL` must be `http://localhost[:port]` or `http://127.0.0.1[:port]`
+ * and nothing else, or this throws and the app and the worker do not
+ * start. A real server's `APP_URL` is its domain, so turned on there by
+ * mistake it is a refusal in the log, not a quieter server. A value that is
+ * not plainly on or off is refused too, rather than guessed at.
+ */
+export function readTryLocalhost(raw: string | undefined, appUrl: string | undefined): boolean {
+  const v = (raw ?? '').trim().toLowerCase()
+  if (['', '0', 'false', 'no', 'off'].includes(v)) return false
+  if (!['1', 'true', 'yes', 'on'].includes(v)) throw new Error('TRY_LOCALHOST is 1 or nothing.')
+  /* The value exactly as `env.appUrl` takes it, matched whole and not
+     trimmed: what is checked is what is used. */
+  const said = appUrl ?? ''
+  const pinned = /^http:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?\/?$/.test(said)
+  if (!pinned) {
+    throw new Error(
+      `\n!!! TRY_LOCALHOST=1 is for trying Tuff on this computer, at http://localhost:<port>, and APP_URL is ${said.trim() ? JSON.stringify(said.slice(0, 200)) : 'empty'}.\n` +
+        '!!! On a server, take TRY_LOCALHOST out of the environment: it sets cookies a network could read (docs/self-hosting.md, "Try it on your computer").\n' +
+        '!!! Refusing to start.\n',
+    )
+  }
+  return true
+}
+
 export const env = {
   /** The table owner. Migrations and seed only: it bypasses RLS. */
   databaseUrl: required('DATABASE_URL'),
@@ -206,6 +235,9 @@ export const env = {
    */
   /** Where links in mail and the providers' redirects point. Empty: the request's own origin. */
   appUrl: (process.env.APP_URL ?? '').replace(/\/$/, ''),
+  /** Tried on this computer over plain http — `readTryLocalhost`. Read once,
+      at start, so a server it would not be safe on never listens. */
+  tryLocalhost: readTryLocalhost(process.env.TRY_LOCALHOST, process.env.APP_URL),
   resendApiKey: process.env.RESEND_API_KEY ?? '',
   /** GIFs from KLIPY — `docs/specs/gifs.md`. Empty: no GIF button. */
   klipyApiKey: process.env.KLIPY_API_KEY ?? '',

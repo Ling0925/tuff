@@ -1,8 +1,8 @@
 # Every push to main: what a fresh checkout of the public repository builds
 # and passes. The types, the permission matrix, the server's tests against
 # a real Postgres — row-level security, workspace isolation, the community
-# edition's own — the web build, and the image for both platforms, built
-# and not pushed.
+# edition's own — the web build, the image for both platforms, built
+# and not pushed, and `scripts/setup.sh --try` started as the README says.
 #
 # The browser tests (Playwright, `e2e/`) are not here: they need a seeded
 # server and a browser, and run with `pnpm check` before each commit lands
@@ -92,3 +92,40 @@ jobs:
             GIT_SHA=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # The README's first command, as a stranger runs it: `scripts/setup.sh
+  # --try` builds this checkout, starts it on plain http://localhost, and
+  # the setup link answers. Then the same again, which must keep the data,
+  # and the refusal of a real server's address with TRY_LOCALHOST=1.
+  try:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Try it
+        run: scripts/setup.sh --try --no-open
+      - name: The setup link opens the setup screen, on localhost only
+        run: |
+          port=$(sed -n 's/^TRY_PORT=//p' .env.try)
+          token=$(sed -n 's/^SETUP_TOKEN=//p' .env.try)
+          curl -fsS "http://localhost:$port/setup?token=$token" | grep -q 'name="tuff-setup" content="open"'
+          curl -fsS -H "x-setup-token: $token" "http://localhost:$port/auth/setup"
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: tuff.example.com' "http://127.0.0.1:$port/health")" = 421
+      - name: Run again, with the same install
+        run: |
+          before=$(sed -n 's/^SETUP_TOKEN=//p' .env.try)
+          scripts/setup.sh --try --no-open
+          test "$(sed -n 's/^SETUP_TOKEN=//p' .env.try)" = "$before"
+      - name: A real server's address refuses to start
+        run: |
+          image=$(sed -n 's/^TUFF_TRY_IMAGE=//p' .env.try)
+          ! timeout 60 docker run --rm -e TRY_LOCALHOST=1 -e APP_URL=https://tuff.example.com -e JWT_SECRET=ci-only \
+            -e DATABASE_URL=postgres://nobody@127.0.0.1:1/none "$image" 2> refused.log
+          grep -q 'Refusing to start' refused.log
+      - name: What the app said
+        if: failure()
+        run: |
+          project=$(sed -n 's/^COMPOSE_PROJECT_NAME=//p' .env.try)
+          docker compose -p "$project" -f docker-compose.try.yml --env-file .env.try logs app worker

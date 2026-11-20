@@ -468,7 +468,9 @@ if (existsSync(join(client, 'index.html'))) {
    */
   const page = readFileSync(join(client, 'index.html'), 'utf8')
   const hashes = inlineScripts(page).map((s) => `sha256-${createHash('sha256').update(s).digest('base64')}`)
-  const production = process.env.NODE_ENV === 'production'
+  /* Over plain http on this computer (`TRY_LOCALHOST`), no HSTS: it has
+     nothing to say there. */
+  const production = process.env.NODE_ENV === 'production' && !env.tryLocalhost
   const guarded = pageHeaders({ scriptHashes: hashes, production })
   /* A public page written as HTML counts its visit. */
   const counted = pageHeaders({ scriptHashes: hashes, production, counted: true })
@@ -585,6 +587,7 @@ edition.starting({ client, appUrl: env.appUrl })
 
 const server = serve({ fetch: app.fetch, port: env.port }, (info) => {
   console.log(`server: http://localhost:${info.port}`)
+  if (env.tryLocalhost) console.log(`try mode: for this computer only, at ${env.appUrl}, not for a server`)
   /* The Markdown workers started now rather than on the first body an
      agent sends, which would wait for them — and a worker that cannot
      start is said here, not on that request (`parsing-off-thread.md`). */

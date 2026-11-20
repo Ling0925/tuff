@@ -5,6 +5,7 @@ import { SignJWT, decodeJwt, jwtVerify, createRemoteJWKSet, importPKCS8, type JW
 import { keyFor, legacyKey } from '../auth/keys.js'
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { env } from '../env.js'
+import { secureAttr } from '../tryLocalhost.js'
 import { edition } from '../edition.js'
 import { origin } from '../publicUrl.js'
 import { fullRefusal } from '../ceilings.js'
@@ -986,7 +987,8 @@ const BIND = 'tuff_bind'
 export async function bindBrowser(c: Context, actorId: string): Promise<void> {
   const token = generateToken('bnd')
   await withoutActor((tx) => tx`select auth_ticket_make(${hashToken(token)}, 'bind', ${actorId}, ${null}, interval '1 day')`)
-  c.header('set-cookie', `${BIND}=${token}; Path=/auth; Max-Age=86400; HttpOnly; Secure; SameSite=Lax`, { append: true })
+  /* Without `Secure` only on a computer trying Tuff over plain http — `tryLocalhost.ts`. */
+  c.header('set-cookie', `${BIND}=${token}; Path=/auth; Max-Age=86400; HttpOnly${secureAttr()}; SameSite=Lax`, { append: true })
 }
 
 async function boundTo(c: Context): Promise<string | null> {

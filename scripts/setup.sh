@@ -3,6 +3,7 @@
 #
 #   scripts/setup.sh tuff.example.com you@example.com
 #   scripts/setup.sh                     # asks; localhost if nobody answers
+#   scripts/setup.sh --try               # Tuff on this computer: scripts/try.sh
 #
 # The address is the owner's (OWNER_EMAIL): until somebody owns the server,
 # only that address can become its owner. Left blank, any address can —
@@ -28,6 +29,13 @@
 # instead (docker-compose.build.yml).
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+# Trying it on this computer is its own install, beside this one, and never
+# reads or writes .env.
+if [ "${1:-}" = --try ]; then
+  shift
+  exec bash scripts/try.sh "$@"
+fi
 
 # A link too, even one that points nowhere: writing through it would put
 # the secrets wherever it points.

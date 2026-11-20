@@ -5,6 +5,50 @@ versions and updates, building from source, checking the image's
 signature, running behind a proxy of your own, the owner from the command
 line, push notifications, and signing in with other accounts.
 
+## Try it on your computer
+
+```bash
+scripts/setup.sh --try
+```
+
+This is Tuff for one computer, to see what it is before you set up a
+server. It needs Docker, `openssl` and `curl`, and:
+
+1. finds a free port from 8080 up — one where nothing answers on
+   `127.0.0.1` or `::1`;
+2. makes the passwords and a setup token, in `.env.try`;
+3. downloads the release's image, or builds this checkout when there is
+   none (between releases, version `0.0.0`), and says which first;
+4. starts Postgres, the app and the worker from `docker-compose.try.yml`,
+   with no Caddy and no TLS, the app published on `127.0.0.1` only;
+5. waits until `/health` answers, prints the setup link
+   (`http://localhost:<port>/setup?token=…`) and opens your browser on it.
+   `--no-open` leaves the browser alone.
+
+| | |
+| --- | --- |
+| Run it again | `scripts/setup.sh --try` starts the same install, with its data and its port. |
+| Stop it | `docker compose -p tuff-try-<six> -f docker-compose.try.yml --env-file .env.try stop`, with the name the script prints (it prints the whole line). |
+| Start fresh | `scripts/setup.sh --try --fresh` lists what it would delete — the database, the uploaded files and `.env.try` — and deletes them only when you type `delete`. It deletes only volumes labelled with this folder, and nothing when there is no `.env.try` naming them. |
+
+**It keeps to itself.** It reads and writes `.env.try`, never `.env`, and
+runs as a compose project of its own, `tuff-try-` and six characters of
+the folder's path, with its own volumes and its own image
+(`tuff:try-` and the same six). A real install in the same folder is never
+touched. Name the project on every `docker compose` command for it
+(`-p`), as the script does: a `COMPOSE_PROJECT_NAME` set in your shell
+would otherwise win.
+
+**It is not a server.** It runs over plain http with `TRY_LOCALHOST=1`,
+which lets the browser keep its cookies on `http://localhost` (Safari
+refuses secure cookies there). The app refuses to start with that setting
+unless `APP_URL` is `http://localhost:<port>` or `http://127.0.0.1:<port>`,
+and answers only requests addressed to `localhost` or `127.0.0.1` that no
+proxy or tunnel says it forwarded. Mail can
+be set up on the setup screen as on a server; signing in with Google, Apple
+or GitHub needs a server's address and HTTPS. To run Tuff for a team, set
+up a server as below.
+
 ## What runs
 
 `docker compose up -d` starts four containers from `docker-compose.prod.yml`:
@@ -59,7 +103,7 @@ in it reaches the app and the worker. After a change, run
 | -------- | ------- |
 | `COMPOSE_FILE` | `docker-compose.prod.yml`, so that a plain `docker compose` uses it. Add `:docker-compose.build.yml` to build from source (below). |
 | `TUFF_VERSION` | The release that runs, like `1.0.0`. `setup.sh` writes this checkout's version; `scripts/update.sh` changes it. |
-| `DOMAIN` | The name Caddy serves and gets a certificate for, like `tuff.example.com`. `localhost` gets a certificate of Caddy's own, for trying it out. |
+| `DOMAIN` | The name Caddy serves and gets a certificate for, like `tuff.example.com`. `localhost` gets a certificate of Caddy's own; to try Tuff on your computer, [`setup.sh --try`](#try-it-on-your-computer) is simpler. |
 | `APP_URL` | **Required.** The address people open, like `https://tuff.example.com`; the server refuses to start without it. Links in emails — a password reset among them — are made from it and never from the request's `Host`, which whoever sends the request writes. Links in emails and the sign-in providers' redirects use it, and so do what has no request to read an address from: Slack's messages (Slack stays off without it) and the link previewer, which tells the sites it reads `TuffBot/1.0 (+APP_URL)`. Include the port if it is not 443. |
 | `POSTGRES_PASSWORD` | Password of `tracker`, the database owner. |
 | `APP_DB_PASSWORD` | Password of `tracker_app`. |
@@ -219,6 +263,7 @@ make yourself. Without them, Settings says they are not set up here.
 | `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | none | Cloudflare Turnstile keys. A project's public feedback page refuses every message without them. |
 | `ORIGIN_SECRET` | none | Only if Cloudflare is in front: see the proxy notes below. |
 | `TUFF_IMAGE` | `ghcr.io/usetuff/tuff` | Where the image is pulled from, for a registry of your own that mirrors it. |
+| `TRY_LOCALHOST` | off | Only for [trying Tuff on your computer](#try-it-on-your-computer), which sets it. Never on a server: with any `APP_URL` but `http://localhost` or `http://127.0.0.1` the app refuses to start. |
 | `UPDATE_CHECK` | on | `off` stops the daily request for the latest release — see [Hearing of a new version](#hearing-of-a-new-version). |
 
 The compose file sets `DATABASE_URL`, `DATABASE_URL_APP`,

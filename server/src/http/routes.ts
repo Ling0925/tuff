@@ -81,6 +81,7 @@ import { githubApi, githubHooks, githubReturns } from './github.js'
 import { incomingHooks, roomHooks } from './hooks.js'
 import { slackApi, slackHooks, slackReturns } from './slack.js'
 import { watching } from '../watchdog.js'
+import { onlyLocalhost } from '../tryLocalhost.js'
 import { usedAs } from './used.js'
 
 type Vars = { ctx: AuthContext }
@@ -91,6 +92,10 @@ export const app = new Hono<{ Variables: Vars }>()
    here holds the thread for it — its method and the shape of its path, no
    more. Nothing while the watchdog is off. */
 app.use('*', watching)
+
+/* Tuff tried on one computer over plain http answers only requests
+   addressed to localhost. Nothing anywhere else. */
+app.use('*', onlyLocalhost)
 
 /*
  * What reaches here unanswered.

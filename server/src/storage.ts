@@ -5,6 +5,7 @@ import { Readable } from 'node:stream'
 import { dirname, join, resolve } from 'node:path'
 import { keyFor, legacyKey, mac, same } from './auth/keys.js'
 import { configured, send } from './s3.js'
+import { secureAttr } from './tryLocalhost.js'
 
 /**
  * Where bytes live.
@@ -255,7 +256,8 @@ export function readFileCookie(value: string | undefined): { actorId: string; le
 const COOKIE_PATHS = ['/api/blob', '/api/preview/image'] as const
 
 export function cookieHeader(value: string | null, path: (typeof COOKIE_PATHS)[number] = '/api/blob'): string {
-  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : ''
+  /* Not on a computer trying Tuff over plain http — `tryLocalhost.ts`. */
+  const secure = secureAttr(process.env.NODE_ENV === 'production')
   return value
     ? `${FILE_COOKIE}=${value}; Path=${path}; HttpOnly; SameSite=Lax; Max-Age=${COOKIE_DAYS * 86_400}${secure}`
     : `${FILE_COOKIE}=; Path=${path}; HttpOnly; SameSite=Lax; Max-Age=0${secure}`

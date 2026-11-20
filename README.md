@@ -141,6 +141,28 @@ account as the server's owner. No commands after that.
 
 ## Quick start
 
+### Try it on your computer
+
+You need Docker (Docker Desktop on a Mac), `git`, `openssl` and `curl`.
+
+```bash
+git clone https://github.com/usetuff/tuff.git
+cd tuff
+scripts/setup.sh --try
+```
+
+It finds a free port, makes the passwords, starts Tuff and opens
+`http://localhost:<port>/setup?token=…` in your browser, where you create
+your account. No domain, no certificate. Between releases it builds Tuff
+from source first, which takes a few minutes the first time.
+
+Run it again to start the same install with your data;
+`scripts/setup.sh --try --fresh` deletes it and starts over. It keeps to
+itself (`.env.try` and Docker volumes of its own) and answers only on this
+computer, so it isn't a way to run Tuff for a team.
+
+### On a server
+
 You need a Linux machine with Docker and Docker Compose 2.24 or newer,
 `git`, `openssl` and `curl`, 2 GB of memory, and a domain name pointing at
 it with ports 80 and 443 open. Caddy, part of the stack, gets the HTTPS
@@ -163,10 +185,6 @@ confirmation email and no commands.
 
 A server runs a release, and its tag is where the compose file, the scripts
 and the image match. `main` is where development happens between releases.
-
-To try it on your own computer, use `localhost` as the domain. If ports 80
-and 443 are taken, run `HTTP_PORT=8080 HTTPS_PORT=8443 scripts/setup.sh localhost`,
-then open `https://localhost:8443` and accept the certificate warning.
 
 ### Becoming the owner
 
