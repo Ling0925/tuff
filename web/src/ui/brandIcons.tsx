@@ -226,13 +226,14 @@ export type Brand = keyof typeof ICONS
 /**
  * The place's icon, fitted inside a `size` square and centred in it —
  * Figma's tall mark and YouTube's wide one keep their own proportions, as a
- * file type's icon does.
+ * file type's icon does. `ink` is the colour a one-colour mark takes: the
+ * app's ink, or `''` to take the text it stands in, as on the website.
  */
-export function BrandIcon({ brand, size }: { brand: Brand; size: number }) {
+export function BrandIcon({ brand, size, ink = 'text-ink' }: { brand: Brand; size: number; ink?: string }) {
   const id = `brand-${useId().replace(/:/g, '')}`
   const icon: Drawing = ICONS[brand]
   return (
-    <svg data-brand={brand} viewBox={icon.box} width={size} height={size} aria-hidden="true" className="text-ink">
+    <svg data-brand={brand} viewBox={icon.box} width={size} height={size} aria-hidden="true" className={ink}>
       {icon.draw(id)}
     </svg>
   )
