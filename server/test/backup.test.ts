@@ -108,8 +108,16 @@ const inDumps = () =>
   readdirSync(dumps)
     .filter((f) => !f.endsWith('.host'))
     .sort()
-const go = (t: DumpTool, over: Partial<BackupSettings> = {}, mounted?: () => Promise<boolean | null>) =>
-  migrateWithBackup(url, own, { settings: settings(over), tool: t, dir: files, ...(mounted ? { mounted } : {}) })
+/*
+ * The test's folder is a volume unless a test says otherwise. Left to the
+ * real check it is whatever the machine's temp folder is: on a Mac nothing
+ * is known and the dump went ahead, on Linux — CI — `/tmp` shares `/`'s
+ * device, every dump was refused as "not a volume", and nine tests failed
+ * there and nowhere else.
+ */
+const onVolume = async () => true
+const go = (t: DumpTool, over: Partial<BackupSettings> = {}, mounted: () => Promise<boolean | null> = onVolume) =>
+  migrateWithBackup(url, own, { settings: settings(over), tool: t, dir: files, mounted })
 
 writeFileSync(
   join(files, '000_settings.sql'),
@@ -437,12 +445,14 @@ test('the service migrates one file at a time, and never in one transaction', as
   const service = { ...edition, backups: false, instance: false, migrated: async () => {} }
   const good = pending()
   const bad = pending('select 1 / 0;')
-  const { r } = await quietly(() => migrateWithBackup(url, service, { settings: settings(), tool: tool().t, dir: files }))
+  const { r } = await quietly(() =>
+    migrateWithBackup(url, service, { settings: settings(), tool: tool().t, dir: files, mounted: onVolume }),
+  )
   assert.ok(r instanceof Error)
   assert.equal((await applied()).includes(good), true, 'the one before went in on its own')
   assert.equal((await applied()).includes(bad), false)
   writeFileSync(join(files, bad), 'select 1;')
-  await quietly(() => migrateWithBackup(url, service, { settings: settings(), tool: tool().t, dir: files }))
+  await quietly(() => migrateWithBackup(url, service, { settings: settings(), tool: tool().t, dir: files, mounted: onVolume }))
 })
 
 test('a migrator waits for another one saying so, gives up in the end, and no statement waits on a lock past ten seconds', async () => {
@@ -451,7 +461,9 @@ test('a migrator waits for another one saying so, gives up in the end, and no st
     await other`select pg_advisory_lock(7295000295)`
     pending()
     const d = tool()
-    const { r, lines } = await quietly(() => migrateWithBackup(url, own, { settings: settings(), tool: d.t, dir: files, lockWait: 1_500 }))
+    const { r, lines } = await quietly(() =>
+      migrateWithBackup(url, own, { settings: settings(), tool: d.t, dir: files, mounted: onVolume, lockWait: 1_500 }),
+    )
     assert.ok(r instanceof Error && /giving up/.test(r.message))
     assert.match(lines.join('\n'), /Waiting for another migrator/)
     assert.equal(d.asked.length, 0, 'nothing done without the lock')
@@ -478,7 +490,9 @@ test('with the last serving start unknown, only a dump this same container took 
   const good = pending()
   const bad = pending('select 1 / 0;')
   const first = tool()
-  await quietly(() => migrateWithBackup(url, own, { settings: settings(), tool: first.t, dir: files, host: 'container-a' }))
+  await quietly(() =>
+    migrateWithBackup(url, own, { settings: settings(), tool: first.t, dir: files, mounted: onVolume, host: 'container-a' }),
+  )
   assert.equal(first.asked.length, 1)
   const dumped = inDumps().filter((f) => f.startsWith('tuff-2.0.0-') && f.endsWith('.dump'))
   assert.equal(dumped.length, 1)
@@ -488,15 +502,21 @@ test('with the last serving start unknown, only a dump this same container took 
   )
   /* Restarted: the same container. */
   const again = tool()
-  await quietly(() => migrateWithBackup(url, own, { settings: settings(), tool: again.t, dir: files, host: 'container-a' }))
+  await quietly(() =>
+    migrateWithBackup(url, own, { settings: settings(), tool: again.t, dir: files, mounted: onVolume, host: 'container-a' }),
+  )
   assert.equal(again.asked.length, 0)
   /* Made again — the old version ran in between, then the update once more: a dump of its own. */
   const other = tool()
   await new Promise((r) => setTimeout(r, 1_100))
-  await quietly(() => migrateWithBackup(url, own, { settings: settings(), tool: other.t, dir: files, host: 'container-b' }))
+  await quietly(() =>
+    migrateWithBackup(url, own, { settings: settings(), tool: other.t, dir: files, mounted: onVolume, host: 'container-b' }),
+  )
   assert.equal(other.asked.length, 1)
   writeFileSync(join(files, bad), 'select 1;')
-  const fixed = await quietly(() => migrateWithBackup(url, own, { settings: settings(), tool: tool().t, dir: files, host: 'container-b' }))
+  const fixed = await quietly(() =>
+    migrateWithBackup(url, own, { settings: settings(), tool: tool().t, dir: files, mounted: onVolume, host: 'container-b' }),
+  )
   assert.deepEqual((fixed.r as { applied: string[] }).applied, [good, bad])
   await served('2.0.0')
 })
