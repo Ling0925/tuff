@@ -14,6 +14,7 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue"></a>
+  <a href="https://github.com/usetuff/tuff/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/usetuff/tuff?sort=semver"></a>
   <a href="https://github.com/usetuff/tuff/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/usetuff/tuff/actions/workflows/ci.yml/badge.svg?branch=main"></a>
 </p>
 
