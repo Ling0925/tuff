@@ -1,0 +1,3785 @@
+@import 'tailwindcss';
+
+/*
+ * `mouse:` — a hover that only exists where something can hover.
+ *
+ * Tailwind's own `hover:` compiles to a bare `:hover`, which on a touch
+ * screen is whatever was tapped last: the wash stays on the row somebody
+ * pressed until they press another. A phone has no pointer to follow, so
+ * a highlight that follows one is a highlight stuck where it landed.
+ */
+@custom-variant mouse {
+  @media (hover: hover) and (pointer: fine) {
+    @slot;
+  }
+}
+
+/*
+ * Something shown while the pointer is over the thing it belongs to.
+ *
+ * Tailwind's `group-hover:` writes "under a hovered `:where(.group)`", and
+ * Chrome cannot tell from that which element's hover it is about — so every
+ * change of hover, on any element, restyled everything inside it. An
+ * element's hover changes whenever the pointer crosses into it or out, and
+ * a board column holds 600 cards: 11,000 elements and 56 ms when a card was
+ * picked up out of it, again on the drop, and on simply moving the pointer
+ * from one column to the next. Written as a plain descendant of a
+ * hovered `.group`, the browser restyles the few things that carry the
+ * class. Named groups get one each; it is the same rule.
+ */
+@custom-variant on-group-hover {
+  @media (hover: hover) {
+    .group:hover & {
+      @slot;
+    }
+  }
+}
+@custom-variant on-resizer-hover {
+  @media (hover: hover) {
+    .group\/resizer:hover & {
+      @slot;
+    }
+  }
+}
+@custom-variant on-reaction-hover {
+  @media (hover: hover) {
+    .group\/reaction:hover & {
+      @slot;
+    }
+  }
+}
+@custom-variant on-pic-hover {
+  @media (hover: hover) {
+    .group\/pic:hover & {
+      @slot;
+    }
+  }
+}
+
+
+
+/*
+ * Our own palette, not the default shadcn theme: that one is recognised at a
+ * glance.
+ *
+ * Little colour. Colour is a signal and an accent, not decoration: hierarchy is
+ * built from size, weight and spacing. Almost no borders or shadows —
+ * separation comes from background and space.
+ *
+ * This is the web, not an imitation of macOS in a browser: our own typography,
+ * because faking nativeness reads as cheap.
+ */
+@theme {
+  /*
+   * The paint half of the lens. The numbers the SVG filter needs live in
+   * Glass.tsx; these have to follow the theme, so they live here. One set for
+   * the product — a segmented control and the command palette are the same
+   * material seen at two sizes.
+   */
+  --glass-blur: 12px;
+  --glass-saturate: 180%;
+  --glass-tint: oklch(100% 0 0 / 0.62);
+  /* Nearly solid on purpose: this one has to carry white text. See the note
+     on the accent tone in Glass.tsx. */
+  --glass-accent-tint: oklch(55% 0.17 262 / 0.88);
+  --glass-accent-edge: oklch(100% 0 0 / 0.38);
+  --glass-edge: oklch(100% 0 0 / 0.55);
+  --glass-shadow: 0 8px 28px oklch(24% 0.01 260 / 0.1);
+
+  /*
+   * The system face first, and Inter behind it.
+   *
+   * The design is drawn in Inter because that is what stands in for San
+   * Francisco in Figma — Apple does not license SF for it. Shipping Inter as
+   * a webfont would mean downloading a copy of the thing the machine already
+   * has, and getting it slightly wrong on the one platform this is aimed at.
+   * So: SF where it exists, Inter where it is installed, and the system face
+   * everywhere else.
+   */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', system-ui,
+    'Segoe UI', sans-serif;
+  /*
+   * For a handle, and for nothing else yet.
+   *
+   * `RED-1` and `RED-12` in the body face are two different widths of the
+   * same thing, and a column of them is ragged in a way tabular figures
+   * cannot fix: it is the letters that differ, not only the digits. In the
+   * mono face every handle is as wide as its characters and the column
+   * reads as one thing.
+   *
+   * The platform's own, not a face to download: it is on every machine,
+   * it is what the system uses for an identifier, and a webfont for six
+   * characters a row is a request on every load for a column of grey.
+   */
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  /*
+   * The type scale: six sizes for the product, and a few named ones that are
+   * there on purpose.
+   *
+   * Twenty-two sizes were written by hand, a component at a time, and the
+   * nearest of them were one pixel apart: 13 next to 14 is a hierarchy, 14
+   * next to 14.5 is a hesitation. Thirteen and fourteen carry most of the
+   * product — a row's title and the words under it — so both stay, and the
+   * rest are steps a reader can tell apart.
+   *
+   * Tailwind's own sizes are cleared first, and these carry no line height
+   * of their own: a size changes the letters, not the rhythm of the rows
+   * around them, which is the body's twenty pixels or a `leading-` beside
+   * the size. `text-lg` stays at seventeen, above the sixteen iOS needs
+   * before it stops zooming into a field.
+   */
+  --text-*: initial;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 17px;
+  --text-xl: 20px;
+  /* A count on a badge, a key, a tab's label under its glyph. */
+  --text-badge: 11px;
+  /* The `+3` on a stack of faces, and the smallest words on the landing. */
+  --text-mini: 9px;
+  /* The landing page's drawings of the product, at the size of a drawing. */
+  --text-sketch: 8px;
+  /* A page's own title, a big number, the first screen's greeting. */
+  --text-title: 24px;
+  --text-display: 32px;
+  --text-hero: 40px;
+  /*
+   * The shell's line height, as a ratio and not a length: twenty over
+   * fourteen. The app's frame set it with the old `text-sm`, and every size
+   * inside the frame without a `leading-` of its own takes its line from
+   * it — a 24-pixel number gets 34, not the body's twenty.
+   */
+  --leading-shell: calc(1.25 / 0.875);
+  /* Tracking is size-specific: large text reads too loose as it grows, small
+     text too tight. One value for both is wrong somewhere. */
+  --track-body: -0.1px;
+  --track-title: -0.3px;
+  --track-display: -0.7px;
+
+  /*
+   * The built-in CSS easings are too weak to read as deliberate. These are the
+   * stronger variants: --ease-out for anything entering or responding to a
+   * press, --ease-in-out for something moving across the screen.
+   *
+   * ease-in is deliberately absent. It delays the first frame, which is the
+   * frame the user is watching hardest, so the same duration feels slower.
+   */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  /*
+   * For a surface travelling its own width in or out of the edge it lives
+   * on.
+   *
+   * The two above are for something appearing where it already is, and over
+   * three hundred pixels their front loading tells: the house ease-out puts
+   * 84 of those pixels in the first frame and then crawls the last twenty
+   * for a sixth of a second, which reads as the panel stopping early and
+   * then dragging itself the rest of the way. This one moves 57 in the
+   * first frame — still answered at once — and spends the rest of the
+   * distance evenly.
+   */
+  --ease-drawer: cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+
+/*
+ * The palette as classes: `text-ink-3`, `bg-sunken`, `border-line`.
+ *
+ * One class for every colour the palette below names, under the same name,
+ * so `text-ink-2` is `var(--ink-2)` and nothing else. Inline, so the class
+ * reads the variable where it is used and not where `@theme` is: the
+ * landing and the board set their own `--lp-*` and `--bd-*` on a section of
+ * the page, and a class that took them from the root would find nothing.
+ */
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-chrome: var(--chrome);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-panel: var(--panel);
+  --color-float: var(--float);
+  --color-control: var(--control);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-hover: var(--hover);
+  --color-track: var(--track);
+  --color-track-on: var(--track-on);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-due: var(--due);
+  --color-danger: var(--danger);
+  --color-scrim: var(--scrim);
+  --color-dialog-scrim: var(--dialog-scrim);
+  --color-art-ground: var(--art-ground);
+  --color-tint-0: var(--tint-0);
+  --color-tint-1: var(--tint-1);
+  --color-tint-2: var(--tint-2);
+  --color-tint-3: var(--tint-3);
+  --color-tint-4: var(--tint-4);
+  --color-tint-5: var(--tint-5);
+  --color-tint-6: var(--tint-6);
+  --color-tint-7: var(--tint-7);
+  --color-tint-8: var(--tint-8);
+  --color-tint-9: var(--tint-9);
+  --color-warn: oklch(66% 0.15 55);
+
+  /* The landing's, in the tone of the band they are in. */
+  --color-lp-bg: var(--lp-bg);
+  --color-lp-fg: var(--lp-fg);
+  --color-lp-muted: var(--lp-muted);
+  --color-lp-faint: var(--lp-faint);
+  --color-lp-line: var(--lp-line);
+  --color-lp-line-strong: var(--lp-line-strong);
+  --color-lp-accent: var(--lp-accent);
+  --color-lp-card: var(--lp-card);
+  --color-lp-sunk: var(--lp-sunk);
+  --color-lp-chip: var(--lp-chip);
+  --color-lp-chip-on: var(--lp-chip-on);
+  --color-lp-code: var(--lp-code);
+  /* The board drawn on the landing. */
+  --color-bd-bg: var(--bd-bg);
+  --color-bd-fg: var(--bd-fg);
+  --color-bd-quiet: var(--bd-quiet);
+  --color-bd-icon: var(--bd-icon);
+  --color-bd-card: var(--bd-card);
+  --color-bd-col: var(--bd-col);
+  --color-bd-panel: var(--bd-panel);
+  --color-bd-badge: var(--bd-badge);
+  --color-bd-ring: var(--bd-ring);
+  --color-bd-search: var(--bd-search);
+  --color-bd-seg: var(--bd-seg);
+  --color-bd-seg-on: var(--bd-seg-on);
+  --color-bd-seg-on-fg: var(--bd-seg-on-fg);
+  --color-bd-sel: var(--bd-sel);
+}
+
+/*
+ * The palette lives here and not in `@theme`, and that is not a style choice.
+ *
+ * Tailwind drops theme variables no utility class mentions, and most of these
+ * are named only from inline styles — so `--tint-3`, `--r-panel`, `--due` and
+ * the shadows were declared, compiled away, and resolved to nothing. Every
+ * tinted tile was transparent and every card was flat, with no error anywhere
+ * and the variables plainly there in the file.
+ *
+ * `@theme` keeps what Tailwind has to know about: the colours behind
+ * `bg-sunken` and `text-ink-3`, the font, the sizes. Everything a
+ * component reads with `var()` is declared below, where nothing can decide it
+ * is unused.
+ */
+:root {
+  /*
+   * The system greys, and everything else named from them.
+   *
+   * Not an evenly spaced ramp any more. These are the values the design uses,
+   * and they are not evenly spaced on purpose: the three surfaces at the top
+   * are a hair apart because a sidebar, a column and a card have to be
+   * tellable apart without a line between them, while the greys that carry
+   * text are far apart because that is what legibility needs.
+   */
+  --n-0: #ffffff;
+  --n-1: #f5f5f7;
+  --n-2: #f2f2f5;
+  --n-3: #e8e8ed;
+  --n-4: #d1d1d6;
+  --n-5: #aeaeb2;
+  --n-6: #8e8e93;
+  --n-7: #6c6c70;
+  --n-8: #5e5e63;
+  --n-9: #1d1d1f;
+
+  /*
+   * What the ramp is used for. Components name these and never the ramp.
+   *
+   * The page is grey and the work is white, not the other way round.
+   *
+   * It was the other way round: a white page with grey panels laid on it.
+   * That put the brightest surface on the screen under everything, and the
+   * thing a person is actually reading — a list of tasks, a document, a
+   * task's own screen — a step darker than the ground it sits on. The dark
+   * theme never did this; there the page is nearly black and every panel
+   * lifts out of it. One rule read the same way in both: what you put things
+   * on recedes, and what is laid on it comes forward.
+   *
+   * So the chrome — page, sidebar, the tools column — is one grey, the work
+   * is a white sheet in it, and `--sunken` is what is cut *into* a surface:
+   * a field, a board column, the well behind an empty state's mark.
+   */
+  --canvas: var(--n-1);
+  /*
+   * The sidebar a step below the page, as it is a step above it in dark.
+   *
+   * It lay flat on the page here, the same grey, so the workspace column and
+   * the project's tools column read as one strip with a gap in it, while in
+   * dark they were two things. Darker rather than lighter because lighter is
+   * white, and white is the work. Between `--n-2` and `--n-3` on purpose: a
+   * column that has to be told apart without a line, not a well cut into
+   * the page.
+   */
+  --chrome: #ffffff;
+  --surface: var(--n-0);
+  --sunken: var(--n-3);
+  /* A board's column, by choice: lighter than the sunken well
+     the list's rows sit in, the grey Apple puts behind its own grouped
+     lists, so a column of white cards reads as a page and not a trench. */
+  --lane: #f5f5f7;
+  --panel: var(--n-1);
+  /* A task drawn under the message that names it. White on the white room
+     it was, held off the words only by a shadow the eye barely finds; a
+     step of grey says it is a thing inside the conversation, not more of
+     it. In the dark the surface already does. */
+  --said-card: var(--n-1);
+  /*
+   * A card on the board, which is not the same as the list's sheet.
+   *
+   * Both were `--panel` on the argument that the two drawings of one
+   * project should agree about what a task looks like, and in the dark
+   * theme they do: `--panel` is the lighter of the two grounds there, so a
+   * card reads as raised. In the light theme `--panel` is the grey the list
+   * is *printed on* and white is the paper — a card drawn in it is a hole
+   * in the column rather than a card on it.
+   *
+   * So the rule is the same in both and the value is not: the card takes
+   * whichever of the two reads as lifted off the column under it.
+   */
+  --card: var(--n-0);
+
+  /*
+   * The strip a band's name sits on.
+   *
+   * A heading between two groups of rows was the same grey as the rows, so
+   * what separated one group from the next was a hairline and the word
+   * itself. A shade of its own makes the strip a thing the eye skips to,
+   * which is what a heading in a long list is for.
+   *
+   * Barely a step — two per cent of white over the panel in dark, two per
+   * cent of black under it in light. Enough to read as a band and not
+   * enough to stripe the list, which is what a list of alternating grounds
+   * becomes once it is longer than a screen.
+   */
+  --band: rgb(0 0 0 / 0.025);
+
+  /*
+   * How much of a tint a mark's wash is made of.
+   *
+   * Per theme, because the two grounds pull opposite ways. On the dark
+   * ground a 16% wash in oklch is all but the ground itself — measured, a
+   * tile on the sidebar read at 1.05 against what it sits on, which is a
+   * mark somebody can see is there and cannot say the colour of. A real
+   * sRGB composite at 20% puts it at 1.5–1.7.
+   *
+   * On white the same change undoes the thing the wash is for: the glyph
+   * sits on it and has to clear 4.5:1, and an sRGB mix barely darkens the
+   * tile, so the ink lost its ground — 1.87, where oklch left it at 4.95.
+   *
+   * So each theme names the space and the amount, and the component builds
+   * the mix from them. The whole declaration cannot live here: it would be
+   * resolved once at `:root`, where the tint it needs does not exist yet.
+   */
+  --mark-space: oklch;
+  --mark-wash-pct: 16%;
+  --ink: var(--n-9);
+  --ink-2: var(--n-8);
+  --ink-3: var(--n-7);
+  /* A place in the side column that is not where you are — `ui/Sidebar.tsx`. */
+  --side-ink: #6e6e76;
+
+  /*
+   * The interactive layers are alpha, and the solid ramp above is not.
+   *
+   * A row under the pointer, the track behind a segmented control and the
+   * count on a chat row all sit on something — the sidebar, a card, a
+   * column — and each of those is a different grey. Given as solid values
+   * they would be right on one surface and wrong on the next two; given as
+   * alpha they are the same darkening wherever they land, which is what the
+   * design does and the reason it holds together across three backgrounds.
+   *
+   * Alpha of the grounds' own hue, not of black. The greys here are cool —
+   * #f5f5f7, #f2f2f5, #e8e8ed — and six per cent of black over a white card
+   * is a neutral #f0f0f0, a grey from no palette, sitting on a lavender
+   * column. This is the darkening that lands on white as #f2f2f5 and on the
+   * column as a deeper step of the same grey: the hover in the tone of what
+   * it is over.
+   */
+  --hover: rgb(38 38 88 / 0.06);
+  --track: rgb(0 0 0 / 0.05);
+  --track-on: #ffffff;
+  /* The ground of a quiet control — a button beside the one action, a
+     select on a settings line. The field's grey here; the dark theme says
+     why it is a token of its own. */
+  --control: var(--sunken);
+  --badge: rgb(0 0 0 / 0.07);
+  --line: rgb(0 0 0 / 0.08);
+  --line-strong: var(--n-4);
+  /* The empty states' drawings: one stroke in three greys, and the accent
+     for the one bright mark — `ui/illustrations/strokes.ts`. The ground is
+     read from the screen behind each drawing; this is what it falls back to. */
+  --art-ground: var(--surface);
+  --art-edge: #aeaeb2;
+  --art-mid: #c7c7cc;
+  --art-lo: #dcdce0;
+  /* Code, in the colours an editor uses for it — `data/highlight.ts`. */
+  --code-comment: #6e7781;
+  --code-string: #0a3069;
+  --code-number: #0550ae;
+  --code-keyword: #cf222e;
+  --code-fn: #8250df;
+  --code-type: #953800;
+
+  --accent: #007aff;
+  --accent-soft: #e6f0ff;
+  /* Words a thread is on. The yellow
+     every document editor marks a comment with, washed so the words stay
+     in the ink they are read in; the same in both themes. */
+  --comment-tint: color-mix(in oklch, #ffcc00 28%, transparent);
+  --comment-tint-on: color-mix(in oklch, #ffcc00 52%, transparent);
+  --comment-line: color-mix(in oklch, #e0a800 80%, transparent);
+  --on-accent: #ffffff;
+  /*
+   * A date that has arrived is not an error, and the two were one colour.
+   * Deleting something is red; a due date is the warm orange the system uses
+   * for "look at this", and they must not be the same or the second teaches
+   * people to ignore the first.
+   */
+  --due: #c93400;
+  --danger: #ff3b30;
+  /* The ground under a red row a pointer is on — a menu's Delete. The
+     danger itself at a tenth, so the row reads as the same red thing lit
+     rather than as a grey highlight on red words. */
+  --danger-wash: color-mix(in srgb, var(--danger) 12%, transparent);
+  /*
+   * A pull request's state, in GitHub's own colours.
+   * Not the theme's: somebody who works in GitHub all day reads green as
+   * open and purple as merged before they read the word, and a product that
+   * moved them onto its own accent would be teaching a second code for one
+   * thing. Each theme takes GitHub's own value for it.
+   */
+  --gh-open: #1a7f37;
+  --gh-merged: #8250df;
+  --gh-closed: #cf222e;
+  --gh-draft: #59636e;
+  --gh-running: #9a6700;
+
+  /*
+   * Raised things cast, sunken things do not.
+   *
+   * Two shadows rather than one: a card lifts off the column it sits in, and
+   * the selected segment lifts off the track behind it by much less. One
+   * value for both made the segment look like a card.
+   */
+  --card-shadow: 0 2px 4px rgb(0 0 0 / 0.04), 0 1px 1px rgb(0 0 0 / 0.06);
+  /*
+   * What floats over the words being written — the bar over chosen text,
+   * the table's bar, the "/" list. They were the surface with a card's
+   * shadow, which in this theme is white on the white of a document with
+   * a shadow too faint to find: a bar of buttons with nothing round it. A
+   * step of grey, an edge and a menu's lift, so it is plainly over the
+   * page and not part of it.
+   */
+  --float: var(--n-1);
+  --float-shadow: 0 0 0 1px var(--line), var(--glass-shadow);
+  /*
+   * A ring and then a shadow.
+   *
+   * The shadow alone is offset downward, so a white control on a white
+   * panel had an edge along its bottom and none at all along its top —
+   * which is what "it blends in at the top" is. The ring is a spread with
+   * no blur and no offset, so it draws all four sides and takes no space:
+   * a real border would move the text inside the chosen one by a pixel
+   * while the unchosen ones stayed put.
+   */
+  --control-shadow: 0 0 0 1px rgb(0 0 0 / 0.07), 0 1px 1.5px rgb(0 0 0 / 0.12);
+  /*
+   * The chosen tab in a row of them: the shadow without the ring.
+   *
+   * The chip sits on the track's grey, not on a white panel, so its top
+   * edge is drawn by the ground changing and the ring only outlined it a
+   * second time — a border round the one answer, which we asked
+   * to lose.
+   */
+  --segment-shadow: 0 1px 1.5px rgb(0 0 0 / 0.12);
+
+  /*
+   * The tints a project or a person is given.
+   *
+   * A fixed set, not a hue computed from a hash. Ten colours the eye can name
+   * are ten things somebody can learn; three hundred and sixty hues are one
+   * thing nobody can. They are the system colours, and they brighten in the
+   * dark theme rather than dimming — a saturated colour on near-black needs
+   * more light, not less, or it turns to mud.
+   */
+  --tint-0: #ff3b30;
+  --tint-1: #ff9500;
+  --tint-2: #ffcc00;
+  --tint-3: #34c759;
+  --tint-4: #30b0c7;
+  --tint-5: #0a7fff;
+  --tint-6: #5856d6;
+  --tint-7: #b35be0;
+  --tint-8: #ff2d55;
+  --tint-9: #8e8e93;
+
+  /*
+   * Two readable companions for every tint — one measured, not chosen.
+   *
+   * A tint is a ground and a shape at once: a white letter on a filled
+   * square, and the tint itself as a glyph on a 16% wash of it. White on
+   * yellow is 1.4:1 and a yellow glyph on a yellow wash is 1.4:1, so the
+   * mark that tells two people apart was the one thing on the screen
+   * nobody could read.
+   *
+   * `-on` is what reads **on** the filled tint and `-ink` is the tint
+   * itself, walked towards black or white until it reads on its own wash.
+   * Both are at or above 4.5:1, which is the rule for text; the letter in
+   * an avatar is text, and a glyph held to the same bar costs nothing.
+   *
+   * Walked rather than invented, so each one is the nearest readable
+   * version of the colour it came from and the palette still looks like
+   * itself.
+   *
+   * Measured against the wash **as the browser mixes it**, not as the
+   * arithmetic says it should be: `color-mix(in oklch, … transparent)` is
+   * not a blend in sRGB, and ink picked against the sRGB answer came out a
+   * full point short. Against the hardest of the four grounds a wash is
+   * ever laid on, so one value is right everywhere it is drawn.
+   */
+
+  /*
+   * The ground under a letter on a face, which is not the tint itself.
+   *
+   * An avatar is a tint with an initial on it, and the initial is the thing
+   * that tells two people with the same colour apart — so it has to read.
+   * White does not read on most of these: on the yellow it is 1.4:1, on the
+   * green 2.0, which is a letter somebody can see is there and cannot say
+   * which letter it is.
+   *
+   * The old answer was near-black text on nine of the ten and white on the
+   * one blue that could carry it, which passed and looked like ten
+   * different kinds of badge. The other answer — darkening the tints
+   * themselves until white works — costs the palette: the yellow lands at
+   * 54 per cent of itself, which is a brown, and it is also the colour of
+   * a label dot and a project's mark, where nothing was wrong.
+   *
+   * So the face has its own ground, each tint taken down only as far as
+   * white needs and no further. Measured, not eyeballed: every one of these
+   * is between 4.6 and 5.1 against white, and the hue is the tint's.
+   */
+  --face-0: #db3329;
+  --face-1: #ab6400;
+  --face-2: #8c7000;
+  --face-3: #23853c;
+  --face-4: #237f8f;
+  --face-5: #0972e6;
+  --face-6: #5856d6;
+  --face-7: #9f51c7;
+  --face-8: #de274a;
+  --face-9: #747479;
+
+  --tint-0-ink: #9c241d;
+  --tint-1-ink: #784600;
+  --tint-2-ink: #635000;
+  --tint-3-ink: #19602b;
+  --tint-4-ink: #195c67;
+  --tint-5-ink: #0753a6;
+  --tint-6-ink: #4847af;
+  --tint-7-ink: #743b92;
+  --tint-8-ink: #9e1c35;
+  --tint-9-ink: #8e8e93;
+
+  /*
+   * Six radii, and each one belongs to a size of thing: a 20px tile, a row,
+   * a field, a card, a pill, a panel. Picked once here so that no component
+   * has to decide, which is how a screen ends up with 8, 9 and 10 on three
+   * neighbouring boxes.
+   *
+   * All six are multiples of four, like every other measurement in the
+   * product. They were 6, 8, 10, 14, 16, 18 — a ramp of its own, which is
+   * one more thing to remember than a ramp shared with the spacing.
+   */
+  --r-tile: 4px;
+  --r-row: 8px;
+  --r-field: 12px;
+  --r-card: 16px;
+  /*
+   * A pill is round, whatever height it is.
+   *
+   * This was 16 like the card beside it, which is only a pill on
+   * something 32 tall or more — and almost nothing wearing it is. The
+   * segmented chip is 28 and the label chips are 20, so both came out
+   * with flat sides and read as cards that had been squashed rather
+   * than as pills.
+   *
+   * A large number rather than a measurement: the browser clamps a
+   * radius to half the shorter side, so this is "as round as it can
+   * be" at every size and the one value is right for all of them. It
+   * is the one radius in the ramp that is not on the four-grid,
+   * because it is not a length — it is an instruction.
+   */
+  --r-pill: 9999px;
+  --r-panel: 20px;
+
+  /*
+   * Two heights, and everything is one of them.
+   *
+   * A row in a list and a control in a bar are different things and were
+   * seven different heights. Density is mostly this: deciding once how tall a
+   * line of the product is.
+   */
+  --row-h: 32px;
+  --control-h: 32px;
+  /* Navigation is touched less often than a list is read, and a bigger target
+     costs nothing in a column that is not dense with data. */
+  --nav-h: 32px;
+
+  /*
+   * The gutter down both sides of a screen.
+   *
+   * One token rather than a `wide ?` at every callsite: seven screens use it
+   * and the eighth would be the one that forgot. It is wrong on a phone,
+   * where it would be a tenth of the screen spent on nothing, and that is
+   * what the narrow override below is for. `docs/specs/narrow.md`.
+   *
+   * Twenty-four rather than thirty-two since the work sits on a sheet of
+   * its own: the sheet's edge is already the margin the gutter used to be,
+   * and the two together read as a screen indented twice.
+   */
+  --gutter: 24px;
+
+  /*
+   * The gap between the ground and what floats on it, and the corner they
+   * all share.
+   *
+   * One number each and at the root, not per theme: the shape of the shell
+   * is the same in both and only the colours under it change. They lived in
+   * the dark block first, so light drew three sheets with no gap and no
+   * corners — the columns ran edge to edge and the whole arrangement
+   * vanished.
+   */
+  --lift: 8px;
+  --r-lift: 12px;
+
+  /*
+   * How far the work is in from the window's edge: the sheet's lift and
+   * the gutter inside it. Sixteen on a phone, where the bar at the top
+   * stands in by the same amount so its name lines up with the lines
+   * under it — it was twelve, written separately, and stood four to the
+   * left of them.
+   */
+  --edge: calc(var(--lift) + var(--gutter));
+
+  /*
+   * Wider on a phone, where it is the whole margin.
+   *
+   * On a laptop this is the gap between three columns as much as the
+   * inset around them, and eight is right for a seam. A phone draws one
+   * column, so the gap is never used and the number is only the distance
+   * from the work to the edge of the glass — where eight reads as the
+   * list having been cropped rather than placed.
+   */
+  @media (max-width: 639px) {
+    /* Eight, as on a laptop: twelve here and the gutter inside it put the
+       work twenty-eight in from the glass on a screen 390 wide, and we asked for the sides back. */
+    --lift: 8px;
+
+    /*
+     * And the ground goes white under it.
+     *
+     * On a laptop the grey ground is what the sheets lift off: three
+     * columns standing on something, which is the whole arrangement. A
+     * phone draws one column the width of the screen, so there is no
+     * arrangement to show — only a white card on a grey page with a seam
+     * twelve pixels wide running round it, which reads as the content
+     * having been inset by mistake rather than placed.
+     *
+     * Only the ground. `--panel` stays the grey it is on a laptop — that
+     * is the list's own card, and whitening it too left the whole screen
+     * one surface with nothing saying where the work began.
+     */
+    --canvas: var(--n-0);
+  }
+
+  /*
+   * What a modal pushes the background back with.
+   *
+   * One token, because it was written out three times — the palette, the
+   * dialog and the drawer's sheet — and three copies of a colour are two
+   * chances for one of them to be left behind.
+   *
+   * Light enough to see the work through and heavy enough to say it is not
+   * where you are: the panel over it is what has to be read.
+   *
+   * Grey, with no chroma at all. It carried 0.01 at hue 260, which is a
+   * blue so faint it reads as none on its own — and over a dark page, laid
+   * across a whole screen, faint and large is exactly the condition in
+   * which a cast becomes visible. What showed behind the palette was a
+   * cool wash rather than the work gone quiet. The scrim's job is to take
+   * light out, and taking light out has no hue.
+   */
+  --scrim: oklch(24% 0 0 / 0.28);
+  /*
+   * Under a dialog, deeper: making a task or a project is the one thing on
+   * the screen while it is open, and at 0.28 the page behind still read as
+   * something to look at. The panel's shadow is wide and faint and its
+   * edge barely there — it is set apart by the dark around it, not by a
+   * line drawn round it.
+   */
+  --dialog-scrim: oklch(18% 0 0 / 0.44);
+  --dialog-shadow: 0 24px 64px rgb(0 0 0 / 0.12), 0 2px 8px rgb(0 0 0 / 0.04);
+  --dialog-edge: rgb(0 0 0 / 0.04);
+
+  /*
+   * And the work behind it goes soft.
+   *
+   * The tint alone is enough on a laptop, where a modal is 600 wide on a
+   * 1400 screen and the gap around it is what says which is which. On a
+   * phone the panel is nearly the whole width, so the only thing between
+   * it and the list is 28% of grey — and a sharp row half a centimetre
+   * under a sharp panel reads as one surface, not as something over
+   * something.
+   *
+   * Four pixels, not the lens's twelve: this is behind a surface that is
+   * itself blurring what it covers, and blurring twice makes a fog rather
+   * than a depth. Enough to put the work out of focus and keep it
+   * recognisable, which is the whole of what a scrim is for.
+   */
+  --scrim-blur: 4px;
+
+  /*
+   * What a column lays over itself while it is answering a drag.
+   *
+   * Nearly opaque on purpose: the cards under it are what somebody is
+   * looking past, so the sheet has to put them behind it rather than
+   * tint them — the one line of text on it is the thing being read.
+   * Light here and dark in the dark theme, each against its own ground.
+   */
+  --veil: oklch(100% 0 0 / 0.78);
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+  body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    /* 14px, which is the size this whole product is written at. A tool people
+       keep open all day is read at a distance they have already chosen. */
+    font-size: 14px;
+    line-height: 20px;
+    letter-spacing: var(--track-body);
+    /*
+     * Medium everywhere, and not as an accent.
+     *
+     * Every text node in the design is Medium — the hierarchy is carried by
+     * size and colour, and weight is held constant so that it can be. Regular
+     * next to Medium reads as two typefaces at these sizes, which is what the
+     * product looked like: a title in one voice and the line under it in
+     * another.
+     */
+    font-weight: 500;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: 'cv05', 'ss01';
+  }
+
+  /*
+   * A key or a token, hidden by its letters rather than by being a password
+   * field: a password field is a login to every browser, and offered the
+   * person's saved sign-ins over a webhook's key — `ui/kit/fields.tsx`.
+   */
+  [data-secret] {
+    -webkit-text-security: disc;
+  }
+
+  /*
+   * A search field looks like every other field. The browser's own clear
+   * button would be a second ✕ beside the ones the product draws.
+   */
+  input[type='search'] {
+    appearance: none;
+  }
+  input[type='search']::-webkit-search-cancel-button,
+  input[type='search']::-webkit-search-decoration {
+    appearance: none;
+    display: none;
+  }
+
+  /*
+   * The edge under an installed copy's title bar.
+   *
+   * The bar takes the page's colour from `theme-color`, so in a window of its
+   * own the app ran straight up into the title and there was nothing to say
+   * where the window's chrome stops and the product starts. A tab has the
+   * browser's own toolbar edge for that; an installed copy has only this.
+   * Fixed and over everything, so it runs across the sidebar and the page
+   * alike, and takes no space. A fine pointer only: on a phone the status
+   * bar is not a title bar, and a line under it is a line under nothing.
+   */
+  @media (display-mode: standalone) and (pointer: fine) {
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0 0 auto;
+      height: 1px;
+      background: var(--line);
+      pointer-events: none;
+      z-index: 2147483647;
+    }
+  }
+
+  /*
+   * A row lights under the pointer and nothing else moves.
+   *
+   * The hover is the lightest step on the ramp on purpose: it is under the
+   * cursor, so it needs to be noticed and not looked at. The fade belongs to
+   * the pointer, and to nothing else.
+   *
+   * Declared on the whole row, the transition also ran when the selection
+   * moved: pressing a tab left the old one glowing and the new one arriving
+   * over ninety milliseconds, while the content beside them swapped in a
+   * single frame. Filmed, that is two tabs lit at once, and it was the last
+   * thing that made a screen change look like it was being assembled rather
+   * than shown.
+   *
+   * Written on the rule that draws the hover, it applies only while a
+   * row is hovered and unselected. Becoming selected stops matching it, so
+   * the ground arrives at once; losing the selection never matched it, so it
+   * leaves at once. A click on a row already under the pointer shows nothing
+   * at all, because the hovered ground and the selected ground are the same
+   * token.
+   */
+  @media (hover: hover) {
+    [data-row]:hover:not([data-selected]) {
+      background: var(--hover);
+      transition: background 90ms var(--ease-out);
+    }
+  }
+
+  /* Except where one highlight travels between them instead — `Fluid`. The
+     ground is the same colour, so a row painting its own as well is the
+     highlight arriving at something already lit. */
+  [data-fluid] [data-row]:hover:not([data-selected]) {
+    background: transparent;
+  }
+
+  /* Numbers in a column line up; a date that jitters as it changes reads as
+     the row moving. */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /*
+   * A focus ring that is a ring, not a browser default.
+   *
+   * Only for the keyboard: a mouse user who just clicked something knows
+   * where they clicked.
+   */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+    border-radius: var(--r-tile);
+  }
+  /*
+   * A control's words are not a passage.
+   *
+   * Dragging across a sidebar row selected the word "Members" and left it
+   * highlighted in blue, which is the browser offering to copy a label
+   * nobody wants to copy — and on a row that is a link, the drag that
+   * did it was a press that missed. A tool somebody spends the day in
+   * has a lot of these: every row, tab, chip and button carries a word,
+   * and none of them is text in the sense that selecting means anything.
+   *
+   * Said once, about what a thing *is*, rather than as a class each of
+   * them has to remember. There was a `.no-select` for this and it was
+   * applied nowhere at all, which is the argument against the class.
+   *
+   * What stays selectable is what somebody might actually want to take:
+   * a task's title, a message, a document, a description, an id. Those
+   * are content, and `[data-text]` marks the ones that live inside
+   * something pressable. Form fields select on their own and are left
+   * alone — a value being typed is the clearest case of all.
+   */
+  /*
+   * Turned around: the interface does not select, and content does.
+   *
+   * This was a list of the things that are pressable — `button`, `a`,
+   * the roles, `[data-row]`, `[data-control]` — and it missed everything
+   * that is a label without being a control. Measured across the board
+   * and the list: a column's name, the sidebar's rows, a card's body and
+   * a task's counts all read `user-select: auto`, and the title of a
+   * task in the list read `text`, which is the rule for prose applied to
+   * a heading that is a button.
+   *
+   * Listing what a control is cannot work, because the next label
+   * somebody draws in a `span` is not on the list and nothing fails. So
+   * the body refuses selection and the exceptions below ask for it. The
+   * exceptions are the whole of what anybody wants to take out of this
+   * product: a message, a document, a description, an id, a field being
+   * typed in.
+   *
+   * `-webkit-touch-callout` goes with it, which was set nowhere at all.
+   * On iOS a long press raises the platform's own menu even where the
+   * selection is refused, and on the board that press is how a card is
+   * picked up — so the drag began with a bubble over the card offering
+   * to copy it.
+   */
+  body {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  /*
+   * Content is what a reading surface holds, and those are named.
+   *
+   * Refusing on `body` and allowing only `[data-text]` would have been
+   * the tidier rule and it is wrong today: `[data-text]` is on two
+   * elements in the whole product, and a message, a document's body, a
+   * post and a file's name are none of them. The demo workspace has no
+   * messages or posts in it, so no measurement here could have caught
+   * that — it would have shipped as “nothing selects” and been found by
+   * somebody trying to quote a message.
+   *
+   * So the reading surfaces are listed by what they are, and every name
+   * here is one that exists in the code: `[data-message]` and
+   * `[data-history]` are the chat's, `[data-block]` is a document's, and
+   * the bare tags cover prose wherever it is written as prose.
+   * `[data-text]` stays for content that sits inside something
+   * pressable, such as a task's title in a row that is a button.
+   *
+   * A reading surface added later has to be added here too, and the
+   * failure is quiet — text that will not select rather than an error.
+   * That is the cost of this direction, and it is the right way round:
+   * the other way, every new label leaked a selection on a phone and
+   * nothing failed either.
+   */
+  [data-message],
+  [data-message] *,
+  [data-history],
+  [data-history] *,
+  [data-block],
+  [data-block] *,
+  p,
+  blockquote,
+  pre,
+  code,
+  li {
+    user-select: text;
+    -webkit-user-select: text;
+    -webkit-touch-callout: default;
+  }
+
+  /*
+   * And the exceptions, which are the content.
+   *
+   * `[data-text]` marks content that sits inside something pressable —
+   * a task's title in a row that is itself a button. Form fields select
+   * on their own and are named anyway, because a value being typed is
+   * the clearest case of all.
+   */
+  /*
+   * And a page that is read, not worked in — the landing, Help, the
+   * comparisons, who Tuff is for, the legal pages, a shared document: a web
+   * page, where somebody selects a sentence to quote or a price to check
+   * and found the whole of it refused, the headings first. `[data-page]`
+   * on each one's root.
+   */
+  [data-page],
+  [data-page] *,
+  input,
+  textarea,
+  [contenteditable],
+  [contenteditable] *,
+  [data-text],
+  [data-text] * {
+    user-select: text;
+    -webkit-user-select: text;
+    -webkit-touch-callout: default;
+  }
+
+  .no-select {
+    user-select: none;
+  }
+
+  /*
+   * Every pressable thing answers the press itself, on pointer-down rather
+   * than on release. Without it the interface takes the click and shows
+   * nothing until the state arrives, which reads as not having heard.
+   *
+   * 0.97 and 160ms: enough to feel, not enough to notice.
+   */
+  button {
+    transition: transform 120ms var(--ease-out);
+  }
+
+  button:active {
+    transform: scale(0.97);
+  }
+
+  /*
+   * A control lights under the pointer, whatever it is made of.
+   *
+   * A wash over the top rather than a background of its own: these have
+   * their own already — the accent on the one action, `--control` on the
+   * quiet ones, nothing at all on the bare ones — and a hover that
+   * replaces it is a different button appearing under the hand. Overlaid,
+   * one token is the answer for all of them.
+   *
+   * The corners are inherited, so nothing has to say its shape twice.
+   */
+  [data-control] {
+    position: relative;
+  }
+
+  [data-control]::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--hover);
+    opacity: 0;
+    transition: opacity 90ms var(--ease-out);
+    pointer-events: none;
+  }
+
+  /* Behind the same gate Tailwind puts its own hover utilities behind, so a
+     touch device never leaves one stuck on whatever was tapped last. */
+  @media (hover: hover) {
+    [data-control]:hover::after {
+      opacity: 1;
+    }
+  }
+
+  /*
+   * A press on a row is not a press on a control.
+   *
+   * A left-aligned button is a row in this product — a task's title, a line
+   * in a menu, a name in the sidebar — and scaling one about its middle
+   * walks its text inward while the ground under it stays where it is. The
+   * shrink says "this button took your press"; a row is a place you are
+   * going, and the screen that arrives says it better than six pixels of
+   * text sliding right.
+   */
+  button[data-row]:active,
+  button.text-left:active {
+    transform: none;
+  }
+
+  /*
+   * A control that cannot be used says so, and does not answer the press.
+   * Said once here rather than as an opacity at each callsite: a disabled
+   * button that still shrinks under the finger has told somebody it heard
+   * them, and then does nothing.
+   */
+  button:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  button:disabled:active {
+    transform: none;
+  }
+
+  /*
+   * The chevron on a dropdown is ours, not the browser's.
+   *
+   * Every `select` in the product drew the platform's own arrow: hard
+   * against the right edge, hairline thin, and a different shape on each
+   * machine. A control that is ours everywhere else ended with somebody
+   * else's mark on it.
+   *
+   * Drawn as a background image, which is the only way to put a glyph in a
+   * `select` — its options are rendered by the browser and nothing can be
+   * placed inside it. Two strokes in `currentColor`, so it dims with the
+   * text when a control is disabled and inverts with the theme without a
+   * second copy of it.
+   *
+   * `appearance: none` first, or the platform arrow stays and ours lands
+   * beside it. The padding on the right is the glyph's box plus the room it
+   * stands off the edge — one number, so a select cannot have its own
+   * spacing and disagree with the next.
+   *
+   * Drawn by `background-image` with `!important`, which is the one place
+   * in this sheet that has it. Nine of the eleven selects set `background:`
+   * inline for their own ground, and the shorthand resets `background-image`
+   * to none — an inline style no stylesheet can reach without it. The
+   * alternative is nine callsites each remembering to write the glyph, and
+   * the tenth being the one that forgot.
+   */
+  select {
+    appearance: none;
+    /* `!important` here too, and for the other half of the same reason: a
+       `px-2` on the callsite is a Tailwind utility, which outranks a bare
+       element selector. Without it the glyph is drawn over the room the
+       text was given. */
+    padding-right: 28px !important;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'><path d='M1.5 1.75 6 6.25l4.5-4.5' stroke='%23999' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/></svg>") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 8px center !important;
+    background-size: 12px 8px !important;
+  }
+
+  /* Inside a `Popover` the face is a button and the select is the invisible
+     layer over it that takes the press — it has a glyph of its own already,
+     and a second one would be drawn over the first. */
+  select.opacity-0 {
+    background-image: none !important;
+    padding-right: 0 !important;
+  }
+
+  /*
+   * A select inside a pill carries a smaller arrow and borrows the pill's
+   * own right-hand gap.
+   *
+   * The numbers above are a form select's: 28 of padding is the glyph plus
+   * the room it stands off the edge, and that is right when the select
+   * *is* the control. Inside a chip it is not — the pill already pays 8 on
+   * each side, so the select's 28 lands on top of the right-hand one and
+   * the inside of the pill measures 8 on the left against 36 on the right.
+   * Measured on a card, which is where it shows.
+   *
+   * So the glyph sits against the select's own edge and the pill's padding
+   * is the gap, which is what makes the two sides agree. And it is drawn at
+   * 10×7 rather than 12×8: a chip is a 24-pixel-high thing and the form
+   * arrow is sized for a 32-pixel one, so at full size it reads as the
+   * heaviest mark on a card that is mostly words.
+   */
+  select[data-in-pill] {
+    padding-right: 14px !important;
+    background-position: right 0 center !important;
+    background-size: 10px 7px !important;
+  }
+
+  /*
+   * And a select that is the pill — `Select` in the kit — stands its arrow
+   * four further in.
+   *
+   * A form select's corner is a quarter of a small radius and the arrow
+   * can sit eight from it. A pill's end is a half circle, sixteen deep at
+   * thirty-two high, and eight from that edge put the arrow against the
+   * curve while the words on the other side stood sixteen off theirs: one
+   * end tight and the other loose. Twelve reads as level with sixteen,
+   * because an arrow is a lighter mark than a word. The gap between the
+   * words and the arrow stays the eight every select has.
+   */
+  select[data-pill] {
+    padding-right: 32px !important;
+    background-position: right 12px center !important;
+  }
+
+  /*
+   * Type gets its tracking from its size, not one value for everything.
+   * Large text reads too loose as it grows; small text needs the opposite.
+   */
+  h1, .display {
+    letter-spacing: -0.018em;
+    line-height: 1.1;
+  }
+
+  .text-badge {
+    letter-spacing: 0.006em;
+  }
+}
+
+@media (max-width: 1023px) {
+  :root {
+    --gutter: 16px;
+  }
+}
+
+/* A phone: the sheet's own edge is most of the margin, so the gutter inside
+   it is a little more than a row's own inset — the work starts sixteen in
+   from the glass, where every phone's own apps start theirs. */
+@media (max-width: 639px) {
+  :root {
+    --gutter: 8px;
+  }
+}
+
+/*
+ * The tabs floating at a phone's foot.
+ *
+ * `--foot-gap` is the air under them: the home indicator's height where
+ * there is one, so they stand clear of it, and twenty where there is not.
+ * It overlapped the indicator by eight until the page reached under the
+ * phone's edges (`viewport-fit=cover`), and on an installed iPhone the
+ * indicator then ran across the tabs. `--foot` is how far up anything at
+ * the foot of the screen stands so the tabs do not cover it: the end of
+ * every list, the line to write on, the undo toast. Nought above 640;
+ * inside a room, where there are no tabs, the indicator's height.
+ */
+:root {
+  --foot-gap: 0px;
+  --foot: 0px;
+}
+@media (max-width: 639px) {
+  :root {
+    /* Clear of the home indicator rather than over it: the tabs sat low
+       enough on an installed iPhone that the indicator ran across them. */
+    --foot-gap: max(20px, env(safe-area-inset-bottom, 0px));
+    --foot: calc(64px + 8px + var(--foot-gap));
+  }
+  /* With the keyboard up there are no tabs and no indicator under the
+     line to write on — `data/keyboard.ts` — so it sits on the keys, with
+     eight to breathe. */
+  :root[data-keyboard] {
+    --foot-gap: 8px;
+    --foot: 8px;
+  }
+}
+
+/*
+ * The writing dock on a phone's keys — `PhoneDock` in `ui/Editor.tsx` —
+ * stands over the foot of whatever is under it: forty-eight tall and eight
+ * above the keys.
+ *
+ * `--dock-h` is what the shell gives up while the dock is up (`data-dock`,
+ * set by the dock itself), so an open task's scroller ends on the dock
+ * instead of running on under it with the caret behind the glass.
+ * `--keys-dock` is the same room kept for it under a large window whenever
+ * the keyboard is up, so going from a task's title down into its body does
+ * not shrink the window under the hand when the dock arrives.
+ * `--dialog-top` is where a large window opens from.
+ */
+:root {
+  --dock-h: 0px;
+  --keys-dock: 0px;
+  --dialog-top: 8vh;
+}
+@media (max-width: 639px) {
+  :root {
+    --dialog-top: 4vh;
+  }
+  :root[data-keyboard] {
+    --keys-dock: 56px;
+  }
+  :root[data-keyboard][data-dock] {
+    --dock-h: 56px;
+  }
+  /* Written under the keys, as Notion does — `data/keyboard.ts`: the
+     shell keeps its height, and what it gave up to the dock and the keys
+     is room at the foot of the scroller instead. */
+  :root[data-keyboard][data-dock][data-under] {
+    --dock-h: 0px;
+  }
+  :root[data-under] {
+    --under: calc(var(--keys, 0px) + 64px);
+  }
+}
+
+/*
+ * On a phone the window itself never scrolls; only what is inside it does.
+ *
+ * A finger in a room at the top or the foot of its messages carried on into
+ * the page, and the whole window slid with the bar and the line to write
+ * on, instead of the messages. The page bounces nowhere, and a scroller at
+ * its end keeps the finger rather than handing it on.
+ */
+@media (max-width: 639px) {
+  html,
+  body {
+    overscroll-behavior: none;
+  }
+  .overflow-y-auto,
+  .overflow-auto {
+    overscroll-behavior-y: contain;
+  }
+}
+
+/* A screen's own scroller runs on under the tabs, and ends with their
+   height of nothing so its last row can still be scrolled clear of them.
+   A spacer rather than padding, so the scroller keeps its own. */
+[data-foot]::after {
+  content: '';
+  display: block;
+  flex: none;
+  height: calc(var(--foot) + var(--under, 0px));
+}
+
+/*
+ * No hover where there is nothing to hover with.
+ *
+ * Tailwind compiles `hover:` and `on-group-hover:` to a bare `:hover`, and on
+ * a touch screen that is whatever was tapped last: the wash stayed on the
+ * row somebody pressed, and the controls that appear on hover stayed out
+ * after the tap that revealed them. A phone has no pointer to follow, so a
+ * highlight that follows one is a highlight stuck where it landed.
+ *
+ * Undone here rather than by redefining the variants. Overriding
+ * `@custom-variant group-hover` looked tidier and silently dropped every
+ * *named* group — `group-hover/resizer` stopped compiling, and the column
+ * handle's hairline never came back. A rule that unsets the effect cannot
+ * break the machinery that produced it.
+ *
+ * `:active` is left alone: a press is a press on any pointer, and the
+ * feedback for it is the one thing a finger does need.
+ */
+@media (hover: none), (pointer: coarse) {
+  [data-row]:hover:not([data-selected]) {
+    background: transparent;
+  }
+
+  [data-control]:hover::after {
+    opacity: 0;
+  }
+
+  .group:hover .on-group-hover\:opacity-100,
+  .group\/resizer:hover .on-resizer-hover\:opacity-100,
+  [data-column]:hover [data-col-reveal] {
+    opacity: 0;
+  }
+
+  .group:hover .on-group-hover\:pointer-events-auto {
+    pointer-events: none;
+  }
+
+  .hover\:bg-\[var\(--hover\)\]:hover,
+  .hover\:bg-\[var\(--line\)\]:hover,
+  .mouse\:hover\:bg-\[var\(--hover\)\]:hover {
+    background-color: transparent;
+  }
+}
+
+/*
+ * A phone, where a thumb is the pointer.
+ *
+ * The chrome is 32px square — the drawer, the composer, the bell, the
+ * theme — which is right under a mouse and is what a thumb misses. Apple's
+ * floor is 44 and it is a floor for a reason: the pad of a finger is about
+ * that wide, and the target is not where the person thinks they pressed.
+ *
+ * Grown by padding rather than by size, so the glyph stays the size it is
+ * everywhere else. What gets bigger is what is pressable, which is not the
+ * same thing as what is drawn.
+ */
+@media (max-width: 639px) {
+  [data-touch] {
+    position: relative;
+  }
+
+  [data-touch]::after {
+    content: '';
+    position: absolute;
+    /* (44 − 32) ÷ 2 = 6 on each side, which is the multiple of four this
+       one cannot be: the floor is 44 and the glyph is 32. Taken on the
+       pseudo-element so no layout moves. */
+    inset: -6px;
+  }
+}
+
+/*
+ * Reduced motion is not no feedback — it is feedback without travel.
+ * Opacity and colour stay because they carry meaning; movement goes.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+
+  button:active {
+    transform: none;
+  }
+}
+
+/*
+ * Our palette is deliberately low-contrast: hierarchy comes from weight and
+ * space, so secondary text sits quiet and lines are almost absent. That is a
+ * choice for the default, not a floor. When someone asks the system for more
+ * contrast, the quiet greys are the first thing that stops being readable, so
+ * they step forward and the lines become real.
+ *
+ * There is no prefers-reduced-transparency block on purpose: nothing here is
+ * translucent, so there would be nothing for it to make solid.
+ */
+@media (prefers-contrast: more) {
+  :root {
+    /* The quiet greys step forward and the hairlines become real lines. The
+       ramp is the thing being adjusted, so everything named from it follows
+       without being listed again. */
+    --n-3: #dcdce2;
+    --lane: var(--n-3);
+    --n-5: #8a8a8f;
+    --n-6: #6b6b70;
+    --n-7: #4a4a4f;
+    --art-edge: #8a8a8f;
+    --art-mid: #aeaeb2;
+    --art-lo: #c7c7cc;
+    --hover: rgb(38 38 88 / 0.1);
+    --line: rgb(0 0 0 / 0.22);
+    --ink-2: var(--n-8);
+    --ink-3: var(--n-7);
+    --accent: #0040dd;
+  }
+}
+
+/*
+ * Hover is already gated. Tailwind v4 generates hover: utilities inside
+ * @media (hover: hover), so a touch device never gets a hover state stuck on
+ * whatever was tapped last. Overriding the variant here would remove that.
+ */
+
+/*
+ * Dark from day one, not as a later hardening pass — and defined as tokens on
+ * the root so a component never asks which theme it is in.
+ */
+/*
+ * Dark from day one, not as a later hardening pass — and defined as tokens on
+ * the root so a component never asks which theme it is in.
+ *
+ * Chosen by an attribute and not by the media query, and written once.
+ * A media query is not something a person can overrule: the theme would be
+ * whatever the machine said, and the switch at the foot of the sidebar would
+ * have nothing to change. The preference is resolved before the first paint
+ * and the answer written onto the root, so the switch, the system setting
+ * and the stylesheet all read one source. Two copies of sixty tokens is two
+ * copies that drift.
+ */
+:root[data-theme='dark'] {
+  --veil: oklch(18% 0 0 / 0.72);
+  /* Already a step up from the panel it floats over here. */
+  --float: var(--surface);
+  /* The platform's own controls follow too. Without this a date field and a
+     select stay white on a dark screen, which is the one place the theme
+     visibly stops. */
+  color-scheme: dark;
+
+  /*
+   * The ramp turned over, not the light one dimmed.
+   *
+   * Dark is not light with the brightness down: the steps near black have
+   * to be further apart than the steps near white, because the eye tells
+   * them apart less well down there. The canvas sits above the sunken
+   * surfaces rather than below them, so a panel still reads as nearer.
+   */
+  --n-0: #26262a;
+  --n-1: #1d1d20;
+  --n-2: #1a1a1d;
+  --n-3: #2e2e33;
+  --n-4: #3a3a40;
+  --n-5: #48484e;
+  --n-6: #636368;
+  --n-7: #98989f;
+  --n-8: #c7c7cc;
+  --n-9: #f5f5f7;
+
+  /*
+   * The page is the darkest thing here, and the panels lift out of it —
+   * which is now what the light theme does too, with the page a grey and the
+   * work white on it. The rule is the same in both: what you put things *on*
+   * recedes, and everything laid on it comes forward.
+   */
+  /*
+   * The ground goes darker, so the columns can lift off it.
+   *
+   * Sampled from a dark product we liked rather than picked: #090909 is
+   * what its window sits on and #111111 is every raised surface on it, with
+   * a #181818 edge around each. One step of depth for the whole app — chrome recedes to
+   * the ground, and everything laid on it is the same lighter grey with the
+   * same corners, so nothing has to invent a third level to look raised.
+   *
+   * Also written into `index.html`, which needs it before this sheet
+   * arrives — see the comment there. */
+  --canvas: #090909;
+  /* On a phone the ground is the sheet's own colour, as it goes white in
+     the light theme: one column the width of the glass, on a darker page
+     with a seam round it, read as the screen inset by mistake. */
+  @media (max-width: 639px) {
+    --canvas: var(--chrome);
+  }
+  /* The sidebar lifts off the page here and sits a step below it in light:
+     the page is already the darkest thing in the room, so there is nothing
+     below it for the sidebar to be, and above the light page is white,
+     which is the work's. Either way it is a column of its own. */
+  --chrome: #111111;
+  --surface: #242424;
+  --sunken: #0d0d0d;
+  --lane: var(--sunken);
+  --panel: #191919;
+  --said-card: var(--surface);
+  /* Lifted off the column, which here is the panel grey — see the light
+     theme for why this is its own token and not `--panel` everywhere. */
+  --card: #191919;
+  --band: rgb(255 255 255 / 0.025);
+  --mark-space: srgb;
+  --mark-wash-pct: 20%;
+  --ink: var(--n-9);
+  --ink-2: var(--n-7);
+  --ink-3: var(--n-6);
+  --side-ink: #8f8f97;
+
+  --hover: rgb(255 255 255 / 0.06);
+  --track: rgb(255 255 255 / 0.05);
+  --track-on: var(--n-5);
+  /*
+   * A quiet control is the sheet's grey, not the field's black.
+   *
+   * It was `--sunken`, and #0d0d0d on a #191919 panel made every quiet
+   * button and select on it the darkest thing there: a hole in a panel of
+   * words. This is the ground the panel itself sits on — our
+   * pick, over the chosen segment's lighter grey — so a quiet control
+   * reads as a step under the panel rather than a slot cut through it.
+   */
+  --control: #111111;
+  --badge: rgb(255 255 255 / 0.1);
+  --line: rgb(255 255 255 / 0.06);
+  --line-strong: var(--n-5);
+  --art-edge: #6e6e75;
+  --art-mid: #55555b;
+  --art-lo: #3c3c42;
+  --code-comment: #8b949e;
+  --code-string: #a5d6ff;
+  --code-number: #79c0ff;
+  --code-keyword: #ff7b72;
+  --code-fn: #d2a8ff;
+  --code-type: #ffa657;
+
+  --accent: #0a84ff;
+  --accent-soft: #10233d;
+  --on-accent: #ffffff;
+  --due: #ff9f0a;
+  --danger: #ff453a;
+  --gh-open: #3fb950;
+  --gh-merged: #ab7df8;
+  --gh-closed: #f85149;
+  --gh-draft: #9198a1;
+  --gh-running: #d29922;
+
+  /*
+   * A hairline of light, not a shadow.
+   *
+   * A card used to be `--surface` on a `--sunken` column and separated on
+   * that difference alone — 1.25, enough that nothing else was needed, and
+   * a shadow under it would have been invisible anyway. The cards take the
+   * list's own ground now so the two agree, which drops that to 1.10 and
+   * leaves the card with no edge in the one theme where a shadow cannot
+   * draw one.
+   *
+   * So the edge is drawn the way a dark interface can: a top rim catching
+   * light, which is what separates a raised thing here. It is an inset ring
+   * rather than a border, because a border would take a pixel from the
+   * card's own box and move everything inside it.
+   */
+  --card-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04);
+  /* The ring is light here, not dark: a chosen control is lighter than the
+     panel behind it in this theme, so an edge made of shadow would be
+     invisible against the thing it is meant to separate from. */
+  --control-shadow: 0 0 0 1px rgb(255 255 255 / 0.08), 0 1px 1.5px rgb(0 0 0 / 0.25);
+  --segment-shadow: 0 1px 1.5px rgb(0 0 0 / 0.25);
+
+  --tint-0: #ff453a;
+  --tint-1: #ff9f0a;
+  --tint-2: #ffd60a;
+  --tint-3: #30d158;
+  --tint-4: #40c8e0;
+  --tint-5: #0a84ff;
+  --tint-6: #5e5ce6;
+  --tint-7: #bf5af2;
+  --tint-8: #ff375f;
+  --tint-9: #98989f;
+
+  --face-0: #d63a31;
+  --face-1: #a66706;
+  --face-2: #877105;
+  --face-3: #1f8638;
+  --face-4: #287e8d;
+  --face-5: #0973de;
+  --face-6: #5e5ce6;
+  --face-7: #a44dd0;
+  --face-8: #db2f52;
+  --face-9: #747479;
+
+  --tint-0-ink: #ff453a;
+  --tint-1-ink: #ff9f0a;
+  --tint-2-ink: #ffd60a;
+  --tint-3-ink: #30d158;
+  --tint-4-ink: #40c8e0;
+  --tint-5-ink: #1e8eff;
+  --tint-6-ink: #8583ec;
+  --tint-7-ink: #c366f3;
+  --tint-8-ink: #ff375f;
+  --tint-9-ink: #98989f;
+
+  /* Dark glass is a darker material, not the light one turned down: a
+     light translucent surface over a dark ground goes grey and the text on
+     it stops separating. */
+  /* The modal's own surface, picked rather than derived: a neutral at 27%
+     with no chroma, and 0.7 so what is behind it is present and not
+     readable. It carried a trace of blue at 0.62, which on a ground that
+     has none read as a panel borrowed from somewhere else. */
+  --glass-tint: oklch(27% 0 0 / 0.7);
+  --glass-accent-tint: oklch(48% 0.16 262 / 0.9);
+  --glass-accent-edge: oklch(100% 0 0 / 0.2);
+  --glass-edge: oklch(100% 0 0 / 0.14);
+  --glass-shadow: 0 8px 28px oklch(0% 0 0 / 0.4);
+  --dialog-scrim: rgb(0 0 0 / 0.6);
+  --dialog-shadow: 0 24px 64px rgb(0 0 0 / 0.36);
+  --dialog-edge: rgb(255 255 255 / 0.04);
+}
+
+/*
+ * The glass surface.
+ *
+ * Where it goes is in the glass spec and matters more than the effect:
+ * chrome and controls, never a task list, a table, a document body or the
+ * message feed. Those stay ordinary dense planes.
+ *
+ * The tint, the edge and the shadow are the whole appearance when the lens is
+ * off. That is the point — flat is a supported mode, not a fallback, so the
+ * surface keeps its shape and its elevation and reads as deliberate.
+ */
+/*
+ * In the components layer, so a utility on the element still wins.
+ *
+ * This set `position: relative` from the top level, which beats Tailwind's
+ * `.absolute` and `.fixed` — same specificity, defined later — so every glass
+ * surface told to position itself quietly stayed in the flow. The workspace
+ * switcher's menu was the one that showed it: it sits in a flex row, so
+ * opening it made that row ninety pixels taller and carried the button it
+ * hangs off the top of the window.
+ *
+ * The position belongs here only as a default, for the lens filter inside it
+ * to be absolute against. A layer says exactly that: a default that anything
+ * more specific about this element overrules.
+ */
+@layer components {
+  .glass {
+    position: relative;
+    background: var(--glass-tint);
+    box-shadow: var(--glass-shadow);
+    /* The bright top edge is light caught by the rim. Without it the surface
+       reads as a blurred rectangle rather than as a material. */
+    border-top: 1px solid var(--glass-edge);
+  }
+}
+
+/* Blur alone, for the browsers that have no displacement in a backdrop
+   filter. Still a material; just one without a rim that bends. */
+.glass[data-lens='off'] {
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+
+/*
+ * The prominent tone: one action per screen, in the one colour the screen
+ * uses. Same lens, same rim — the glass reads in the edge, not in how much
+ * shows through, because the label has to stay legible on it.
+ */
+.glass[data-tone='accent'] {
+  background: var(--glass-accent-tint);
+  border-top-color: var(--glass-accent-edge);
+  color: white;
+}
+
+/*
+ * Asked for solidity, give solidity — no blur behind it either, since a
+ * frosted panel is the thing being opted out of.
+ */
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  .glass[data-lens='off'] {
+    background: var(--surface);
+    backdrop-filter: none;
+    border-top-color: var(--line);
+  }
+  /* Solid, not grey: the action must still be the thing the eye lands on. */
+  .glass[data-tone='accent'] {
+    background: var(--accent);
+    border-top-color: var(--accent);
+  }
+}
+
+@media (prefers-contrast: more) {
+  .glass {
+    background: var(--surface);
+    backdrop-filter: none;
+    border: 1px solid var(--line);
+  }
+  .glass[data-tone='accent'] {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+}
+
+/*
+ * The scrollbar.
+ *
+ * The native one on this platform is either an overlay that vanishes or a
+ * grey trough with arrows, depending on a system setting the product does not
+ * control. Both are wrong here: the first hides how far down a long list you
+ * are, the second draws a hard vertical line down every panel.
+ *
+ * So: no track at all, and a thumb that is a translucent pill floating in a
+ * transparent gutter. It reads as the content's own shadow rather than as
+ * chrome. Idle it is faint enough to ignore; hovering the pane it sits in
+ * brings it up; hovering the thumb itself brings it up again, so grabbing it
+ * is a deliberate act with feedback.
+ *
+ * The gutter is the price. Styling a WebKit scrollbar takes it out of overlay
+ * mode, so 10px of width is taken by any pane that can scroll.
+ *
+ * And **whether it can scroll changes**, which is the part that was wrong:
+ * the gutter appeared the moment a pane had one row too many and went again
+ * when it had one too few, and everything in it moved ten pixels sideways.
+ * `scrollbar-gutter: stable` reserves the space either way — ten pixels on a
+ * pane that is not scrolling, bought against a screen that does not move when
+ * one more task arrives.
+ *
+ * **Named, not universal.** Put on `*` it also reserves a gutter along the
+ * *bottom* of anything that scrolls sideways, and the board scrolls sideways:
+ * a ten-pixel track appeared under the columns and stayed there. A rule that
+ * fixes one axis by drawing furniture on the other is worse than the jump it
+ * fixed, so it goes on the panes that read down a column of rows and nowhere
+ * else.
+ *
+ * WebKit does not transition scrollbar pseudo-elements, so the change is
+ * instant. That is the right behaviour anyway — a scrollbar fading in behind
+ * the pointer would be one more thing moving while you read.
+ */
+/*
+ * Firefox has no pseudo-elements for this, only these two properties and no
+ * hover state. It gets the middle value permanently.
+ *
+ * **Only Firefox**, and that is the whole point of the guard. These were set
+ * on `*` unconditionally, and current Chrome treats either of them as a
+ * request to draw the platform's own bar and ignore every
+ * `::-webkit-scrollbar` rule below — so everything underneath here was dead,
+ * and what was actually on the screen was the macOS overlay: six pixels where
+ * this says four, 40% where this says 26%, and visible only while something
+ * was being scrolled. Two bars of two different thicknesses on one board is
+ * how it was noticed.
+ */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, var(--ink-3) 40%, transparent) transparent;
+  }
+}
+
+/*
+ * No reserved gutter any more: the bar is an overlay again.
+ *
+ * `scrollbar-gutter: stable` was bought against a real jump — the gutter
+ * appeared the moment a pane had one row too many and went when it had one
+ * too few, and everything in it moved sideways. The price was ten pixels
+ * down the right of every pane, scrolling or not, and the sheet inside being
+ * inset from them: measured, a band's shade ended at 1247 where the panel
+ * went on to 1259, so every heading had a strip of plain ground beside it.
+ * A seam between two groups that stops short of the edge is a seam with a
+ * gap in it.
+ *
+ * What makes it affordable is the change above. A thumb that is transparent
+ * until the pointer is in the pane takes no space while nobody is pointing
+ * at it, so there is nothing to reserve against: the width does not change
+ * when a row arrives, because the bar was never in the flow to begin with.
+ * `overlay` says exactly that, and `auto` is the fallback where it is not
+ * understood — the jump it leaves is the one case this had, on a browser
+ * that is not the one this product is drawn on.
+ *
+ * The cost is that a drawn bar now sits over the right end of the rows,
+ * which is where a task's number and the faces are. It is there only while
+ * the pointer is in that pane, and translucent — and the alternative was
+ * ten pixels missing from every band, always, for everyone.
+ */
+[data-reads-down] {
+  scrollbar-gutter: auto;
+}
+
+/*
+ * Except a column held in the middle of its pane — My Tasks, Settings.
+ *
+ * There the bar's ten pixels are not taken from a band that runs to the
+ * edge: the column is centred in the pane, so a bar arriving with one row
+ * too many narrowed the pane and moved the whole column five pixels left,
+ * and a tab with twenty rows beside one with seventeen jumped as you went
+ * between them. Reserved on both sides, the middle stays where it is, and
+ * nothing reaches the edge for the gutter to cut short. A utility class did
+ * this and lost: this file is not in a layer, so the rule above won.
+ */
+[data-reads-down][data-steady],
+[data-steady] {
+  scrollbar-gutter: stable both-edges;
+}
+
+/*
+ * A pane that draws its own bar hides the browser's entirely.
+ *
+ * Whether the browser's takes width is not ours to decide: styled, it is not
+ * an overlay, and on macOS with "Always show scrollbars" every pane loses
+ * real content width to a track — which is how a band's shade came to stop
+ * short of the panel it was painted on, and why the same CSS looked right on
+ * one machine and wrong on another. Reserving that width with
+ * `scrollbar-gutter` only made the loss permanent instead of intermittent.
+ *
+ * So the list hides it and draws `ListBar` in the column beside the panel,
+ * outside it. Nothing inside is inset by anything, on any machine and
+ * whatever the setting, and the bar is a control the product owns rather
+ * than one it is handed.
+ *
+ * Both properties, because they answer different engines: `scrollbar-width`
+ * is what Firefox reads, and the pseudo-element is what WebKit and Chrome
+ * draw. Either alone leaves a bar on one of them.
+ */
+[data-own-bar] {
+  scrollbar-width: none;
+}
+
+[data-own-bar]::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+ * The board hides the browser's sideways bar, and draws one of its own.
+ *
+ * Not the same decision as before, though the rule is the same line. The
+ * argument for hiding it was that a styled scrollbar is not an overlay, so
+ * its ten pixels are taken for good, and the column cut off at the right edge
+ * already says there is more.
+ *
+ * What that missed is that a scrollbar is not only a sign — it is the handle.
+ * With a trackpad the board can be pushed sideways; with a mouse there is no
+ * sideways to push, so a board with nothing to grab cannot be scrolled at all.
+ * And the browser's own bar cannot fix it here: `scrollbar-width` on `*`
+ * makes Chrome ignore the styled pseudo-element and draw the platform's bar,
+ * which on macOS is an overlay that shows up only *while* something is being
+ * scrolled. A handle you can only see once you have found the scrolling is no
+ * handle.
+ *
+ * So the board draws its own — `BoardBar` in `web/src/ui/Tasks.tsx` — which
+ * is there whether or not the pointer is, on every machine, and can be
+ * measured by a test rather than asserted about.
+ */
+[data-board] {
+  scrollbar-width: none;
+}
+
+[data-board]::-webkit-scrollbar {
+  display: none;
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/*
+ * Nothing until the pointer is in the pane.
+ *
+ * The thumb used to sit at 26% whether or not anybody was looking at it, and
+ * on the board that is three pills down three columns, permanently, beside
+ * cards that carry no other vertical line. Every pane that could scroll drew
+ * a mark saying so, and they added up to furniture.
+ *
+ * What a scrollbar is for is answering "how far down am I" and being the
+ * handle for changing it. Both of those are asked with the pointer already
+ * in the pane — so that is when it is drawn. Idle it is not faint, it is
+ * gone, and the pane is as clean as the cards on it.
+ *
+ * The gutter stays reserved either way (`scrollbar-gutter: stable` above), so
+ * nothing moves sideways when the bar appears. Appearing is a paint, not a
+ * reflow.
+ *
+ * The trackpad is the reason this is safe: scrolling does not need the bar,
+ * and the one case that does — dragging the thumb with a mouse — begins by
+ * moving the pointer into the pane, which is the gesture that draws it.
+ *
+ * **In the pane, not on the pane.** `:hover` alone matches only the element
+ * the pointer is directly over, so on a board the bar appeared over a
+ * column's own padding and went the moment the pointer crossed a card — and
+ * a card is most of a column. The bar flickered in the gaps between cards
+ * and was missing everywhere a person actually points. `:has(:hover)` asks
+ * the question that was meant: is the pointer anywhere inside this pane.
+ */
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  background-clip: padding-box;
+  /* The border is transparent and the background stops at the padding edge,
+     which is what insets a 4px pill inside a 12px gutter. */
+  border: 4px solid transparent;
+  border-radius: 999px;
+  /* Below this the pill stops reading as a position and starts reading as
+     dirt on the screen. */
+  min-height: 32px;
+}
+
+:hover::-webkit-scrollbar-thumb,
+:has(:hover)::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--ink-3) 45%, transparent);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklch, var(--ink-3) 65%, transparent);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: color-mix(in oklch, var(--ink-2) 80%, transparent);
+  background-clip: padding-box;
+}
+
+/*
+ * Translucency is the whole idea here, so both of the preferences that argue
+ * with it get answered: opaque when transparency is unwanted, and solid with
+ * a real trough when contrast is.
+ */
+@media (prefers-reduced-transparency: reduce) {
+  * {
+    scrollbar-color: var(--n-5) transparent;
+  }
+  ::-webkit-scrollbar-thumb,
+  :hover::-webkit-scrollbar-thumb,
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--n-5);
+    background-clip: padding-box;
+  }
+}
+
+@media (prefers-contrast: more) {
+  * {
+    scrollbar-color: var(--ink-2) var(--sunken);
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--sunken);
+  }
+  ::-webkit-scrollbar-thumb,
+  :hover::-webkit-scrollbar-thumb,
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--ink-2);
+    background-clip: padding-box;
+    border-width: 2px;
+  }
+}
+
+/*
+ * The body of a task, an announcement and a document.
+ *
+ * ProseMirror draws its own element and inherits nothing, so the spacing
+ * lives here rather than in the component — one set of rules for the three
+ * screens that have a body, because three copies is three chances for one of
+ * them to stop matching. `docs/specs/rich-text.md`.
+ */
+.prose-body .ProseMirror {
+  outline: none;
+  color: var(--prose-ink, var(--ink));
+  letter-spacing: var(--track-body);
+  /*
+   * Set for reading, the way the documentation people actually read is
+   * set — Stripe's, Linear's, GitHub's: about 1.6 between lines, a clear
+   * step between paragraphs, headings that are close to what they head and
+   * far from what came before, and a line no longer than seventy-odd
+   * characters.
+   *
+   * It was 1.43 with 0.6em between blocks, a chat message's density, and a
+   * page of it read as one grey slab — our "make the text in docs
+   * and tasks readable". `docs/specs/rich-text.md`.
+   *
+   * Relative, so the body follows the size it is given; every body that
+   * reads like this is drawn at 15, and at 15 each number below lands on
+   * the four-pixel grid: 24-pixel lines, 12 between paragraphs, headings
+   * of 24, 20 and 16 on lines of 32, 28 and 24.
+   */
+  line-height: 1.6;
+}
+.prose-body .ProseMirror > * + * {
+  margin-top: 0.8em;
+}
+/*
+ * The measure. Words wider than about seventy characters make the eye lose
+ * its place on the way back, and a task's description at 800 wide was a
+ * hundred and ten. Tables, code and pictures keep the whole width — they
+ * are not lines to be read back along.
+ */
+.prose-body .ProseMirror > :is(p, h1, h2, h3, ul, ol, blockquote) {
+  max-width: 70ch;
+}
+/*
+ * Except in a document, whose column is already 640 — Google Docs' 624 on a
+ * Letter page, about eighty-five characters at 15. Seventy there drew the
+ * words some hundred pixels inside their own column, and a document is
+ * what gets held up beside Google Docs and Notion and read as narrow.
+ */
+[data-document] .prose-body .ProseMirror > :is(p, h1, h2, h3, ul, ol, blockquote) {
+  max-width: none;
+}
+.prose-body .ProseMirror h1,
+.prose-body .ProseMirror h2,
+.prose-body .ProseMirror h3 {
+  font-weight: 600;
+  letter-spacing: var(--track-title);
+}
+.prose-body .ProseMirror h1 { font-size: 1.6em; line-height: 1.3333; }
+.prose-body .ProseMirror h2 { font-size: 1.3333em; line-height: 1.4; }
+.prose-body .ProseMirror h3 { font-size: 1.0667em; line-height: 1.5; }
+/* Far from what came before — 32, 28 and 24 at a 15 body — and only the
+   ones that follow something: a heading at the top of a body starts it. */
+.prose-body .ProseMirror > * + h1 { margin-top: 1.3333em; }
+.prose-body .ProseMirror > * + h2 { margin-top: 1.4em; }
+.prose-body .ProseMirror > * + h3 { margin-top: 1.5em; }
+/* And close to what it heads: eight, so the heading belongs to the
+   paragraph under it rather than floating between two. */
+.prose-body .ProseMirror > :is(h1, h2, h3) + * {
+  margin-top: 0.5333em;
+}
+.prose-body .ProseMirror ul,
+.prose-body .ProseMirror ol {
+  padding-left: 1.25rem;
+}
+.prose-body .ProseMirror ul { list-style: disc; }
+.prose-body .ProseMirror ol { list-style: decimal; }
+/* Four between items, and between the parts of one: a list is one thing,
+   looser than a line and tighter than a paragraph. */
+.prose-body .ProseMirror li + li,
+.prose-body .ProseMirror li > * + * {
+  margin-top: 0.2667em;
+}
+.prose-body .ProseMirror li::marker {
+  color: var(--ink-3);
+}
+.prose-body .ProseMirror blockquote {
+  /* Four pixels, in the strong line: a quote is set
+     off by its bar, and the bar was drawn in a token that does not exist,
+     so there was none. */
+  border-left: 4px solid var(--line-strong);
+  padding-left: 12px;
+  color: var(--ink-2);
+}
+.prose-body .ProseMirror code {
+  background: var(--sunken);
+  border-radius: 4px;
+  padding: 0.1em 0.3em;
+  font-size: 0.93em;
+}
+.prose-body .ProseMirror pre {
+  background: var(--sunken);
+  border-radius: var(--r-row);
+  padding: 12px 16px;
+  font-family: var(--font-mono);
+  font-size: 0.93em;
+  overflow-x: auto;
+}
+.prose-body .ProseMirror pre {
+  position: relative;
+}
+/* The bin in a code block's corner: there under the pointer, gone when
+   nothing can be written — `Editor.tsx`. */
+.prose-body .ProseMirror pre [data-code-remove] {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-row);
+  color: var(--ink-3);
+  opacity: 0;
+  transition: opacity 90ms var(--ease-out), background-color 90ms var(--ease-out);
+}
+.prose-body .ProseMirror pre:hover [data-code-remove] {
+  opacity: 1;
+}
+.prose-body .ProseMirror pre [data-code-remove]:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.prose-body .ProseMirror[contenteditable='false'] pre [data-code-remove] {
+  display: none;
+}
+/* Selected whole — Escape inside it — it wears the ring a picture does. */
+.prose-body .ProseMirror-focused pre.ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+/* ⌘ held: links say they can be followed. */
+html[data-follow] .prose-body .ProseMirror a {
+  cursor: pointer;
+  text-decoration-thickness: 2px;
+}
+.prose-body .ProseMirror pre code {
+  background: none;
+  padding: 0;
+}
+.tok-comment { color: var(--code-comment); font-style: italic; }
+.tok-string { color: var(--code-string); }
+.tok-number { color: var(--code-number); }
+.tok-keyword { color: var(--code-keyword); }
+.tok-fn { color: var(--code-fn); }
+.tok-type { color: var(--code-type); }
+/* Somebody called in, in the chat's line and in what it sent. */
+.chat-mention {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 4px;
+  padding: 0 4px;
+  font-weight: 500;
+}
+/* The chat's line: a message, not a page — its own density, not a
+   document's: tighter lines, tighter blocks, no measure. */
+.chat-field .ProseMirror {
+  line-height: 1.43;
+}
+.chat-field .ProseMirror > * + * {
+  margin-top: 4px;
+}
+.chat-field .ProseMirror li + li,
+.chat-field .ProseMirror li > * + * {
+  margin-top: 0;
+}
+.chat-field .ProseMirror > :is(p, h1, h2, h3, ul, ol, blockquote) {
+  max-width: none;
+}
+.prose-body .ProseMirror a {
+  color: var(--accent);
+  text-decoration: underline;
+  /* An address is one long word: it breaks where it must rather than
+     pushing the body wider than its column. */
+  overflow-wrap: anywhere;
+}
+.prose-body .ProseMirror hr {
+  /* A hairline drawn in the middle of a sixteen-pixel strip rather than as a
+     one-pixel border: the strip is what a press lands on, and a divider
+     that has to be hit to the pixel is one nobody can select to delete.
+     The same room as before — 0.9rem either side of a line. */
+  border: none;
+  height: 16px;
+  margin: 0.4rem 0;
+  background: linear-gradient(var(--line-strong), var(--line-strong)) center / 100% 1px no-repeat;
+}
+/*
+ * A table.
+ *
+ * Flat like every other content surface: hairlines between the cells in
+ * the line colour, the header row on the sunken ground. The columns share
+ * the body's width and the words wrap inside them; a table that cannot fit
+ * scrolls sideways in its own frame rather than pushing the page. The
+ * read-only drawing (`Doc.tsx`) wears the same classes.
+ */
+.prose-body .ProseMirror .tableWrapper,
+.doc-table-frame {
+  overflow-x: auto;
+}
+.prose-body .ProseMirror table,
+.doc-table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  margin: 0;
+  overflow: hidden;
+  border-radius: var(--r-tile);
+}
+.prose-body .ProseMirror td,
+.prose-body .ProseMirror th,
+.doc-table td,
+.doc-table th {
+  position: relative;
+  border: 1px solid var(--line);
+  padding: 8px 12px;
+  vertical-align: top;
+  text-align: start;
+  min-width: 80px;
+}
+.prose-body .ProseMirror th,
+.doc-table th {
+  /* A wash of the ink rather than a ground token: the sunken ground is
+     lighter than a dark panel by a step nobody can see, and the header
+     vanished into the rows. */
+  background: color-mix(in oklch, var(--ink) 6%, transparent);
+  font-weight: 500;
+}
+.prose-body .ProseMirror td > * + *,
+.prose-body .ProseMirror th > * + * {
+  margin-top: 0.4em;
+}
+/* Cells chosen together are lit as one, in the selection's own colour. */
+.prose-body .ProseMirror .selectedCell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: color-mix(in oklch, var(--accent) 14%, transparent);
+  pointer-events: none;
+}
+
+/* Selected, the line takes the colour and the weight a selection has
+   everywhere else in the body — while the body has the caret: a document
+   opened with a divider first would otherwise open with it selected. */
+.prose-body .ProseMirror-focused hr.ProseMirror-selectednode {
+  background: linear-gradient(var(--accent), var(--accent)) center / 100% 2px no-repeat;
+}
+
+/*
+ * A callout.
+ *
+ * One of the ten tints, washed at twelve per cent under words that stay in
+ * the ink they are read in: the tone says what kind of aside it is, and
+ * the words still read as words. Flat, like every content surface. The
+ * read-only drawing (`Doc.tsx`) and the panel's swatches wear the same
+ * classes, so the three cannot drift apart.
+ */
+.callout,
+.callout-swatch {
+  --callout-tone: var(--tint-9);
+}
+[data-tone='blue']:is(.callout, .callout-swatch) { --callout-tone: var(--tint-5); }
+[data-tone='green']:is(.callout, .callout-swatch) { --callout-tone: var(--tint-3); }
+[data-tone='yellow']:is(.callout, .callout-swatch) { --callout-tone: var(--tint-2); }
+[data-tone='red']:is(.callout, .callout-swatch) { --callout-tone: var(--tint-0); }
+.callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 16px 12px 12px;
+  border-radius: var(--r-row);
+  background: color-mix(in oklch, var(--callout-tone) 12%, transparent);
+}
+.callout-swatch {
+  background: color-mix(in oklch, var(--callout-tone) 40%, var(--float));
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--callout-tone) 60%, transparent);
+}
+/* The emoji sits on the first line's middle: a box as tall as the line. */
+.callout-emoji {
+  display: flex;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-row);
+  font-size: 16px;
+  line-height: 1;
+  user-select: none;
+}
+.callout-body {
+  flex: 1;
+  min-width: 0;
+}
+.callout-body > * + * {
+  margin-top: 0.4em;
+}
+
+/*
+ * A toggle. Its arrow beside its first line, what
+ * it folds under that line; the arrow turns as it opens, on the one curve
+ * every small movement here uses. In the editor it is TipTap's node view;
+ * where a body is read, the browser's own `<details>`.
+ */
+.prose-body .ProseMirror .toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+.prose-body .ProseMirror .toggle > div {
+  flex: 1;
+  min-width: 0;
+}
+.toggle-button,
+.toggle-read > summary > .toggle-chevron {
+  display: flex;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-row);
+  color: var(--ink-3);
+}
+.toggle-button:hover {
+  background: var(--hover);
+  color: var(--ink-2);
+}
+.toggle-button svg,
+.toggle-read > summary > .toggle-chevron svg {
+  transition: transform 150ms var(--ease-out);
+}
+.prose-body .ProseMirror .toggle.is-open > .toggle-button svg,
+.toggle-read[open] > summary > .toggle-chevron svg {
+  transform: rotate(90deg);
+}
+.prose-body .ProseMirror .toggle summary {
+  display: block;
+  list-style: none;
+}
+.prose-body .ProseMirror .toggle summary::-webkit-details-marker,
+.toggle-read > summary::-webkit-details-marker {
+  display: none;
+}
+/*
+ * Where it starts and where it ends: the arrow and the line beside it, and
+ * under them the body, indented to the line's words with a hairline down
+ * from the arrow to the body's last line — the guide Notion draws for a
+ * nested block, and quieter than any box. Without it a toggle's empty
+ * body was a blank line, and the paragraphs after the toggle read as
+ * inside it.
+ */
+.prose-body .ProseMirror .toggle [data-type='detailsContent'],
+.toggle-read > .toggle-inside {
+  position: relative;
+}
+.prose-body .ProseMirror .toggle [data-type='detailsContent'] {
+  margin-top: 0.4em;
+}
+.prose-body .ProseMirror .toggle [data-type='detailsContent']::before,
+.toggle-read > .toggle-inside::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -16px;
+  width: 1px;
+  background: var(--line-strong);
+  pointer-events: none;
+}
+.toggle-read > .toggle-inside::before {
+  left: 12px;
+}
+/* An empty body says so, in the quiet ink, as an empty line of a toggle does. */
+.prose-body .ProseMirror .toggle [data-type='detailsContent'] > p:only-child:has(> br.ProseMirror-trailingBreak:only-child)::before {
+  content: var(--toggle-empty, '');
+  color: var(--ink-3);
+  pointer-events: none;
+  float: left;
+  height: 0;
+}
+.prose-body .ProseMirror .toggle [data-type='detailsContent'][hidden] {
+  display: none;
+}
+.prose-body .ProseMirror .toggle [data-type='detailsContent'] > * + * {
+  margin-top: 0.4em;
+}
+.prose-body .ProseMirror summary[data-placeholder]:has(> br.ProseMirror-trailingBreak:only-child)::before {
+  content: attr(data-placeholder);
+  color: var(--ink-3);
+  pointer-events: none;
+  float: left;
+  height: 0;
+}
+.toggle-read > summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  list-style: none;
+  cursor: pointer;
+}
+.toggle-read > .toggle-inside {
+  margin-top: 8px;
+  padding-left: 28px;
+}
+/* A selected node is said by its own ring, not by the browser painting its
+   box in the selection colour: ProseMirror marks the body while a node is
+   selected so the native highlight can be put away, and a divider drawn as
+   a sixteen-pixel strip was otherwise a sixteen-pixel blue bar. */
+.prose-body .ProseMirror-hideselection *::selection,
+.prose-body .ProseMirror-hideselection::selection {
+  background: transparent;
+}
+.prose-body .ProseMirror-hideselection {
+  caret-color: transparent;
+}
+
+/*
+ * Said once, on an empty body.
+ *
+ * ProseMirror has no placeholder attribute — an empty document is one empty
+ * paragraph, which is a node and not nothing — so it is drawn as the first
+ * paragraph's `::before`. The official extension does the same thing and is
+ * a dependency for it.
+ *
+ * Not `:empty`: an empty paragraph in a ProseMirror view holds a
+ * `<br class="ProseMirror-trailingBreak">`, which browsers need to give the
+ * line a height and which makes the paragraph not empty. So the rule never
+ * matched and this has never been drawn — unnoticed for as long as the body
+ * sat on a panel, because an empty panel is itself an invitation. Flat,
+ * nothing is left to say "write here", which is where it was found.
+ *
+ * The attribute is on the editable element, so it is `.ProseMirror` that
+ * carries it and not the box around it: a React component drops props it
+ * does not recognise, and `data-placeholder` on `EditorContent` reached
+ * nothing.
+ *
+ * Which is also why the words travel down as a custom property. `attr()`
+ * reads the element the pseudo belongs to, and that is the paragraph, which
+ * has no such attribute — so the rule matched and drew an empty string.
+ */
+.ProseMirror[data-placeholder] {
+  --placeholder: attr(data-placeholder);
+}
+
+.ProseMirror[data-placeholder] > p:only-child:has(> br.ProseMirror-trailingBreak:only-child)::before {
+  content: var(--placeholder);
+  color: var(--ink-3);
+  pointer-events: none;
+  float: left;
+  height: 0;
+}
+
+/*
+ * A carried card owns its gesture, and so does everything drawn inside it.
+ *
+ * `touch-action` is not inherited, so `none` on the card alone leaves the
+ * title — which is a button, because it is the card's accessible name — at
+ * `auto`, and the title is most of what a thumb lands on. Measured: with
+ * the card alone set, a finger starting on the title found `auto` under it
+ * and the column did not move at all, because the pan was then neither the
+ * browser's nor ours.
+ *
+ * Why `none` at all, rather than letting the browser pan, is in
+ * `useDrag.ts` and the phone spec: the board performs both pans
+ * itself, because a refusal that arrives at the hold arrives after the
+ * compositor has already scrolled.
+ */
+[data-card],
+[data-card] * {
+  touch-action: none;
+}
+
+
+/*
+ * The frame and the arrival — `docs/specs/arrival.md`.
+ *
+ * `#frame` is painted by `index.html` before the app has loaded: the sheets
+ * of the shell and nothing on them, under everything (`z-index: -1` sits
+ * above the ground the body gives the canvas and below the app). The app
+ * takes it away in the frame it first draws the shell, which covers it.
+ *
+ * Then the contents arrive into the sheets once, together: held clear while
+ * the first answers are on their way and faded in when they are in, so a
+ * screen does not assemble itself piece by piece in front of somebody. The
+ * sheets themselves never fade — they were already there.
+ */
+#frame {
+  position: fixed;
+  inset: 48px 0 0;
+  z-index: -1;
+  display: flex;
+  gap: var(--lift);
+  padding-right: var(--lift);
+  padding-bottom: var(--lift);
+  pointer-events: none;
+}
+#frame > div {
+  background: var(--chrome);
+  border-radius: var(--r-lift);
+}
+[data-arriving] [data-panel] > * {
+  opacity: 0;
+}
+[data-arriving='go'] [data-panel] > * {
+  opacity: 1;
+  transition: opacity 240ms var(--ease-out);
+}
+
+/*
+ * A narrowed column is one button, so the whole strip answers the pointer —
+ * the ground lights, not the glyphs on it. A wash over whatever the column's
+ * own ground is, so the accent it takes while a card is over it still shows
+ * through. Important because that ground is set inline.
+ */
+[data-shut-col]:hover:not([data-over]) {
+  background-image: linear-gradient(var(--hover), var(--hover)) !important;
+}
+/* Not while things are moving under a pointer that is not — a column
+   folding out from under the hand lit and unlit on the way. Until the hand
+   moves again (`holdUntilMoved` in the kit). */
+[data-still] [data-shut-col]:hover {
+  background-image: none !important;
+}
+
+/*
+ * Nothing on a phone zooms the screen.
+ *
+ * iOS zooms in on any field written smaller than sixteen pixels the moment
+ * it takes the caret — a title, a search in the labels menu, the body of a
+ * task — and leaves the page zoomed after. Sixteen on a touch screen, where
+ * the rule applies, and the sizes the desk was drawn with everywhere else.
+ * And no double-tap zoom: a second tap on a row is a second press, not a
+ * request to enlarge it. Pinching still zooms, which is the one people ask
+ * for on purpose.
+ */
+@media (pointer: coarse) {
+  /* Only the fields written smaller than sixteen — a 21-pixel title stays
+     21. Listed by their size classes, since a rule cannot read the size it
+     is about to replace; a field with no size of its own inherits fourteen. */
+  :is(input, textarea, select):is(
+      .text-sketch,
+      .text-mini,
+      .text-badge,
+      .text-xs,
+      .text-sm,
+      .text-base,
+      .text-md
+    ),
+  :is(input, textarea, select):not([class*='text-']),
+  .prose-body [contenteditable='true'] {
+    font-size: 16px !important;
+  }
+  html {
+    touch-action: manipulation;
+  }
+}
+
+/* A task named in a message — `ChatComposer.tsx`, `TaskCard.tsx`. */
+.chat-taskref {
+  color: var(--accent);
+  font-weight: 500;
+  cursor: pointer;
+  /* A button, which centres its words: a name that wrapped on a phone
+     stood in the middle of the message over a card starting at its edge. */
+  text-align: start;
+}
+.chat-taskref:hover {
+  text-decoration: underline;
+}
+
+/*
+ * A message whose picture is open is not under the pointer.
+ *
+ * The lightbox is drawn inside the message it came from, so to the browser
+ * the hand on the dim was a hand on the message: the row lit behind the
+ * picture and its actions stood up, and the moment the picture went home
+ * the light dropped off in one frame — the message's ground jumping as the
+ * lightbox closed. So the row keeps no light while one of its pictures is
+ * open, and its light comes and goes at the speed of a hover rather than in
+ * a frame.
+ */
+[data-message] {
+  transition:
+    background-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+/*
+ * On a phone a held finger on a message opens its actions, and iOS starts
+ * selecting the word under that same finger at about the same moment — two
+ * answers to one gesture. So the words are not selected by a long press
+ * there; the sheet's "Select text" hands them back (`data-selecting`), and
+ * "Copy text" takes the lot. A link and a picture keep the platform's own
+ * long press, which the hold leaves to them.
+ */
+@media (pointer: coarse) and (max-width: 639px) {
+  [data-message]:not([data-selecting], [data-editing]),
+  [data-message]:not([data-selecting], [data-editing]) * {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+  [data-message] :is(a[href], img) {
+    -webkit-touch-callout: default;
+  }
+}
+[data-message]:has([data-lightbox]) {
+  background-color: transparent !important;
+}
+[data-message]:has([data-lightbox]) [data-message-actions] {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/*
+ * A column read at the chat's measure, scrolled at the window's edge.
+ *
+ * The tools other than Tasks are eight hundred wide, and held to that by a
+ * width their scrollbar sat at the edge of — in the middle of the screen,
+ * where a thumb reads as a rule down the page. Held by padding instead, the
+ * scroller is the full width and its thumb is at the edge; the words stand
+ * in the same column. `docs/specs/tool-bar.md`.
+ */
+/* Out over the gutter too, so the thumb is at the sheet's own edge rather
+   than a gutter in from it; the words keep their column. */
+.reads {
+  margin-inline: calc(-1 * var(--gutter));
+  padding-inline: max(var(--gutter), calc((100% - 800px) / 2 + var(--gutter)));
+}
+
+/* A message opened from what was found in its room: lit for a moment, so the
+   eye lands on it among its neighbours — `docs/specs/find.md`. */
+[data-found-at] {
+  animation: lit 2s ease-out;
+}
+@keyframes lit {
+  from,
+  40% {
+    background: var(--accent-soft);
+  }
+  to {
+    background: transparent;
+  }
+}
+
+/*
+ * A thread opening beside the room: the frame and the bar over it widen by
+ * the thread's width while the thread grows from nothing, on one curve over
+ * one fifth of a second, so the room itself keeps its width the whole way.
+ * And the same way shut: the pane is kept while it folds back to nothing
+ * and the frame and the bar narrow with it. `docs/specs/chat-threads.md`.
+ */
+.thread-ease {
+  transition: max-width 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.thread-beside {
+  width: 384px;
+  transition: width 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@starting-style {
+  .thread-beside {
+    width: 0;
+  }
+}
+.thread-beside[data-thread-shutting] {
+  width: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .thread-ease,
+  .thread-beside {
+    transition: none;
+  }
+}
+
+/* A conversation beside the work. The frame
+   widens from nothing while the work, the flex column beside it, narrows by
+   the same amount on the same curve; the sheet inside is fixed and rides in
+   on the work's edge. */
+.beside {
+  width: calc(400px + var(--lift));
+  transition: width 200ms var(--ease-out);
+}
+@starting-style {
+  .beside {
+    width: 0;
+  }
+}
+.beside[data-beside-shutting] {
+  width: 0;
+}
+.beside[data-beside-still] {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .beside {
+    transition: none;
+  }
+}
+
+/* Docs with files held over it: it will take them — `docs/specs/docs.md`. */
+[data-dropping] {
+  outline: 2px dashed var(--accent);
+  outline-offset: -8px;
+  border-radius: var(--r-card);
+}
+
+/*
+ * The offline band's room at the top of the window — `docs/specs/offline.md`.
+ * Nought until the band is shown; the band sets it on the root, the body
+ * steps down by it, and the full-height pages take it off their height.
+ */
+:root {
+  --offline-h: 0px;
+  /*
+   * The phone's own band at the top — its clock and battery — when Tuff is
+   * on the Home Screen and the page reaches under it (`viewport-fit=cover`).
+   * The window steps down by it the way it steps down for the offline band,
+   * so nothing is drawn under the system's blur. Nought in a browser tab
+   * and on a laptop.
+   */
+  --top-inset: env(safe-area-inset-top, 0px);
+  /* Everything above the window's own top: the phone's band, then ours. */
+  --above: calc(var(--offline-h) + var(--top-inset));
+  /* The window's height: what can be seen, measured on a touch screen by
+     `data/keyboard.ts` so the keyboard takes its share. */
+  --app-h: 100dvh;
+}
+/*
+ * And a little more on an installed phone: iOS lays a darkening gradient
+ * under its band that reaches past the safe area, and it shaded the top of
+ * the bar — the project's name read dimmed. Sixteen puts that gradient on
+ * the window's own ground instead.
+ */
+@media (display-mode: standalone) and (max-width: 639px) {
+  :root {
+    --top-inset: calc(env(safe-area-inset-top, 0px) + 16px);
+  }
+}
+body {
+  padding-top: var(--above);
+}
+
+/*
+ * A face, a project's mark, a workspace's picture and the logo are not
+ * things to carry away. A press that slid a pixel on one of them picked the
+ * picture up — a ghost of it under the pointer and the browser offering to
+ * save it — when the press was meant for the row or the menu it sits in.
+ * They say `draggable={false}`; this is WebKit's own word for the same, so
+ * Safari agrees. Pictures in the work — attachments, a file's preview —
+ * say nothing and keep the browser's drag.
+ */
+img[draggable='false'] {
+  -webkit-user-drag: none;
+}
+
+/*
+ * Things that open over the work arrive, and the windows leave the way they
+ * came. Opacity and a small scale, one fifth of a
+ * second on the strong ease-out; a menu from just above where it hangs. The
+ * palette is left out on purpose: it is opened by a key, dozens of times a
+ * day, and a key's answer is not animated.
+ */
+[data-scrim] {
+  transition: opacity 200ms var(--ease-out);
+}
+[data-dialog-panel] {
+  transition:
+    opacity 200ms var(--ease-out),
+    transform 200ms var(--ease-out);
+}
+@starting-style {
+  [data-scrim] {
+    opacity: 0;
+  }
+  [data-dialog-panel] {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+[data-leaving] [data-scrim] {
+  opacity: 0;
+  transition-duration: 160ms;
+}
+[data-leaving] [data-dialog-panel] {
+  opacity: 0;
+  transform: translateY(8px);
+  transition-duration: 160ms;
+}
+/*
+ * A window written in is a sheet on a phone — and
+ * a sheet rises from the foot of the screen and goes back down it, as a
+ * menu's sheet does. Transform only: it is opaque the whole way, the scrim
+ * fading behind it.
+ */
+[data-dialog-panel][data-sheet] {
+  transition: transform 240ms var(--ease-out);
+}
+@starting-style {
+  [data-dialog-panel][data-sheet] {
+    opacity: 1;
+    transform: translateY(100%);
+  }
+}
+[data-leaving] [data-dialog-panel][data-sheet] {
+  opacity: 1;
+  transform: translateY(100%);
+  transition-duration: 160ms;
+}
+/* Its top bar's buttons are a thumb's: 44 tall, and said at the size the
+   rest of a phone's chrome is. */
+[data-sheet-bar] {
+  --control-h: 44px;
+}
+[data-sheet-bar] [data-control] {
+  font-size: 15px;
+}
+/* What scrolls in it ends on the writing dock while the dock is up, and
+   on the home indicator while the keys are down. */
+[data-sheet-foot] {
+  height: calc(var(--dock-h) + env(safe-area-inset-bottom, 0px));
+}
+:root[data-keyboard] [data-sheet-foot] {
+  height: var(--dock-h);
+}
+
+/*
+ * A menu moves its own surface, not the box it hangs in: most are glass,
+ * and a backdrop-filter under a parent going from transparent to opaque
+ * has nothing to sample until the parent is opaque — the blur popped in
+ * at the end, and the menu arrived in two jerks. On the surface itself,
+ * the blur is there from the first frame.
+ */
+[role='menu'][data-over] > * {
+  transform-origin: top left;
+  transition:
+    opacity 160ms var(--ease-out),
+    transform 160ms var(--ease-out);
+}
+@starting-style {
+  [role='menu'][data-over] > * {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+@media (min-width: 640px) {
+  [data-popover] {
+    transition:
+      opacity 160ms var(--ease-out),
+      transform 160ms var(--ease-out);
+  }
+  @starting-style {
+    [data-popover] {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+  }
+}
+/*
+ * The sidebar's rows change shape when it shuts — names to glyphs — and
+ * that change is one frame whatever is done with the width. So the rows
+ * arrive in the new shape from nothing, on the width's own curve and
+ * length, instead of being swapped in under a column still moving: the
+ * labels do not hang in a 120px column and the glyphs do not jump from
+ * twenty to thirty-two in plain sight. `docs/specs/collapsed-sidebar.md`,
+ * "Shutting moves". Reduced motion gets none of it, from the rule above.
+ */
+aside[data-moving] > [data-fluid] {
+  animation: column-swap 200ms var(--ease-out);
+}
+@keyframes column-swap {
+  from {
+    opacity: 0;
+  }
+}
+/* The find field grows out of its magnifier and folds back into it. */
+[data-find] {
+  transition:
+    width 200ms var(--ease-out),
+    background-color 200ms var(--ease-out);
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-scrim],
+  [data-dialog-panel],
+  [data-dialog-panel][data-sheet],
+  [role='menu'][data-over] > *,
+  [data-popover],
+  [data-find] {
+    transition: none;
+  }
+}
+
+/*
+ * The landing's arrival. Out of a blur, rising
+ * twelve pixels and fading in, once, as it is scrolled to; `--reveal-delay`
+ * staggers a row. Transform, opacity and a blur that settles: nothing that
+ * moves layout. A marketing page may take its time, so this is longer than
+ * the product's 150–250. Reduced motion gets it all at once.
+ */
+/* 400ms, not 700: the landing's sections came in slower than a page is
+   scrolled, and somebody reading waited on words that were already there. */
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(8px);
+  filter: blur(6px);
+  transition:
+    opacity var(--reveal-ms, 400ms) var(--ease-out),
+    transform var(--reveal-ms, 400ms) var(--ease-out),
+    filter var(--reveal-ms, 400ms) var(--ease-out);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+[data-reveal][data-shown] {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] {
+    opacity: 1;
+    transform: none;
+    filter: none;
+    transition: none;
+  }
+}
+
+/* The landing's agent pressing something: a ring that opens and fades. */
+@keyframes demo-press {
+  from {
+    opacity: 0.55;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+
+/*
+ * The landing's type — our design is set in Inter, its code in
+ * Geist Mono — kept on this server, because the page's policy lets fonts
+ * come from here alone and a font from Google is a visitor's address told
+ * to Google. Named "Tuff Inter" so the product's own stack, which lists
+ * Inter for a computer that has it, never downloads this. Latin only; the
+ * licences are beside the files.
+ */
+@font-face {
+  font-family: 'Tuff Inter';
+  src: url('/landing/fonts/inter-latin.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('/landing/fonts/geist-mono-latin.woff2') format('woff2');
+  font-weight: 400 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+/*
+ * The landing's motion. Each
+ * thing once, as it is first seen (`[data-watch]` is told by `useReveal`),
+ * on transform and opacity alone; reduced motion gets it all in place.
+ */
+.lp-tile {
+  animation: lp-tile 640ms var(--ease-out) both;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes lp-tile {
+  from {
+    opacity: 0;
+    transform: translateY(0.25em) scale(0.6) rotate(0deg);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(var(--turn, 0deg));
+  }
+}
+[data-watch] .lp-card,
+[data-watch] .lp-row {
+  opacity: 0;
+  transform: translateY(10px);
+  transition:
+    opacity 480ms var(--ease-out),
+    transform 480ms var(--ease-out);
+  transition-delay: var(--d, 0ms);
+}
+[data-watch][data-shown] .lp-card,
+[data-watch][data-shown] .lp-row {
+  opacity: 1;
+  transform: none;
+}
+[data-watch] .lp-bar {
+  transform: scaleY(0);
+  transform-origin: bottom;
+  transition: transform 520ms var(--ease-out);
+  transition-delay: var(--d, 0ms);
+}
+[data-watch][data-shown] .lp-bar {
+  transform: none;
+}
+[data-watch] .lp-fill {
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 1400ms var(--ease-out) 250ms;
+}
+[data-watch][data-shown] .lp-fill {
+  transform: none;
+}
+.lp-caret {
+  animation: lp-caret 1060ms steps(1) infinite;
+}
+@keyframes lp-caret {
+  50% {
+    opacity: 0;
+  }
+}
+.lp-swap {
+  animation: lp-swap 280ms var(--ease-out) both;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes lp-swap {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp-tile,
+  .lp-caret,
+  .lp-swap {
+    animation: none;
+  }
+  .lp-tile {
+    transform: rotate(var(--turn, 0deg));
+  }
+  [data-watch] .lp-card,
+  [data-watch] .lp-row,
+  [data-watch] .lp-bar,
+  [data-watch] .lp-fill {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/*
+ * The landing's colours. One fixed
+ * scheme, whatever the visitor's theme: the page is dark and its sections
+ * take turns, dark and light, each saying which on itself
+ * (`data-lp-tone`). Every drawing in a section — the board, the thread —
+ * takes its section's tone from these tokens. `.lp-board` is dark by
+ * default, which is what it is anywhere else it is drawn.
+ */
+[data-lp],
+[data-lp-tone='dark'] {
+  --lp-accent: #2f7bf6;
+  --lp-bg: #09090b;
+  --lp-fg: #fafafa;
+  --lp-muted: #9f9fa9;
+  --lp-faint: #5f5f68;
+  --lp-line: rgba(255, 255, 255, 0.08);
+  --lp-line-strong: rgba(255, 255, 255, 0.16);
+  --lp-sunk: #0e0e10;
+  --lp-card: #121214;
+  --lp-chip: rgba(255, 255, 255, 0.05);
+  --lp-chip-on: #1c1c1f;
+  --lp-glass: rgba(9, 9, 11, 0.72);
+  --lp-lift: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 12px 32px -12px rgba(0, 0, 0, 0.5);
+  --lp-lift-small: 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --lp-code: #0e0e10;
+  --lp-hatch: rgba(255, 255, 255, 0.04);
+}
+[data-lp-tone='light'] {
+  --lp-bg: #ffffff;
+  --lp-fg: #0b0b0d;
+  --lp-muted: #6b6b73;
+  --lp-faint: #a1a1aa;
+  --lp-line: rgba(9, 9, 11, 0.08);
+  --lp-line-strong: rgba(9, 9, 11, 0.16);
+  --lp-sunk: #f7f7f8;
+  --lp-card: #ffffff;
+  --lp-chip: rgba(9, 9, 11, 0.04);
+  --lp-chip-on: #ffffff;
+  --lp-accent: #2f7bf6;
+  --lp-glass: rgba(255, 255, 255, 0.8);
+  --lp-lift: 0 0 0 1px rgba(9, 9, 11, 0.08), 0 1px 2px rgba(9, 9, 11, 0.04), 0 12px 32px -12px rgba(9, 9, 11, 0.12);
+  --lp-lift-small: 0 0 0 1px rgba(9, 9, 11, 0.08), 0 1px 2px rgba(9, 9, 11, 0.05);
+  --lp-code: #0e0e10;
+  --lp-hatch: rgba(9, 9, 11, 0.05);
+}
+.lp-board {
+  --bd-bg: #090909;
+  --bd-fg: #f5f5f7;
+  --bd-card: #181818;
+  --bd-card-shadow: none;
+  --bd-panel: #111111;
+  --bd-col: #0d0d0d;
+  --bd-sel: #1f1f1f;
+  --bd-search: #151515;
+  --bd-seg: #1e1e20;
+  --bd-seg-on: #48484c;
+  --bd-seg-on-fg: #ffffff;
+  --bd-badge: #232325;
+  --bd-icon: #636366;
+  --bd-icon2: #c7c7cc;
+  --bd-quiet: #aeaeb2;
+  --bd-ring: rgba(255, 255, 255, 0.08);
+}
+[data-lp-tone='light'] .lp-board {
+  --bd-bg: #f5f5f7;
+  --bd-fg: #1d1d1f;
+  --bd-card: #ffffff;
+  --bd-card-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --bd-panel: #ffffff;
+  --bd-col: #f4f4f6;
+  --bd-sel: #ececef;
+  --bd-search: #e9e9ec;
+  --bd-seg: #ececef;
+  --bd-seg-on: #ffffff;
+  --bd-seg-on-fg: #1d1d1f;
+  --bd-badge: #e5e5ea;
+  --bd-icon: #a1a1a6;
+  --bd-icon2: #3a3a3c;
+  --bd-quiet: #6e6e73;
+  --bd-ring: rgba(0, 0, 0, 0.08);
+}
+/*
+ * The landing's demos — `ui/LandingDemo.tsx`, `useStage`. A scene runs only
+ * while it is on the screen (`data-run`); off it, whatever loops is paused.
+ * Each line of a thread has its place from the start and is shown in it:
+ * opacity and a rise of six pixels, ease-out, and leaves the way it came.
+ */
+[data-stage]:not([data-run]) .agent-working,
+[data-stage]:not([data-run]) .af *,
+[data-stage]:not([data-run]) .lp-ch,
+[data-stage]:not([data-run]) .lp-caret,
+[data-stage]:not([data-run]) .lp-dot {
+  animation-play-state: paused;
+}
+.lp-msg {
+  opacity: 0;
+  transform: translateY(6px);
+  transition:
+    opacity 360ms var(--ease-out),
+    transform 360ms var(--ease-out);
+}
+.lp-msg[data-on] {
+  opacity: 1;
+  transform: none;
+}
+/* Two in one place — the dots, then the answer — take turns: the one
+   leaving goes in 160 ms, and the one coming waits for it. */
+.lp-msg:not([data-on]) {
+  transition-duration: 160ms;
+}
+.lp-msg.lp-after[data-on] {
+  transition-delay: 160ms;
+}
+.lp-note {
+  opacity: 0;
+  transform: translate(-50%, 8px);
+  transition:
+    opacity 280ms var(--ease-out),
+    transform 280ms var(--ease-out);
+}
+.lp-note[data-on] {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.lp-ring {
+  transition: opacity 240ms var(--ease-out);
+}
+/* The hero's room — `Room` in `ui/LandingDemo.tsx`. A message that arrives
+   rises eight pixels into its place as the list slides up under it, on one
+   curve and in one time; the line under the box fades in and out, a line
+   tall whether or not it says anything. */
+.lp-arrive {
+  animation: lp-arrive 240ms var(--ease-out) both;
+}
+@keyframes lp-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+/* The phone's turn from the room to the tasks, and the lit half of the
+   switch over them: a push, as the phone goes from screen to screen —
+   transform and opacity, 240 ms, the strong ease-out. */
+.lp-push {
+  /* `translate` as well: Tailwind's translate classes set that property,
+     not `transform`. */
+  transition:
+    translate 240ms var(--ease-out),
+    transform 240ms var(--ease-out),
+    opacity 240ms var(--ease-out);
+}
+.lp-line {
+  opacity: 0;
+  transition: opacity 200ms var(--ease-out);
+}
+.lp-line[data-on] {
+  opacity: 1;
+}
+.lp-ch {
+  opacity: 0;
+  animation: lp-ch 1ms linear both;
+}
+@keyframes lp-ch {
+  to {
+    opacity: 1;
+  }
+}
+.lp-dot {
+  animation: lp-dot 960ms ease-in-out infinite;
+}
+@keyframes lp-dot {
+  30% {
+    transform: translateY(-2px);
+    opacity: 1;
+  }
+  0%,
+  60%,
+  100% {
+    opacity: 0.5;
+  }
+}
+/* A status that changes as the table is watched: the old one goes as the
+   new one comes, in the same place. */
+/* One at a time, never both: the old one is gone (200 ms) before the new
+   one starts, and the cell is as wide as the wider of the two from the
+   first frame, since both stand in one grid cell. */
+.lp-was {
+  transition:
+    opacity 200ms var(--ease-out),
+    transform 200ms var(--ease-out);
+  transition-delay: var(--d, 0ms);
+}
+.lp-now {
+  transition:
+    opacity 280ms var(--ease-out),
+    transform 280ms var(--ease-out);
+  transition-delay: calc(var(--d, 0ms) + 200ms);
+}
+.lp-now {
+  opacity: 0;
+  transform: translateY(4px);
+}
+[data-watch][data-shown] .lp-was {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+[data-watch][data-shown] .lp-now {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp-arrive {
+    animation: none;
+  }
+  .lp-push,
+  .lp-msg,
+  .lp-note,
+  .lp-line,
+  .lp-ring,
+  .lp-was,
+  .lp-now {
+    transition: none;
+  }
+  .lp-ch,
+  .lp-dot {
+    opacity: 1;
+    animation: none;
+  }
+  .lp-was {
+    opacity: 0;
+  }
+  .lp-now {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* A link on the landing that answers a pointer — colour only, never size. */
+@media (hover: hover) and (pointer: fine) {
+  [data-lp] .lp-link:hover {
+    color: var(--lp-fg) !important;
+  }
+}
+/* Pressed, a pill gives a little. */
+.lp-press {
+  transition: transform 160ms var(--ease-out);
+}
+.lp-press:active {
+  transform: scale(0.97);
+}
+
+/* An import from Linear before its first number: a strip that travels the
+   bar, so the page never looks stopped while the work is not —
+   `ui/ImportFrom.tsx`. Transform only; no motion under reduced motion. */
+@keyframes import-wait {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(400%);
+  }
+}
+
+/*
+ * An agent at work on a task. A ring
+ * round its face with a lit arc that goes round: transform only, slow
+ * enough to be noticed at the edge of the eye and not to pull it, and
+ * still — a whole quiet ring — for anybody who asked for less motion.
+ */
+.agent-working {
+  /* Grey and faint, by decision: in the accent it was the
+     loudest thing on a card, a blue halo round a face that is only busy. */
+  background: conic-gradient(from 0deg, transparent 0 55%, color-mix(in oklch, var(--ink-3) 70%, transparent) 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+  animation: agent-turn 1.6s linear infinite;
+}
+@keyframes agent-turn {
+  to {
+    transform: rotate(1turn);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .agent-working {
+    animation: none;
+    background: var(--ink-3);
+    opacity: 0.4;
+  }
+}
+
+/*
+ * An agent's premade face.
+ *
+ * Still at rest: a face is drawn tens of times on a screen of chat, and a
+ * column of blinking faces is a column pulling the eye off the words. It
+ * says hello once under a mouse — a blink and a small hop, ease-out, under
+ * a third of a second — and it lives, slowly, only where it is the thing
+ * being looked at or something is happening: on its own page, in the
+ * picker, and on a task row while it works there (`data-live`). A blink
+ * every five seconds, a breath of one unit, the antenna's light. Transform
+ * and opacity only, and for anybody who asked for less motion, nothing.
+ */
+.af {
+  display: inline-block;
+  flex-shrink: 0;
+  border-radius: 50%;
+  overflow: hidden;
+}
+.af svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.af .af-body,
+.af .af-eyes,
+.af .af-glow,
+.af .af-look {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.af .af-sway {
+  transform-box: fill-box;
+  transform-origin: left center;
+}
+.af .af-orbit {
+  transform-box: view-box;
+  transform-origin: 24px 24px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  @media (hover: hover) and (pointer: fine) {
+    .af:hover .af-eyes {
+      animation: af-blink 240ms var(--ease-out);
+    }
+    .af:hover .af-body {
+      animation: af-hop 320ms var(--ease-out);
+    }
+  }
+  .af[data-live] .af-eyes {
+    animation: af-blink-idle 4.8s ease-out infinite;
+  }
+  .af[data-live] .af-body {
+    animation: af-breathe 3.2s ease-in-out infinite;
+  }
+  .af[data-live] .af-glow {
+    animation: af-glow 2.4s ease-in-out infinite;
+  }
+  .af[data-live] .af-look {
+    animation: af-look 5.6s ease-in-out infinite;
+  }
+  .af[data-live] .af-orbit {
+    animation: af-orbit 8s linear infinite;
+  }
+  .af[data-live] .af-sway {
+    animation: af-sway 3.2s ease-in-out infinite;
+  }
+  /* Ten alive side by side, in the picker, do not blink as one. */
+  .af[data-live] .af-body,
+  .af[data-live] .af-eyes,
+  .af[data-live] .af-glow,
+  .af[data-live] .af-look,
+  .af[data-live] .af-orbit,
+  .af[data-live] .af-sway {
+    animation-delay: var(--af-at, 0s);
+  }
+}
+@keyframes af-blink {
+  50% {
+    transform: scaleY(0.12);
+  }
+}
+@keyframes af-hop {
+  40% {
+    transform: translateY(-2px);
+  }
+}
+@keyframes af-blink-idle {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  95% {
+    transform: scaleY(0.12);
+  }
+}
+@keyframes af-breathe {
+  50% {
+    transform: translateY(-1px);
+  }
+}
+@keyframes af-glow {
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes af-look {
+  0%,
+  20%,
+  100% {
+    transform: translateX(0);
+  }
+  35%,
+  50% {
+    transform: translateX(-1.5px);
+  }
+  65%,
+  80% {
+    transform: translateX(1.5px);
+  }
+}
+@keyframes af-orbit {
+  to {
+    transform: rotate(1turn);
+  }
+}
+@keyframes af-sway {
+  50% {
+    transform: rotate(-12deg);
+  }
+}
+
+/*
+ * A board by link — `ui/Board.tsx`. Its panel and windows come in whole,
+ * short, by transform and opacity only, and leave at once.
+ */
+@keyframes board-in-right { from { transform: translateX(24px); opacity: 0; } }
+@keyframes board-in-up { from { transform: translateY(16px); opacity: 0; } }
+@keyframes board-fade { from { opacity: 0; } }
+.board-panel { animation: board-in-right 200ms var(--ease-out); }
+.board-window { animation: board-in-up 200ms var(--ease-out); }
+.board-scrim { animation: board-fade 200ms var(--ease-out); }
+@media (prefers-reduced-motion: reduce) {
+  .board-panel, .board-window, .board-scrim { animation: none; }
+}
+
+/*
+ * The note at the foot of the landing's boards — `Note` in
+ * `ui/LandingDemo.tsx`: in while an agent has just done something, out
+ * between, by opacity and a few pixels. None with reduced motion.
+ */
+.lp-note {
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 220ms var(--ease-out), transform 220ms var(--ease-out);
+}
+.lp-note[data-on] {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp-note { transition: none; transform: none; }
+}
+
+/*
+ * What a column shows while the pointer is in it: the way to narrow it, and
+ * its bar.
+ *
+ * These were Tailwind's `group-hover/col`, which is written as "any element
+ * under a hovered group" — and a selector the browser cannot narrow makes a
+ * change of the column's hover restyle everything in it. Picking a card up
+ * is one: the board takes the pointer, the column stops being hovered, and
+ * a column of 600 cards was restyled whole, 11,000 elements and 56 ms, and
+ * again when the card was let go of. Named by an attribute, the
+ * browser restyles the two things that change.
+ */
+@media (hover: hover) {
+  [data-column]:hover [data-col-reveal] {
+    opacity: 1;
+  }
+}
+
+/*
+ * Words chosen for a comment, tinted while it is on its way; and the card
+ * beside them, coming in on the product's one short ease — and not at all
+ * for somebody who asked for less motion.
+ */
+[data-comment-waiting] {
+  background: var(--comment-tint);
+  box-shadow: inset 0 -2px 0 var(--comment-line);
+}
+@keyframes words-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.words-card {
+  animation: words-card-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .words-card {
+    animation: none;
+  }
+}
+
+/*
+ * A task named in a document, alive. Inline
+ * in the sentence, as Notion's mention of a page and Linear's of an issue
+ * are: the tick and the handle at its start, then the whole title flowing
+ * like the words it replaced, wrapping across lines, on a tint that breaks
+ * with the line and starts again on the next (`box-decoration-break`).
+ *
+ * Every part is inline, never a box: a button is one box, and a title
+ * inside one either wrapped inside a 24-pixel chip — its lines piled over
+ * each other, centred — or was cut with an ellipsis, saying less than the
+ * line did. TipTap writes `white-space: normal` on the node view's own
+ * element; that is what this wants, and the words keep the paragraph's
+ * line height, so wrapped lines stand a line apart and never overlap. The
+ * tint is the words' own box, shorter than the line, so the gap between
+ * two wrapped lines shows.
+ */
+.task-chip {
+  display: inline;
+  /* Room round the tick, the same above, below and before it — four
+     pixels at a body's size, in its own em so a heading's chip keeps the
+     proportion. With none above and below, the tint was the words' box
+     and the tick stood past it. */
+  padding: 0.1875em 0.25em;
+  margin: 0 2px;
+  border-radius: var(--r-row);
+  background: var(--track);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: inherit;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  user-select: none;
+}
+.task-chip-tick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* In the words' own size, so a chip in a heading has a tick of the
+     heading's size, centred on its letters: sixteen pixels and four down
+     sat low beside a heading's taller words. */
+  width: 1em;
+  height: 1em;
+  margin-right: 0.3em;
+  /* Centred on the letters whatever is inside it: aligned by its own
+     baseline, the ticked one — with a check in it — stood lower than the
+     empty ring beside it. */
+  vertical-align: middle;
+  position: relative;
+  top: -0.12em;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1.5px var(--ink-3);
+  color: var(--on-accent);
+}
+/* A heading's letters stand low in their box: the tint starts nearer
+   them, so they are as far from its top as from its foot. */
+.ProseMirror h1 .task-chip,
+.ProseMirror h2 .task-chip {
+  padding: 0.11em 0.25em 0.27em;
+}
+/* The check grows with the words, and is set a hair right and up: drawn
+   in the middle of its box, a check's weight is its foot on the left, and
+   it read as sitting low and to the left of the circle. */
+.task-chip-tick svg {
+  width: 0.75em;
+  height: 0.75em;
+  translate: 0 -0.02em;
+}
+/* Its task deleted, or not this reader's: words in the sentence, nothing
+   more — `taskChip.tsx`. */
+.task-chip[data-gone] {
+  padding: 0;
+  margin: 0;
+  background: none;
+  user-select: text;
+}
+.task-chip[data-done] .task-chip-tick {
+  background: var(--accent);
+  box-shadow: none;
+}
+.task-chip-open {
+  display: inline;
+  cursor: pointer;
+  outline-offset: 2px;
+}
+.task-chip-open[aria-disabled] {
+  cursor: default;
+}
+/* Smaller words on the paragraph's leading sit on a baseline of their
+   own and pushed the line 0.64 taller; on a line of their own height they
+   stay inside it. */
+/* A document named in a body — `refs.ts`. The task chip's tint and room,
+   the document's own mark before its title. */
+.doc-chip {
+  display: inline;
+  padding: 0.1875em 0.25em;
+  margin: 0 2px;
+  border-radius: var(--r-row);
+  background: var(--track);
+  color: var(--ink);
+  cursor: pointer;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  user-select: none;
+}
+.doc-chip:hover .doc-chip-title {
+  text-decoration: underline;
+}
+.doc-chip-mark {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-right: 0.25em;
+  color: var(--accent);
+  position: relative;
+  top: -0.08em;
+}
+.task-chip-handle {
+  font-size: 0.86em;
+  line-height: 1;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.task-chip-title {
+  color: var(--ink);
+}
+.task-chip-face {
+  display: inline-flex;
+  margin-left: 0.25em;
+  vertical-align: -0.2em;
+}
+.task-chip[data-done] .task-chip-title {
+  text-decoration: line-through;
+  color: var(--ink-3);
+}
+/* The line it was made from, drawn in it: a link is followed on a plain
+   press, so it says so without ⌘ held. */
+.task-chip a[data-chip-link] {
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .task-chip-open:not([aria-disabled]):hover .task-chip-title {
+    text-decoration: underline;
+  }
+}
+
+/*
+ * A list's block in the tasks list — `ui/tasks/listView.tsx`. Its heading
+ * is the switch that folds it, and under the pointer the block's own
+ * ground darkens: a lit strip laid inside it read as a second box on the
+ * block rather than the block answering.
+ */
+[data-band-block],
+[data-fold-block] {
+  transition: background-color 120ms var(--ease-out);
+}
+@media (hover: hover) {
+  [data-band-block]:has(> [data-band]:hover),
+  [data-fold-block]:has(> [data-fold-head]:hover) {
+    background: color-mix(in oklch, var(--ink) 5%, var(--lane)) !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-band-block],
+  [data-fold-block] {
+    transition: none;
+  }
+}
+
+/* A quiet place in the side column comes up to full ink under the pointer
+   — `ui/Sidebar.tsx`. */
+@media (hover: hover) {
+  [data-row]:hover [data-side-name],
+  [data-tool]:hover [data-side-name],
+  [data-side-tool]:hover [data-side-name] {
+    color: var(--ink) !important;
+  }
+}
+@media (prefers-contrast: more) {
+  :root {
+    --side-ink: var(--ink-2) !important;
+  }
+}
+
+/*
+ * Rows taken together are one block of the accent's ground — `docs/specs/
+ * many-at-once.md`. The line between two taken rows was the grey hairline
+ * on blue, and left of its inset a stripe of the sheet's own white or
+ * black where the hairline's box had no ground: two lines of two colours
+ * cutting a selection into slices. Between two taken rows the hairline's
+ * box takes the same ground and the line goes.
+ */
+[data-band-rows] > div:has(> [data-taken]) + div:has(> [data-taken]) > [data-hairline] {
+  background: color-mix(in oklch, var(--accent) 12%, transparent);
+}
+[data-band-rows] > div:has(> [data-taken]) + div:has(> [data-taken]) > [data-hairline] > [data-line] {
+  opacity: 0 !important;
+}
+
+/*
+ * A menu's highlight is a pill inside the menu, not a band across it.
+ *
+ * The rows were the menu's full width and the light under them ran edge
+ * to edge, so the lit row sliced the panel and its square ends met the
+ * panel's round corners on the first and last row. Linear, and every
+ * menu on the platforms, hang the highlight inside the panel with its own
+ * corners. So a menu — `[data-menu]`, on whatever holds its rows — keeps
+ * four pixels either side, and its rows are rounded by the panel's corner
+ * less those four, so the two curves are concentric: 16 less 4 on the
+ * glass menus. A panel with another corner says its own `--r-item`.
+ *
+ * Only across: the menus already keep four above and below, and a pass
+ * that also moved them up and down would move every menu's height.
+ * Unlayered, so it wins over the `px-*` a panel was written with.
+ */
+[data-menu] {
+  --r-item: calc(var(--r-card) - 4px);
+  padding-left: 4px;
+  padding-right: 4px;
+}
+[data-menu] :is([data-row], [role='option'], [role^='menuitem']),
+[data-menu] > button {
+  border-radius: var(--r-item);
+}
+/* Delete keeps its red, and its pill is red too — the travelling light
+   does the same for its own rows (`Fluid`), so this is for the menus
+   without one. */
+@media (hover: hover) {
+  [data-menu] :is([data-row][data-danger], [data-row].text-danger):hover:not([data-selected]):not([data-fluid] *) {
+    background: var(--danger-wash);
+  }
+}
+@media (hover: none), (pointer: coarse) {
+  [data-menu] :is([data-row][data-danger], [data-row].text-danger):hover:not([data-selected]) {
+    background: transparent;
+  }
+}
+
+/*
+ * A pinned document's page — `docs/specs/docs.md`, "A pinned document is a
+ * page". A page standing on two more sheets, fanned a degree or two behind
+ * it and still. Under the pointer the page lifts two pixels; nothing turns
+ * and nothing lights. Transform only, 200 ms on a strong ease-out, none
+ * where there is no pointer and none under reduced motion. The page is
+ * content and stays flat — no glass.
+ */
+.paper-sheet,
+.paper-under {
+  border-radius: var(--r-card);
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.paper-sheet {
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.08);
+  transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.paper-under-1 {
+  transform: rotate(-2deg) translate(-4px, 4px);
+  opacity: 0.8;
+}
+.paper-under-2 {
+  transform: rotate(2deg) translate(4px, 8px);
+  opacity: 0.56;
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .group:hover .paper-sheet {
+    transform: translateY(-2px);
+  }
+}

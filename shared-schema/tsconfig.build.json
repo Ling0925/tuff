@@ -1,0 +1,24 @@
+{
+  // The compiled copy production imports.
+  //
+  // `exports` points at `src/index.ts` for everything else, because the
+  // tools in this repo run TypeScript directly and a second build step in
+  // development is a second thing to forget. Node cannot run a `.ts` file,
+  // so the image gets this instead, behind the `compiled` condition —
+  // which only `node --conditions=compiled` asks for.
+  //
+  // It was the `import` condition first, and that was wrong in a way the
+  // full check did not catch: `import` matches every ESM load, including
+  // the test runner under `tsx`, so CI went looking for a `dist` it had
+  // never built. It passed locally only because a `dist` happened to be
+  // sitting there from an earlier build. A condition that production opts
+  // into cannot be triggered by accident.
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "noEmit": false,
+    "declaration": true
+  },
+  "include": ["src/**/*.ts"]
+}

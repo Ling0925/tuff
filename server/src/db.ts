@@ -1,0 +1,231 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
+import postgres from 'postgres'
+import { env, wholeFromEnv } from './env.js'
+
+export type Sql = postgres.Sql
+export type Tx = postgres.TransactionSql
+
+/**
+ * The runtime connection: the tracker_app role, which RLS applies to.
+ *
+ * Prepared statements, on. They were off for a PgBouncer in transaction
+ * mode that has not been put in front of the database — and the cost of
+ * being ready for it was paid on every query since: unprepared, a query
+ * with parameters is described before it is run, a round trip of its own,
+ * and the describe makes the driver wait instead of sending the next query
+ * behind it. Measured against a database 20 ms away, an open task took 880
+ * ms with them off; most of that was this. PgBouncer has kept prepared
+ * statements across transaction mode since 1.21 (`max_prepared_statements`),
+ * so this is no longer the thing in its way.
+ */
+export const sql: Sql = postgres(env.databaseUrlApp, {
+  max: env.poolMax,
+  prepare: true,
+  onnotice: () => {},
+  /*
+   * No JIT, on every connection this application opens.
+   *
+   * Postgres turns the compiler on when a plan's *estimated* cost crosses a
+   * threshold, and row-level security inflates that estimate enormously: the
+   * policies inline subqueries and function calls into every plan, so a
+   * query over twenty-three rows looked expensive enough to be worth
+   * compiling. It compiled 112 functions and spent 538 ms doing it, out of
+   * 732 ms total — the compilation cost more than five times the query.
+   *
+   * That was the whole reason a chat room took two seconds to open. Not the
+   * volume: the demo has twenty-three messages in seven rooms.
+   *
+   * JIT is right for analytical work, where a long scan pays back the
+   * compilation. Nothing in this product is that shape — every query is a
+   * small indexed lookup under RLS, and the load table makes them bigger
+   * without making them longer-running per row. So it is off here rather
+   * than tuned per query, because the next RLS-heavy query will cross the
+   * same threshold for the same wrong reason.
+   */
+  connection: { jit: 'off' },
+  types: {
+    // Dates come back as strings: a date is a plan with no zone, and turning
+    // it into a Date would mix in the server's timezone.
+    date: { to: 1082, from: [1082], serialize: (x: string) => x, parse: (x: string) => x },
+  },
+})
+
+/**
+ * The projects a token is limited to, for the request it came with.
+ *
+ * `withActor` is called from some two hundred and fifty places, and a limit each of
+ * them had to pass along is a limit one of them forgets: the list was
+ * carried on the request for months and never reached a query. So it rides
+ * the request itself, set once where the request is let in (`bounded`), and
+ * every transaction made for that token's actor inside it hands it to the
+ * database, where `visible_projects()` narrows to it. A transaction for
+ * anybody else — a mention's reader, a linked GitHub account — is not
+ * bound by this token, and the worker, outside any request, never is.
+ */
+type Bound = { actorId: string; projectIds: readonly string[] }
+const scope = new AsyncLocalStorage<Bound>()
+
+/** Runs `fn` with the token's limit on, when it has one. */
+export function bounded<T>(who: { actorId: string; tokenProjectIds: readonly string[] }, fn: () => T): T {
+  return who.tokenProjectIds.length > 0 ? scope.run({ actorId: who.actorId, projectIds: who.tokenProjectIds }, fn) : fn()
+}
+
+/** The settings for the limit, or empty strings for none — set every time,
+    so a pooled connection never carries one request's list into another's. */
+function limitFor(actorId: string): [string, string] {
+  const b = scope.getStore()
+  return b && b.actorId === actorId ? [actorId, `{${b.projectIds.join(',')}}`] : ['', '']
+}
+
+/**
+ * A transaction on behalf of an actor.
+ *
+ * app.actor_id is set locally in the transaction and read by the RLS policies.
+ * Anything that touches workspace data must go through this function: a query
+ * that skips it sees emptiness, not someone else's data.
+ */
+export async function withActor<T>(actorId: string, workspaceId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  /* Read here, not inside: the driver may start the transaction from a
+     socket's callback, where the request's store is not. */
+  const [tokenActor, tokenProjects] = limitFor(actorId)
+  return sql.begin(async (tx) => {
+    /*
+     * One statement for both, and not waited for.
+     *
+     * Each `await` here was a round trip to the database before the
+     * handler's first query could leave — two of them on every
+     * transaction, and every request opens at least two (who is asking,
+     * then what they asked). The connection runs statements in the order
+     * they are sent, so the handler's queries go out right behind this one
+     * and still read the settings it makes; if it fails, the transaction is
+     * aborted and they fail with it.
+     */
+    /* `execute()`, because a query here is lazy: it leaves when somebody
+       waits on it, and the handler's first `await` would otherwise send its
+       own query ahead of this one — into a transaction with nobody in it,
+       where every policy answers with nothing. */
+    /* And fifteen seconds for any one statement of a request. A request is
+       answered in milliseconds or something is wrong, and a query left to
+       run held its connection while twenty more queued behind the pool. */
+    const set = tx`select set_config('statement_timeout', '15s', true),
+                          set_config('app.actor_id', ${actorId}, true),
+                          set_config('app.workspace_id', ${workspaceId}, true),
+                          set_config('app.token_actor', ${tokenActor}, true),
+                          set_config('app.token_projects', ${tokenProjects}, true)`.execute()
+    const [, out] = await Promise.all([set, fn(tx)])
+    return out
+  }) as Promise<T>
+}
+
+/**
+ * The same, for the questions that are about a person rather than a place.
+ *
+ * Which workspaces somebody belongs to, and switching into one, cannot be
+ * asked from inside a workspace — that is the whole question. The login flows
+ * and the worker are in the same position for the same reason.
+ *
+ * It is named at length on purpose. The workspace bound used to be absent
+ * from `withActor` rather than declined by name, so a handler that wanted one
+ * workspace and a handler that wanted all of them were spelled identically,
+ * and My tasks quietly listed another company's work for as long as it took
+ * one account to have two workspaces. Whatever this is called, it should be
+ * the thing somebody has to choose.
+ */
+export async function withActorEverywhere<T>(actorId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  const [tokenActor, tokenProjects] = limitFor(actorId)
+  return sql.begin(async (tx) => {
+    // Sent ahead of the handler's queries, as `withActor` does.
+    const set = tx`select set_config('app.actor_id', ${actorId}, true),
+                          set_config('app.token_actor', ${tokenActor}, true),
+                          set_config('app.token_projects', ${tokenProjects}, true)`.execute()
+    const [, out] = await Promise.all([set, fn(tx)])
+    return out
+  }) as Promise<T>
+}
+
+/**
+ * The worker's own connection, as `tracker_worker` — migration 153.
+ *
+ * The queues, the clear-out and the GitHub token by person are that role's
+ * alone: as the application role, which every request runs as, an
+ * injection anywhere could have called them with anybody's ids. Opened
+ * only when first asked, so the server, which never asks, holds none.
+ * Without `DATABASE_URL_WORKER` it is the application's connection, and
+ * those calls are refused — said once, loudly, rather than found out from
+ * a sync that quietly stopped.
+ */
+let worker: Sql | null = null
+export async function asWorker<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+  if (!worker) {
+    if (!env.databaseUrlWorker) console.error('DATABASE_URL_WORKER is not set: the worker’s queues and clear-out will be refused')
+    worker = env.databaseUrlWorker
+      ? postgres(env.databaseUrlWorker, { max: 4, prepare: true, onnotice: () => {}, connection: { jit: 'off' } })
+      : sql
+  }
+  return worker.begin(fn) as Promise<T>
+}
+
+/*
+ * Boards by link have a pool of their own.
+ * A few connections, so that however many boards are asked of at
+ * once, they wait on each other and never on the connections the product's
+ * own requests need. Opened when first asked for.
+ */
+let boards: Sql | null = null
+export const boardPool = (): Sql =>
+  (boards ??= postgres(env.databaseUrlApp, {
+    max: wholeFromEnv(process.env.BOARD_POOL, 4),
+    prepare: true,
+    onnotice: () => {},
+    connection: { jit: 'off' },
+  }))
+
+/* How long each board transaction took, told to whoever is watching — the
+   breaker (`http/boardGuard.ts`), which times the database alone, never a
+   slow upload or a slow reader. */
+let timed: ((ms: number) => void) | null = null
+export function onBoardQuery(fn: ((ms: number) => void) | null): void {
+  timed = fn
+}
+async function timedBoard<T>(run: () => Promise<T>): Promise<T> {
+  const t = performance.now()
+  try {
+    return await run()
+  } finally {
+    timed?.(performance.now() - t)
+  }
+}
+
+/** `withActor`, on the boards' own pool. */
+export async function withBoardActor<T>(actorId: string, workspaceId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return timedBoard(
+    () =>
+      boardPool().begin(async (tx) => {
+        const set = tx`select set_config('statement_timeout', '5s', true),
+                          set_config('app.actor_id', ${actorId}, true),
+                          set_config('app.workspace_id', ${workspaceId}, true),
+                          set_config('app.token_actor', '', true),
+                          set_config('app.token_projects', '', true)`.execute()
+        const [, out] = await Promise.all([set, fn(tx)])
+        return out
+      }) as Promise<T>,
+  )
+}
+
+/** `withoutActor`, on the boards' own pool. */
+export async function withBoardOnly<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return timedBoard(() => boardPool().begin(fn) as Promise<T>)
+}
+
+/** A transaction with no actor: authentication and housekeeping only. */
+export async function withoutActor<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return sql.begin(fn) as Promise<T>
+}
+
+export async function closeDb(): Promise<void> {
+  if (worker && worker !== sql) await worker.end()
+  worker = null
+  if (boards) await boards.end()
+  boards = null
+  await sql.end()
+}

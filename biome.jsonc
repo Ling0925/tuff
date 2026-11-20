@@ -1,0 +1,63 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  // The web app, the server and the tests. Not what is generated from the
+  // schema, and not the migrations, which are written once and replayed as
+  // they were.
+  "vcs": { "enabled": false },
+  "files": {
+    "includes": [
+      "web/src/**/*.ts",
+      "web/src/**/*.tsx",
+      "web/test/**/*.ts",
+      "server/src/**/*.ts",
+      "server/test/**/*.ts",
+      "server/bench/**/*.ts",
+      "shared-schema/test/**/*.ts",
+      "e2e/**/*.ts",
+      "!**/generated/**",
+      "!server/migrations/**",
+      // Editors and agents that keep git worktrees under .claude/ leave a
+      // biome.jsonc in each; a nested root there stops the whole run.
+      "!!.claude"
+    ]
+  },
+  // The format the code was already written in: two spaces, single quotes,
+  // no semicolons, trailing commas. 140 wide, because the hand-written code
+  // ran past 120 often enough that a narrower page rewrapped far more of it.
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 140,
+    "lineEnding": "lf"
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "jsxQuoteStyle": "double",
+      "quoteProperties": "asNeeded",
+      "semicolons": "asNeeded",
+      "trailingCommas": "all",
+      "arrowParentheses": "always",
+      "bracketSpacing": true,
+      "bracketSameLine": false
+    }
+  },
+  "assist": { "enabled": false },
+  // Two questions and no more: whether a hook says everything it reads, and
+  // whether anything is imported or declared and never used. A hook that
+  // leaves something out on purpose says why in a `biome-ignore` beside it.
+  // The rest of Biome's rules are off — a rule nobody asked for is a rule
+  // somebody silences without reading.
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "none",
+      "correctness": {
+        "useExhaustiveDependencies": "error",
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error"
+      }
+    }
+  }
+}
