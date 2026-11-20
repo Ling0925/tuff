@@ -14,14 +14,13 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue"></a>
-  <a href="https://github.com/usetuff/tuff/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/usetuff/tuff?sort=semver"></a>
   <a href="https://github.com/usetuff/tuff/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/usetuff/tuff/actions/workflows/ci.yml/badge.svg?branch=main"></a>
 </p>
 
 <p align="center">
   <a href="#quick-start"><img alt="Self-host with Docker" src="docs/readme/button-docker.png" height="44"></a>&nbsp;
   <a href="https://usetuff.com"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/readme/button-try-dark.png"><img alt="Try it on usetuff.com" src="docs/readme/button-try-light.png" height="44"></picture></a>
-  <a href="https://railway.com/deploy/tuff?referralCode=ncZYV6"><img alt="Deploy on Railway" src="https://railway.com/button.svg" height="44"></a>
+  <a href="https://railway.com/deploy/tuff?referralCode=ncZYV6"><img alt="Deploy on Railway" src="docs/readme/button-railway.png" height="44"></a>
 </p>
 
 <p align="center">
@@ -163,7 +162,7 @@ computer, so it isn't a way to run Tuff for a team.
 
 ### On Railway
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/tuff?referralCode=ncZYV6)
+<a href="https://railway.com/deploy/tuff?referralCode=ncZYV6"><img alt="Deploy on Railway" src="docs/readme/button-railway.png" height="44"></a>
 
 One click makes the app, the worker, Postgres and a bucket for files on
 your Railway account, with every secret generated, and gives Tuff an

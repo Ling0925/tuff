@@ -51,7 +51,7 @@ up a server as below.
 
 ## On Railway
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/tuff?referralCode=ncZYV6)
+<a href="https://railway.com/deploy/tuff?referralCode=ncZYV6"><img alt="Deploy on Railway" src="readme/button-railway.png" height="44"></a>
 
 The template makes four things on your Railway account: **tuff**, the app,
 on an address Railway gives it; **worker**, from the same image; Railway's
