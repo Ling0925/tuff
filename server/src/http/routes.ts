@@ -688,7 +688,7 @@ app.use('/api/*', async (c, next) => {
        running server dropped them from every GET — `afterward.ts`. */
     addCookies(c, cookieHeaders(fileCookie(ctx.actorId)))
   } catch {
-    // An answer that cannot be made again (a socket's upgrade): the next answer sets it.
+    // An answer that cannot take a header now: the next answer sets it.
   }
 })
 

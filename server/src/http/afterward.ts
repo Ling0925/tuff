@@ -18,12 +18,19 @@ import type { Context } from 'hono'
  * `?for=me` was refused to somebody who had only looked (found on Railway). `app.request` in the tests does not swap the global `Response`,
  * which is why nothing there saw it.
  *
- * So the answer is made again, its headers a real `Headers` that holds the
- * cookies, and handed to `c.res`, whose setter keeps what it is given.
+ * So the cookies go in through `c.header`, which first turns the light answer
+ * into a real one and then appends to it, in the order Hono expects. An
+ * earlier version made the answer again and handed it to `c.res`, and the
+ * setter's copy of the old headers put back only the handler's own cookies:
+ * an answer that set one — linking a way in sets `__Host-tuff_link` — lost
+ * the file cookie.
+ *
+ * Not on an answer that may carry no body (101, 204, 205, 304): making one
+ * of those again throws, and the next answer sets the cookie anyway.
  */
 export function addCookies(c: Context, cookies: readonly string[]): void {
   if (cookies.length === 0) return
-  const headers = new Headers(c.res.headers)
-  for (const h of cookies) headers.append('set-cookie', h)
-  c.res = new Response(c.res.body, { status: c.res.status, statusText: c.res.statusText, headers })
+  const status = c.res.status
+  if (status === 101 || status === 204 || status === 205 || status === 304) return
+  for (const h of cookies) c.header('set-cookie', h, { append: true })
 }
