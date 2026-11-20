@@ -292,6 +292,43 @@ export function pageSize(asked: string | undefined, fallback: number, most: numb
   return Number.isFinite(n) && n >= 1 ? Math.min(n, most) : fallback
 }
 
+/*
+ * A moment in a cursor.
+ *
+ * Written by the database as `to_char(x at time zone 'UTC',
+ * 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`, to the microsecond, and sent back as
+ * text cast in the query, `${at}::text::timestamptz`: a parameter the driver
+ * knows is a timestamp — cast to one, or compared with a column that is one —
+ * goes through a JavaScript `Date`, which keeps milliseconds, and the rows of
+ * one transaction past a page's end were skipped. Checked here to the day
+ * and hour, so what reaches that cast is a moment Postgres reads, never a
+ * 500: `Date.parse` alone took "Fri Oct 23" and the thirty-first of February.
+ */
+const MOMENT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/
+const AN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+export function isMoment(at: string): boolean {
+  if (!MOMENT.test(at)) return false
+  const ms = Date.parse(at)
+  return !Number.isNaN(ms) && new Date(ms).toISOString().slice(0, 19) === at.slice(0, 19)
+}
+
+/**
+ * `<moment>_<id>`, the cursor of a list newest first by a time and then the
+ * id; or a bare moment, which these lists answered before (a `Date` as JSON
+ * prints one), with `id` null. Null for anything else — a `400 invalid`.
+ *
+ * A bare moment is read as everything up to the end of its millisecond
+ * (`before`), so a page cut inside one is repeated rather than skipped: the
+ * last row of the page before may come again, which a client drawing rows
+ * by id draws once.
+ */
+export function timeCursor(raw: string): { at: string; id: string | null } | null {
+  const cut = raw.indexOf('_')
+  const at = cut === -1 ? raw : raw.slice(0, cut)
+  const id = cut === -1 ? null : raw.slice(cut + 1)
+  return isMoment(at) && (id === null || AN_ID.test(id)) ? { at, id } : null
+}
+
 /** Spend one of `allowance` in a window of `seconds`; false once it is gone. */
 export async function spendOn(key: string, allowance: number, seconds: number, db: Sql = sql): Promise<boolean> {
   try {

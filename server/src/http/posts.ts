@@ -20,7 +20,7 @@ import {
   missing,
   subscribe,
 } from './objects.js'
-import { pageSize } from './limits.js'
+import { pageSize, timeCursor } from './limits.js'
 
 type Vars = { ctx: AuthContext }
 export const posts = new Hono<{ Variables: Vars }>()
@@ -38,14 +38,17 @@ posts.get('/projects/:projectId/posts', async (c) => {
   const ctx = c.get('ctx')
   const limit = pageSize(c.req.query('limit'), 50, 200)
   const cursor = c.req.query('cursor')
+  const from = cursor === undefined ? null : timeCursor(cursor)
+  if (cursor !== undefined && !from) return c.json({ error: { code: 'invalid' } }, 400)
   const rows = await withActor(
     ctx.actorId,
     ctx.workspaceId,
     (tx) =>
-      tx<{ id: string; created_at: string }[]>`
+      tx<{ id: string; created_at: string; at_key: string }[]>`
       select p.id, p.number, p.title, p.category, p.schedule, p.published_at,
              p.author_id, a.name as author_name, a.avatar_key as author_avatar,
              p.created_at,
+             to_char(p.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as at_key,
              /*
               * The whole body, not its first line.
               *
@@ -62,13 +65,24 @@ posts.get('/projects/:projectId/posts', async (c) => {
                 and c.deleted_at is null) as reply_count
       from post p join actor a on a.id = p.author_id
       where p.project_id = ${c.req.param('projectId')} and p.deleted_at is null
-        ${cursor ? tx`and p.created_at < ${cursor}` : tx``}
-      order by p.created_at desc
+        /* <moment>_<id>, the time as text to the microsecond and the id
+           for posts of one moment: A bare
+           moment, from before, reads to the end of its millisecond. */
+        ${
+          !from
+            ? tx``
+            : from.id
+              ? tx`and p.created_at <= ${from.at}::text::timestamptz
+                   and (p.created_at < ${from.at}::text::timestamptz or p.id < ${from.id}::uuid)`
+              : tx`and p.created_at < ${from.at}::text::timestamptz + interval '1 millisecond'`
+        }
+      order by p.created_at desc, p.id desc
       limit ${limit}`,
   )
+  const last = rows[rows.length - 1]
   return c.json({
-    posts: rows.map((r) => facedAs(r, 'author_avatar', 'author_avatar_url')),
-    next_cursor: rows.length === limit ? rows[rows.length - 1]!.created_at : null,
+    posts: rows.map(({ at_key: _, ...r }) => facedAs(r, 'author_avatar', 'author_avatar_url')),
+    next_cursor: rows.length === limit && last ? `${last.at_key}_${last.id}` : null,
   })
 })
 

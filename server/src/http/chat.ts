@@ -15,7 +15,7 @@ import { env } from '../env.js'
 import { MAX_FILE_BYTES } from '@tracker/shared-schema'
 import { put, remove } from '../storage.js'
 import { fits, roomFor } from '../ceilings.js'
-import { pageSize } from './limits.js'
+import { pageSize, timeCursor } from './limits.js'
 import { used } from './used.js'
 
 type Vars = { ctx: AuthContext }
@@ -1173,7 +1173,11 @@ chat.get('/conversations/:id/messages', async (c) => {
   const ctx = c.get('ctx')
   const limit = pageSize(c.req.query('limit'), 50, 200)
   const cursor = c.req.query('cursor')
-  const pair = cursor ? MESSAGE_CURSOR.exec(cursor) && { at: cursor.split('_')[0]!, id: cursor.split('_')[1]! } : null
+  /* `<moment>_<id>`, or a bare moment from before (`id` null), read to the
+     end of its millisecond; anything else is a 400, not a cast the
+     database refuses with a 500. */
+  const from = cursor === undefined ? null : timeCursor(cursor)
+  if (cursor !== undefined && !from) return c.json({ error: { code: 'invalid' } }, 400)
   const parent = c.req.query('thread') ?? null
   /*
    * The room's messages that say these words — replies in threads too,
@@ -1186,16 +1190,30 @@ chat.get('/conversations/:id/messages', async (c) => {
     /* Through `search_room`, which can use the words' index: under the
        room's row-level security `ilike` cannot, and every message of the
        room was read for every search. */
+    /* On the room history's cursor, the moment sent as text: as the
+       function's timestamp it went through a Date, to the millisecond,
+       and the messages of one moment past a page were never found
+       (migration 304). */
     const found = await withActor(
       ctx.actorId,
       ctx.workspaceId,
       (tx) =>
-        tx<{ id: string; created_at: string }[]>`
-        select * from search_room(${c.req.param('id')}, ${words}, ${cursor ?? null}, ${Math.min(limit, 30)})`,
+        tx<{ id: string; created_at: string; at_key: string }[]>`
+        select f.*, to_char(f.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as at_key
+        from search_room(${c.req.param('id')}, ${words},
+          ${
+            !from
+              ? tx`null::timestamptz`
+              : from.id
+                ? tx`${from.at}::text::timestamptz`
+                : tx`${from.at}::text::timestamptz + interval '1 millisecond'`
+          },
+          ${from?.id ?? null}::uuid, ${Math.min(limit, 30)}) f`,
     )
+    const last = found[found.length - 1]
     return c.json({
-      messages: found.map((r) => facedAs(r, 'author_avatar', 'author_avatar_url')),
-      next_cursor: found.length === Math.min(limit, 30) ? found[found.length - 1]!.created_at : null,
+      messages: found.map(({ at_key: _, ...r }) => facedAs(r, 'author_avatar', 'author_avatar_url')),
+      next_cursor: found.length === Math.min(limit, 30) && last ? `${last.at_key}_${last.id}` : null,
     })
   }
 
@@ -1220,11 +1238,11 @@ chat.get('/conversations/:id/messages', async (c) => {
             /* `<moment>_<id>`, so a page cut inside messages written in one
                moment neither skips nor repeats them; a bare moment is the
                cursor this answered before, and still read. */
-            pair
-              ? tx`and (m.created_at, m.id) < (${pair.at}::text::timestamptz, ${pair.id}::uuid)`
-              : cursor
-                ? tx`and m.created_at < ${cursor}`
-                : tx``
+            !from
+              ? tx``
+              : from.id
+                ? tx`and (m.created_at, m.id) < (${from.at}::text::timestamptz, ${from.id}::uuid)`
+                : tx`and m.created_at < ${from.at}::text::timestamptz + interval '1 millisecond'`
           }
         order by m.created_at desc, m.id desc
         limit ${limit}
@@ -1316,9 +1334,6 @@ chat.get('/conversations/:id/messages', async (c) => {
     next_cursor: more ? `${rows[rows.length - 1]!.at_key}_${rows[rows.length - 1]!.id}` : null,
   })
 })
-
-/** A page's cursor: `<moment in UTC>_<id>`. */
-const MESSAGE_CURSOR = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** How much of message bodies one page carries. */
 export const MESSAGE_BYTES_MOST = 4 * 1024 * 1024

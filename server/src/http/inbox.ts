@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { withActor, withActorEverywhere, type Tx } from '../db.js'
 import { facedAs } from '../storage.js'
 import { allow, type AuthContext } from '../auth/context.js'
-import { pageSize } from './limits.js'
+import { pageSize, timeCursor } from './limits.js'
 import { readsAudit } from './audit.js'
 import { publish } from '../realtime.js'
 import { owesCount } from '../push.js'
@@ -103,14 +103,17 @@ inbox.get('/inbox', async (c) => {
   const ctx = c.get('ctx')
   const limit = pageSize(c.req.query('limit'), 50, 200)
   const cursor = c.req.query('cursor')
+  const from = cursor === undefined ? null : timeCursor(cursor)
+  if (cursor !== undefined && !from) return c.json({ error: { code: 'invalid' } }, 400)
   const unreadOnly = c.req.query('unread') === '1'
 
   const rows = await withActor(
     ctx.actorId,
     ctx.workspaceId,
     (tx) =>
-      tx<{ id: string; created_at: string }[]>`
+      tx<{ id: string; created_at: string; at_key: string }[]>`
       select n.id, n.reason, n.object_type, n.object_id, n.read_at, n.created_at, n.what, n.kind,
+             to_char(n.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as at_key,
              /* Who did it, with their face — docs/specs/inbox.md, "Who, and
                 what kind". An agent is an actor like anybody, face and all. */
              n.by_id, doer.name as by_name, doer.avatar_key as by_avatar,
@@ -149,8 +152,18 @@ inbox.get('/inbox', async (c) => {
           and n.reason <> 'messaged'
           and n.deliver_after <= now()
           ${unreadOnly ? tx`and n.read_at is null` : tx``}
-          ${cursor ? tx`and n.created_at < ${cursor}` : tx``}
-        order by n.created_at desc
+          /* <moment>_<id>, the time as text to the microsecond and the
+             id for notes of one moment: A bare
+             moment, from before, reads to the end of its millisecond. */
+          ${
+            !from
+              ? tx``
+              : from.id
+                ? tx`and n.created_at <= ${from.at}::text::timestamptz
+                     and (n.created_at < ${from.at}::text::timestamptz or n.id < ${from.id}::uuid)`
+                : tx`and n.created_at < ${from.at}::text::timestamptz + interval '1 millisecond'`
+          }
+        order by n.created_at desc, n.id desc
         limit ${limit}
       ) n
       left join post p on p.id = n.object_id and n.object_type = 'post'
@@ -205,7 +218,7 @@ inbox.get('/inbox', async (c) => {
          alone, a mention in one company's room was listed in the other
          company's inbox — as "A conversation", since nothing about the room
          could be read from here, but listed. */
-      order by n.created_at desc`,
+      order by n.created_at desc, n.id desc`,
   )
   const counted = await withActor(
     ctx.actorId,
@@ -245,13 +258,14 @@ inbox.get('/inbox', async (c) => {
       order by c.created_at desc
       limit 50`,
       )
+  const last = rows[rows.length - 1]
   return c.json({
-    notifications: rows.map((r) => facedAs(r as Record<string, unknown>, 'by_avatar', 'by_avatar_url')),
+    notifications: rows.map(({ at_key: _, ...r }) => facedAs(r as Record<string, unknown>, 'by_avatar', 'by_avatar_url')),
     questions: questions.map((r) => facedAs(r as Record<string, unknown>, 'by_avatar', 'by_avatar_url')),
     /* Every reason the bell counts, as a string as it always was, '0'
        where nothing is waiting. */
     unread: Object.fromEntries(BELL.map((r) => [r, String(counted.find((x) => x.reason === r)?.n ?? '0')])),
-    next_cursor: rows.length === limit ? rows[rows.length - 1]!.created_at : null,
+    next_cursor: rows.length === limit && last ? `${last.at_key}_${last.id}` : null,
   })
 })
 
@@ -365,6 +379,8 @@ inbox.get('/activity', async (c) => {
 
   const limit = pageSize(c.req.query('limit'), 50, 200)
   const cursor = c.req.query('cursor')
+  const from = cursor === undefined ? null : timeCursor(cursor)
+  if (cursor !== undefined && !from) return c.json({ error: { code: 'invalid' } }, 400)
   const actorId = c.req.query('actor')
   const projectId = c.req.query('project')
   /* Somebody else's lines across every project are their page's history,
@@ -395,8 +411,9 @@ inbox.get('/activity', async (c) => {
     ctx.actorId,
     ctx.workspaceId,
     (tx) =>
-      tx<{ id: string; at: string }[]>`
+      tx<{ id: string; at: string; at_key: string }[]>`
       select e.id, e.action, e.object_type, e.object_id, e.origin, e.at,
+             to_char(e.at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as at_key,
              /* A copy says where it came from only to whoever can see
                 that project: its id and number are not the others' to have. */
              case when e.action = 'task.copy'
@@ -466,13 +483,24 @@ inbox.get('/activity', async (c) => {
         ${projectId ? tx`and e.project_id = ${projectId}` : tx``}
         ${objectId ? tx`and e.object_id = ${objectId}` : tx``}
         ${words ? tx`and (o.title ilike ${like} or a.name ilike ${like})` : tx``}
-        ${cursor ? tx`and e.at < ${cursor}` : tx``}
-      order by e.at desc
+        -- The moment as text to the microsecond and the id for lines of one
+        -- moment, which one change writes several of:
+        -- A bare moment, from before, reads to the end of its millisecond.
+        ${
+          !from
+            ? tx``
+            : from.id
+              ? tx`and e.at <= ${from.at}::text::timestamptz
+                   and (e.at < ${from.at}::text::timestamptz or e.id < ${from.id}::uuid)`
+              : tx`and e.at < ${from.at}::text::timestamptz + interval '1 millisecond'`
+        }
+      order by e.at desc, e.id desc
       limit ${limit}`,
   )
+  const last = rows[rows.length - 1]
   return c.json({
-    events: rows.map((r) => facedAs(r as Record<string, unknown>, 'actor_avatar', 'actor_avatar_url')),
-    next_cursor: rows.length === limit ? rows[rows.length - 1]!.at : null,
+    events: rows.map(({ at_key: _, ...r }) => facedAs(r as Record<string, unknown>, 'actor_avatar', 'actor_avatar_url')),
+    next_cursor: rows.length === limit && last ? `${last.at_key}_${last.id}` : null,
   })
 })
 

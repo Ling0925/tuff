@@ -19,7 +19,7 @@ import { LINES, doer, notify } from '../notify.js'
 import { subscribe } from './objects.js'
 import { faced, linkFor, put } from '../storage.js'
 import { statusByAgent } from '../doing.js'
-import { pageSize, spendOn } from './limits.js'
+import { isMoment, pageSize, spendOn } from './limits.js'
 import { LABELS_FR, SAMPLE, SAMPLE_FR, TEMPLATES_FR, doc, listName, type Label } from '../templates.js'
 import { languageOf, type Language } from '../words.js'
 
@@ -57,11 +57,14 @@ projects.get('/projects', async (c) => {
   /* `key|at|id`: the time to the microsecond, as Postgres keeps it, and the
      id for two made in the same one. It was the row's date as JavaScript
      prints one — "Fri Oct 23 …" — which the next request handed back to
-     Postgres and got a 500, so the fifty-first project was nowhere. */
+     Postgres and got a 500, so the fifty-first project was nowhere. Sent
+     back as text and cast in the query: cast as a timestamp, the driver
+     put it through a Date, to the millisecond, and projects made in one
+     moment past the page's end were skipped. */
   const parts = cursor ? cursor.split('|') : []
   const from = {
     key: parts.length === 3 ? parts[0]! : '~',
-    at: parts.length === 3 && !Number.isNaN(Date.parse(parts[1]!)) ? parts[1]! : null,
+    at: parts.length === 3 && isMoment(parts[1]!) ? parts[1]! : null,
     id: parts.length === 3 && /^[0-9a-f-]{36}$/i.test(parts[2]!) ? parts[2]! : null,
   }
   if (cursor && (!from.at || !from.id)) return c.json({ error: { code: 'invalid', message: 'Not a cursor' } }, 400)
@@ -92,7 +95,7 @@ projects.get('/projects', async (c) => {
           cursor
             ? tx`and (coalesce(sp.sort_key, '~') collate "C" > ${from.key}
              or (coalesce(sp.sort_key, '~') collate "C" = ${from.key}
-                 and (p.created_at, p.id) < (${from.at}::timestamptz, ${from.id}::uuid)))`
+                 and (p.created_at, p.id) < (${from.at}::text::timestamptz, ${from.id}::uuid)))`
             : tx``
         }
       order by coalesce(sp.sort_key, '~') collate "C", p.created_at desc, p.id desc

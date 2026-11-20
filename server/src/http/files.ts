@@ -12,7 +12,7 @@ import { FILE_COOKIE, linkFor, linkForReader, open, put, readFileCookie, remove,
 import { authenticate } from '../auth/context.js'
 import { origin as originOf } from './access.js'
 import { fits, roomFor, storageRefusal } from '../ceilings.js'
-import { pageSize } from './limits.js'
+import { isMoment, pageSize } from './limits.js'
 import { purgeAfterDays } from '../env.js'
 import {
   addComment,
@@ -109,8 +109,10 @@ const STAMP = String.raw`\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z`
 const listCursor = (pinned: string | null, updated: string, id: string) =>
   Buffer.from(`${pinned ?? '-'}|${updated}|${id}`).toString('base64url')
 function readListCursor(raw: string): { pinned: string | null; updated: string; id: string } | null {
-  const m = new RegExp(`^(-|${STAMP})\\|(${STAMP})\\|([0-9a-f-]{36})$`, 'i').exec(Buffer.from(raw, 'base64url').toString())
-  if (!m || Number.isNaN(Date.parse(m[2]!)) || (m[1] !== '-' && Number.isNaN(Date.parse(m[1]!)))) return null
+  const m = new RegExp(`^(-|${STAMP})\\|(${STAMP})\\|([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$`, 'i').exec(
+    Buffer.from(raw, 'base64url').toString(),
+  )
+  if (!m || !isMoment(m[2]!) || (m[1] !== '-' && !isMoment(m[1]!))) return null
   return { pinned: m[1] === '-' ? null : m[1]!, updated: m[2]!, id: m[3]! }
 }
 
@@ -883,8 +885,10 @@ const isId = (s: string | undefined): s is string => !!s && /^[0-9a-f-]{36}$/i.t
  */
 const binCursor = (at: string, id: string) => Buffer.from(`${at}|${id}`).toString('base64url')
 function readBinCursor(raw: string): { at: string; id: string } | null {
-  const m = /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z)\|([0-9a-f-]{36})$/i.exec(Buffer.from(raw, 'base64url').toString())
-  return m && !Number.isNaN(Date.parse(m[1]!)) ? { at: m[1]!, id: m[2]! } : null
+  const m = /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z)\|([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(
+    Buffer.from(raw, 'base64url').toString(),
+  )
+  return m && isMoment(m[1]!) ? { at: m[1]!, id: m[2]! } : null
 }
 
 /*
@@ -936,7 +940,10 @@ files.get('/projects/:projectId/files/deleted', async (c) => {
         and f.deleted_at is not null
         and f.deleted_at > now() - make_interval(days => ${days})
         ${anybodys ? tx`` : tx`and f.deleted_by = ${ctx.actorId}`}
-        ${cursor ? tx`and (f.deleted_at, f.id) < (${cursor.at}::timestamptz, ${cursor.id}::uuid)` : tx``}
+        /* As text first: as a timestamp the driver sent it through a Date,
+           to the millisecond, and the rows of one delete past the page's end
+           were skipped. */
+        ${cursor ? tx`and (f.deleted_at, f.id) < (${cursor.at}::text::timestamptz, ${cursor.id}::uuid)` : tx``}
       order by f.deleted_at desc, f.id desc
       limit ${limit}`
   })

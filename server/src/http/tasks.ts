@@ -444,7 +444,9 @@ tasks.get('/projects/:projectId/tasks', async (c) => {
    *
    * Ordered by creation it is `created_at|id`, the time as the database
    * wrote it, to the microsecond: a time read back through a JavaScript
-   * date loses three digits, and the page boundary with them.
+   * date loses three digits, and the page boundary with them. Sent back as
+   * text and cast in the query, for the same reason: cast as a timestamp,
+   * the driver put it through a Date.
    */
   /*
    * Open work first: in the order the rows were put in, every task not done
@@ -501,8 +503,8 @@ tasks.get('/projects/:projectId/tasks', async (c) => {
               : !created
                 ? tx`and ((t.completed_at is not null), t.sort_key, t.id) > (${at.done}, ${at.key}, ${at.id}::uuid)`
                 : oldest
-                  ? tx`and (t.created_at, t.id) > (${at.key}::timestamptz, ${at.id}::uuid)`
-                  : tx`and (t.created_at, t.id) < (${at.key}::timestamptz, ${at.id}::uuid)`
+                  ? tx`and (t.created_at, t.id) > (${at.key}::text::timestamptz, ${at.id}::uuid)`
+                  : tx`and (t.created_at, t.id) < (${at.key}::text::timestamptz, ${at.id}::uuid)`
           }
         ${order()}
         limit ${limit}
