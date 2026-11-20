@@ -11,7 +11,7 @@
  * number: the commit (`COMMIT`) says how far past it a build is. `0.0.0`
  * means nothing has been released yet.
  */
-export const VERSION = '0.0.0'
+export const VERSION = '1.0.0'
 
 /*
  * The commit this build came from, seven characters, or `unknown`. Railway

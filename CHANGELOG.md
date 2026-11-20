@@ -16,6 +16,8 @@ before the update: the app takes one before it migrates, and
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-20
+
 The first public release of Tuff for your own server.
 
 ### Added
@@ -68,3 +70,6 @@ The first public release of Tuff for your own server.
   worker asks GitHub once a day; `UPDATE_CHECK=off` turns that off.
 - A release with a `### Security` section in this changelog is a security
   release.
+
+[Unreleased]: https://github.com/usetuff/tuff/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/usetuff/tuff/releases/tag/v1.0.0
