@@ -725,7 +725,10 @@ class Room {
   private unversioned = false
   private firstPending: number | null = null
   private bumpedAt = 0
-  private editors = new Map<string, AuthContext>()
+  /** Updates taken, counted: which edits a write began after, and so may not have read. */
+  private edits = 0
+  /** Who edited since the last version, each with the count at their latest edit. */
+  private editors = new Map<string, { ctx: AuthContext; at: number }>()
   private writing: Promise<void> = Promise.resolve()
   closed = false
 
@@ -989,7 +992,10 @@ class Room {
   private changed(ctx: AuthContext): void {
     this.pending = true
     this.unversioned = true
-    this.editors.set(ctx.actorId, ctx)
+    this.edits++
+    /* Taken out and put back, so the latest editor is last. */
+    this.editors.delete(ctx.actorId)
+    this.editors.set(ctx.actorId, { ctx, at: this.edits })
     const now = Date.now()
     this.firstPending ??= now
     const wait = Math.max(0, Math.min(SETTLE_AFTER, this.firstPending + SETTLE_AT_MOST - now))
@@ -1022,17 +1028,32 @@ class Room {
       this.firstPending = null
       this.savedAt = Date.now()
       const bump = this.unversioned && (leaving || Date.now() - this.bumpedAt >= VERSION_EVERY)
+      /*
+       * What this write has surely read: every update taken before it
+       * began. One taken while it is under way may be in the rows it
+       * reads or not, and is the next write's — so once the version moves
+       * only the editors up to here are let go, and the state is called
+       * versioned only if nothing came since. Clearing them all dropped
+       * whoever typed during a slow write: the next write found nobody to
+       * write as, and the body and its fold waited for somebody else's
+       * edit.
+       */
+      const upTo = this.edits
       /* As somebody who edited, the latest first: one taken off the
          project since cannot write the row, and the next can. */
       const who = [...this.editors.values()].reverse()
-      for (const ctx of who) {
+      for (const { ctx } of who) {
         try {
           const done = await writeBody(ctx, this.fileId, bump, [...this.editors.keys()])
           if (done && bump) {
             this.bumpedAt = Date.now()
-            this.unversioned = false
-            const edited = [...this.editors.values()]
-            this.editors.clear()
+            if (this.edits === upTo) this.unversioned = false
+            const edited: AuthContext[] = []
+            for (const [actorId, e] of this.editors) {
+              if (e.at > upTo) continue
+              edited.push(e.ctx)
+              this.editors.delete(actorId)
+            }
             for (const e of edited) {
               await as(e, (tx) =>
                 record(tx, e, 'file.update', { projectId: done.projectId, objectType: 'file', objectId: this.fileId }),

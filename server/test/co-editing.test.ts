@@ -70,9 +70,19 @@ function socket() {
   return { ws, said, closed }
 }
 
-/** A page: the server's state, and the update that adds a line to it. */
+/**
+ * A page: the server's state, and the update that adds a line to it.
+ *
+ * Its client id is drawn from the ids that take five bytes to write. Yjs
+ * draws any 32-bit number, and one in sixteen is written in four bytes or
+ * fewer, so two pages adding the same line to the same state sent updates
+ * a few bytes apart — and a test that filled a document to within one
+ * line of its cap found, once in a dozen runs, a keystroke short enough
+ * to fit.
+ */
 function page(sync: { u?: string }) {
   const d = new Y.Doc()
+  d.clientID = 2 ** 28 + Math.floor(Math.random() * (2 ** 32 - 2 ** 28))
   Y.applyUpdate(d, new Uint8Array(Buffer.from(sync.u ?? '', 'base64')))
   return {
     doc: d,
@@ -447,12 +457,14 @@ const bytesOf = async (fileId: string) =>
 /** Letters nobody would type twice, so nothing about them is small. */
 const noise = (n: number) => Array.from({ length: n }, (_, i) => String.fromCharCode(97 + ((i * 7919) % 26))).join('')
 
-/** A document filled to within a few bytes of its cap: ever smaller pieces until none fits.
+/** A document filled until not even a line of one letter fits: ever smaller pieces until none does.
     A piece taken grows the room's count of its state (`size`), which is
     read here rather than the stored rows: two queries a piece were most of
-    what filling cost. What was kept is asserted by the tests themselves. */
+    what filling cost. What was kept is asserted by the tests themselves.
+    It stopped at ten letters once, and the room that left — up to fifty
+    bytes — took a keystroke now and then, as it should. */
 async function fill(seat: Seat, a: { said: { t: string; u?: string }[] }): Promise<void> {
-  for (const n of [1_000_000, 100_000, 10_000, 1000, 100, 10]) {
+  for (const n of [1_000_000, 100_000, 10_000, 1000, 100, 10, 1]) {
     for (;;) {
       const was = seat.room.size
       await send(seat, page(a.said.filter((m) => m.t === 'sync').at(-1)!).add(noise(n)))
@@ -548,6 +560,67 @@ test('a document’s state stops at its cap, takes deletions past it, and folds 
   console.log(`  emptied and folded: ${(before / 1e6).toFixed(2)} MB → ${folded} bytes`)
   assert.ok(folded < 50_000, `folded to ${folded}`)
   await leave(seat)
+})
+
+test('an edit taken while a write that moves the version is under way is written by the next one', async () => {
+  const { ctx: owner, workspaceId, token } = await makeOwner()
+  const p = await makeProject(owner, workspaceId, 'Acme')
+  const id = await aDocument(token, p, 'The brief.')
+  const before = (await stored(id)).version
+  const a = socket()
+  const seat = await join(owner, id, a.ws)
+  assert.ok(seat)
+  const me = page(a.said[0]!)
+  await send(seat, me.add('Before the write.'))
+  /*
+   * The write is held after it has read the rows and before it writes the
+   * body — the test holds the file's row, as a slow write of a large
+   * document holds itself — and an edit lands meanwhile. Under load the
+   * timer's write of a five-megabyte document did this, and the deletion
+   * that followed was never written or folded: the write let its editor
+   * go, and the next found nobody to write as. The row is held
+   * for no-key update, so the new update's own insert, which only needs
+   * the file to exist, is not held with it.
+   */
+  let release!: () => void
+  const held = new Promise<void>((r) => {
+    release = r
+  })
+  let blocked!: () => void
+  const waiting = new Promise<void>((r) => {
+    blocked = r
+  })
+  let first: Promise<void> | null = null
+  const holding = asTableOwner().begin(async (tx) => {
+    await tx`select 1 from file where id = ${id} for no key update`
+    first = seat.room.save(false)
+    // Until the write is waiting on this transaction: it has read the rows by then.
+    for (;;) {
+      const [w] = await tx<{ n: number }[]>`
+        select count(*)::int as n from pg_stat_activity where pg_backend_pid() = any (pg_blocking_pids(pid))`
+      if (w!.n > 0) break
+      await pause(10)
+    }
+    blocked()
+    await held
+  })
+  await waiting
+  await send(seat, me.add('During the write.'))
+  release()
+  await holding
+  await first
+  let now = await stored(id)
+  assert.equal(now.version, before + 1, 'the first write moved the version')
+  assert.deepEqual(words(now.body), ['The brief.', 'Before the write.'], 'and wrote what it had read')
+  // The next write is somebody's, and takes what came during the first.
+  await seat.room.save(false)
+  now = await stored(id)
+  assert.deepEqual(words(now.body), ['The brief.', 'Before the write.', 'During the write.'])
+  const [rows] = await asTableOwner()<{ n: number }[]>`select count(*)::int as n from file_yjs where file_id = ${id}`
+  assert.equal(rows?.n, 1, 'folded')
+  // And it is still a change since the version: the last one out moves it again.
+  await leave(seat)
+  assert.equal((await stored(id)).version, before + 2)
 })
 
 test('a full document refuses typing without measuring itself each time', async () => {
