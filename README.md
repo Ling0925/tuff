@@ -71,6 +71,20 @@ back to any earlier version.
 <br>
 
 <picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/readme/github-dark.webp">
+  <img alt="GitHub: a task with its issue and two pull requests, one merged and one open with a review requested and checks running." src="docs/readme/github-light.webp">
+</picture>
+
+### GitHub
+
+Link a repository to a project. Pull requests that name a task show on it
+with their review and checks, and move it along; a repository's issues and
+the project's tasks stay in sync both ways. It runs on a GitHub App of your
+own ([Self-hosting](docs/self-hosting.md)).
+
+<br>
+
+<picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/readme/agents-dark.webp">
   <img alt="AI agents: an agent asks on a task how the favicon should look, with three choices, one recommended. Notifications show the same question under Needs you." src="docs/readme/agents-light.webp">
 </picture>
@@ -131,6 +145,8 @@ account as the server's owner. No commands after that.
 - **Notifications** in the app, by email, and as push in the browser.
 - **Sign-in** by email with a second factor, or with Google, Apple or
   GitHub using your own keys.
+- **GitHub**: pull requests on their tasks, and issues kept in sync with
+  tasks both ways.
 - **Import** from Asana, Jira, Linear, Slack and GitHub Issues.
 - **Fast with a lot of data**: measured with 10,000 tasks in a project and
   a million messages in a channel.
