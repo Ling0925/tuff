@@ -13813,7 +13813,9 @@ test('the owner finds delete at the end of the settings, and it waits for the na
   await expect(open).toBeEnabled({ timeout: 15_000 })
   await open.click()
   const asked = page.getByTestId('delete-workspace-dialog')
-  await expect(asked).toContainText('30 days')
+  /* How long it is kept is the service's promise; on a server of one's own
+     the owner sets it, and the window says to ask them (`deleteBackOwn`). */
+  await expect(asked).toContainText('bring it back')
   await expect(asked).toContainText('project')
   const go = asked.getByTestId('delete-workspace-go')
   await expect(go).toBeDisabled()
