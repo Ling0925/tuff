@@ -21,7 +21,7 @@
 <p align="center">
   <a href="#quick-start"><img alt="Self-host with Docker" src="docs/readme/button-docker.png" height="44"></a>&nbsp;
   <a href="https://usetuff.com"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/readme/button-try-dark.png"><img alt="Try it on usetuff.com" src="docs/readme/button-try-light.png" height="44"></picture></a>
-  <!-- Deploy on Railway: https://railway.com/deploy/<template>?referralCode=ncZYV6 — once the template exists -->
+  <a href="https://railway.com/deploy/tuff?referralCode=ncZYV6"><img alt="Deploy on Railway" src="https://railway.com/button.svg" height="44"></a>
 </p>
 
 <p align="center">
@@ -160,6 +160,17 @@ Run it again to start the same install with your data;
 `scripts/setup.sh --try --fresh` deletes it and starts over. It keeps to
 itself (`.env.try` and Docker volumes of its own) and answers only on this
 computer, so it isn't a way to run Tuff for a team.
+
+### On Railway
+
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/tuff?referralCode=ncZYV6)
+
+One click makes the app, the worker, Postgres and a bucket for files on
+your Railway account, with every secret generated, and gives Tuff a
+`*.up.railway.app` address. When the first deploy finishes, open the
+**tuff** service's deploy log and find *Nobody owns this server yet*: its
+link is your setup link. Turn on backups for the Postgres service on
+Railway. Tuff takes none of its own there.
 
 ### On a server
 

@@ -49,6 +49,28 @@ be set up on the setup screen as on a server; signing in with Google, Apple
 or GitHub needs a server's address and HTTPS. To run Tuff for a team, set
 up a server as below.
 
+## On Railway
+
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/tuff?referralCode=ncZYV6)
+
+The template makes four things on your Railway account: **tuff**, the app,
+on a `*.up.railway.app` address; **worker**, from the same image; Railway's
+**Postgres**; and a **Bucket** for uploaded files. Each secret is generated
+for your deploy, and nothing is asked. The first deploy builds the image
+from this repository, which takes about three minutes.
+
+1. When the deploy is green, open the **tuff** service → **Deploy Logs** and
+   find `Nobody owns this server yet. Open this link …`. That link is your
+   setup link, and works once (see [The first opening](#the-first-opening)).
+2. Set up email there, or skip it and do it later in Server settings.
+3. Turn on backups for the **Postgres** service in Railway. Tuff takes no
+   dumps of its own there (see [Backups](#backups)).
+
+A domain of your own goes on the **tuff** service (Settings → Networking).
+Then set `APP_URL` on it to `https://` and that domain, so links and email
+use it. Keep the app at one replica: realtime updates expect a single
+container.
+
 ## What runs
 
 `docker compose up -d` starts four containers from `docker-compose.prod.yml`:
