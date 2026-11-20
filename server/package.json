@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "start": "tsx src/main.ts",
-    "migrate": "tsx src/db/migrate.ts",
+    "migrate": "tsx src/db/run.ts",
     "seed": "tsx scripts/seed.ts",
     "typecheck": "tsc --noEmit",
     "pretest": "tsx scripts/sweep.ts",

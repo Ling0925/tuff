@@ -7,7 +7,6 @@
  * more dangerous than keeping them in SQL you can read whole.
  */
 import { readdirSync, readFileSync } from 'node:fs'
-import { pathToFileURL } from 'node:url'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import postgres from 'postgres'
@@ -235,21 +234,4 @@ async function letTheAppIn(sql: postgres.Sql, url = process.env.DATABASE_URL_APP
   await sql`select format('alter role %I login password %L', ${role}::text, ${secret}::text)`.then((rows) =>
     sql.unsafe((rows[0] as { format: string }).format),
   )
-}
-
-// The project path contains a space, so comparing strings against file:// does
-// not work: pathToFileURL encodes it as %20, a template string does not.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const url = process.env.DATABASE_URL ?? 'postgres://tracker:tracker@localhost:5433/tracker'
-  /* Imported here and not above: the worker and the server read this file
-     for `newestMigration`, and need none of what the edition mounts. */
-  const { edition } = await import('../edition.js')
-  /* On your own server, a backup first when something is pending and
-     `BACKUP_DIR` is set, as the image sets it — `backup.ts`. */
-  const { BackupFailed, migrateWithBackup } = await import('../backup.js')
-  const { applied } = await migrateWithBackup(url, edition).catch((e: unknown) => {
-    if (e instanceof BackupFailed) process.exit(1)
-    throw e
-  })
-  console.log(applied.length ? `applied: ${applied.join(', ')}` : 'no migrations to apply')
 }
