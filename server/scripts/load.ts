@@ -444,6 +444,18 @@ const [held] = await owner<{ id: string }[]>`
   where x.workspace_id = ${ws} and d.audience = 'project' and x.author_id <> ${me} limit 1`
 const heldPicture = held?.id ?? '00000000-0000-0000-0000-000000000000'
 
+/* A thousand pictures down the big project's Images — the cursor the list
+   would have handed back there. */
+const [picturesDeep] = await owner<{ pinned: string | null; updated: string; id: string }[]>`
+  select to_char(pinned_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as pinned,
+         to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated, id
+  from file
+  where project_id = ${big} and deleted_at is null and url is null and storage_key is not null and content_type ^@ 'image/'
+  order by pinned_at desc nulls last, updated_at desc, id desc offset 1000 limit 1`
+const picturesCursor = encodeURIComponent(
+  Buffer.from(`${picturesDeep!.pinned ?? '-'}|${picturesDeep!.updated}|${picturesDeep!.id}`).toString('base64url'),
+)
+
 const budget: [string, number, () => Promise<unknown>][] = [
   ['project screen: its first page of tasks', 200, asked(`/projects/${big}/tasks`)],
   ['project screen: its lists', 200, asked(`/projects/${big}/lists`)],
@@ -477,10 +489,16 @@ const budget: [string, number, () => Promise<unknown>][] = [
   ['the notifications panel, unread only', 200, asked('/inbox?unread=1')],
   ['an announcement to a hundred people', 200, announced],
   ['a project’s Activity', 200, asked(`/activity?project=${big}`)],
-  /* Three thousand rows, two thirds of the documents kept and every
-     picture asking about its document. */
-  ['a project’s Docs: a thousand documents and their pictures', 200, asked(`/projects/${big}/files`)],
-  ['a picture held by a document: its link', 200, asked(`/files/${heldPicture}/url`)],
+  /* Four thousand rows, two thirds of the documents kept and every
+     picture asking about its document — read
+     a page at a time, each kind on its own: */
+  ['a project’s Files: the first page of documents', 200, asked(`/projects/${big}/files?limit=100&kind=docs`)],
+  ['a project’s Files: the first page of pictures, signed', 200, asked(`/projects/${big}/files?limit=100&kind=images`)],
+  ['a project’s Files: pictures, a thousand down', 200, asked(`/projects/${big}/files?limit=100&kind=images&cursor=${picturesCursor}`)],
+  ['a project’s Files: my documents', 200, asked(`/projects/${big}/files?limit=100&kind=docs&whose=mine`)],
+  ['a project’s Files: others’ links, none there', 200, asked(`/projects/${big}/files?limit=100&kind=links&whose=others`)],
+  ['a project’s Files: words found among them', 200, asked(`/projects/${big}/files?limit=100&kind=docs&q=${encodeURIComponent('Document 42')}`)],
+  ['a project’s Files: read again five hundred deep', 200, asked(`/projects/${big}/files?limit=500&kind=images`)],  ['a picture held by a document: its link', 200, asked(`/files/${heldPicture}/url`)],
   ['search: a held picture’s name across the workspace', 200, asked(`/search?q=${encodeURIComponent('Held 1')}&type=file`)],
   ['a project’s Activity of documents, files only', 200, asked(`/activity?project=${big}&in=files`)],
   ['My tasks: given to me', 200, asked('/my/tasks?tab=assigned')],

@@ -47,8 +47,9 @@ export type DocRow = {
   /** What a written document wears — `docs/specs/docs.md`, "A document's mark". */
   mark_icon?: string | null
   mark_tint?: number | null
-  /** A pinned document's first lines, for its card's page. */
-  preview?: { lines: { h: number; t: string }[]; picture: string | null }
+  /** A pinned document's first lines, for its card's page, and its first
+      picture's copy for showing, signed for this reader. */
+  preview?: { lines: { h: number; t: string }[]; picture: string | null; picture_url?: string | null }
   /* Where it was first put — `docs/specs/docs.md`. */
   origin_type?: 'message' | 'task' | 'post' | 'file' | null
   origin_id?: string | null
@@ -127,6 +128,9 @@ export function byRecent(a: DocRow, b: DocRow): number {
   /* A row still on its way has no date yet and is the newest there is:
      sorted last, it stood at the foot and jumped to the head under the
      pointer when the server answered. */
+  /* Rows of one millisecond tie here and keep the order the server paged
+     them in, the sort being stable — the server's is to the microsecond,
+     and then the id. */
   return (b.updated_at ?? b.created_at ?? '\uffff').localeCompare(a.updated_at ?? a.created_at ?? '\uffff')
 }
 

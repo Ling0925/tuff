@@ -2323,10 +2323,17 @@ public enum API {
     public struct Preview: Codable, Sendable {
         public let lines: [Line]
         public let picture: String?
+        public let pictureURL: String?
 
-        public init(lines: [Line], picture: String?) {
+        public enum CodingKeys: String, CodingKey {
+            case lines, picture
+            case pictureURL = "picture_url"
+        }
+
+        public init(lines: [Line], picture: String?, pictureURL: String?) {
             self.lines = lines
             self.picture = picture
+            self.pictureURL = pictureURL
         }
     }
 
@@ -2386,9 +2393,18 @@ public enum API {
     // MARK: - FilesInProject
     public struct FilesInProject: Codable, Sendable {
         public let files: [FileInList]
+        public let kinds: [String]?
+        public let nextCursor: String?
 
-        public init(files: [FileInList]) {
+        public enum CodingKeys: String, CodingKey {
+            case files, kinds
+            case nextCursor = "next_cursor"
+        }
+
+        public init(files: [FileInList], kinds: [String]?, nextCursor: String?) {
             self.files = files
+            self.kinds = kinds
+            self.nextCursor = nextCursor
         }
     }
 

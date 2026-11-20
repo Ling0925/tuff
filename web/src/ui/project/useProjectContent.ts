@@ -4,16 +4,54 @@ import { MAX_FILE_BYTES } from '@tracker/shared-schema'
 import { api, TAB } from '../../data/api.js'
 import { taskChanged } from '../TaskCard.jsx'
 import { fileGone } from '../FileDetail.jsx'
-import { type DocsFilter, type DocsWhose, type Going, keepDocsView, kindOf, linkInfo, placeOf, readDocsView } from '../Docs.jsx'
+import { type DocsFilter, type DocsWhose, type Going, byRecent, keepDocsView, kindOf, linkInfo, placeOf, readDocsView } from '../Docs.jsx'
 import { upload } from '../../data/upload.js'
 import { PersonDoorsContext } from '../PersonCard.jsx'
 import { keepOpen } from '../../data/socket.js'
 import { holdPictures } from '../../data/warm.js'
-import { remember } from '../../data/memory.js'
+import { recall, remember } from '../../data/memory.js'
 import { readTemplates } from '../../data/docTemplates.js'
 import { anyWorking, readWorking } from '../../data/working.js'
 import { type Post, keep, type FileRow, type ProjectProps } from '../Project.jsx'
 import { type ProjectFrame } from './useProjectFrame.js'
+
+/** A page of a project's Files. */
+type FilesPage = { files: FileRow[]; next_cursor?: string | null; kinds?: string[] }
+/** One of Files' lists, a kind and whose: the rows read so far, and the cursor for the rest. */
+type FilesView = { rows: FileRow[]; next: string | null }
+/** Every list a project's Files has read, by `kind:whose`, and which kinds hold anything at all. */
+type FilesHeld = { views: Record<string, FilesView>; kinds: DocsFilter[] | null }
+const KINDS: readonly DocsFilter[] = ['docs', 'images', 'uploads', 'links']
+const WHOSE_ASKED: Record<DocsWhose, string> = { recent: '', mine: '&whose=mine', shared: '&whose=others' }
+/** A page, and the deepest a list is read again in one answer. */
+const PAGE = 100
+const DEEPEST = 500
+const filesAt = (projectId: string, kind: DocsFilter, whose: DocsWhose, rest: string) =>
+  `/projects/${projectId}/files?kind=${kind}${WHOSE_ASKED[whose]}${rest}`
+const viewOf = (kind: DocsFilter, whose: DocsWhose) => `${kind}:${whose}`
+/* What memory held, if it is this shape: a build before pages kept the
+   whole list as an array under another key, and that is not read. */
+function heldFrom(had: unknown): FilesHeld {
+  const h = had as FilesHeld | null
+  return h && typeof h === 'object' && h.views && typeof h.views === 'object' ? h : { views: {}, kinds: null }
+}
+const kindsOf = (said: string[] | undefined) => (said ? KINDS.filter((k) => said.includes(k)) : null)
+/* Rows read again over rows held. Up to the depth asked, the answer is the
+   list; past it, the rows held after the answer's last are kept after it,
+   so a list scrolled further than one answer reads does not shrink. */
+function readAgain(had: FilesView | undefined, got: FilesPage, depth: number): FilesView {
+  const fresh = { rows: got.files, next: got.next_cursor ?? null }
+  const last = got.files[got.files.length - 1]
+  if (!had || !last || !got.next_cursor || had.rows.length <= depth) return fresh
+  const answered = new Set(got.files.map((f) => f.id))
+  const beyond = had.rows.filter((r) => !answered.has(r.id) && !r.id.startsWith('pending:') && byRecent(r, last) >= 0)
+  return beyond.length ? { rows: [...got.files, ...beyond], next: had.next } : fresh
+}
+/* A page added at the foot, nothing in it twice. */
+function addPage(had: FilesView, got: FilesPage): FilesView {
+  const there = new Set(had.rows.map((f) => f.id))
+  return { rows: [...had.rows, ...got.files.filter((f) => !there.has(f.id))], next: got.next_cursor ?? null }
+}
 
 /**
  * What a project holds that its tabs read here: its announcements and
@@ -28,7 +66,6 @@ export function useProjectContent({
   resolving,
   onNavigate,
   setPosts,
-  setFiles,
   folder,
   beat,
   setBeat,
@@ -36,7 +73,77 @@ export function useProjectContent({
   asked,
   kind,
 }: Pick<ProjectProps, 'project' | 'canWrite' | 'revision' | 'objectId' | 'meId' | 'kind'> &
-  Pick<ProjectFrame, 'resolving' | 'onNavigate' | 'setPosts' | 'setFiles' | 'folder' | 'beat' | 'setBeat' | 'shown' | 'asked'>) {
+  Pick<ProjectFrame, 'resolving' | 'onNavigate' | 'setPosts' | 'folder' | 'beat' | 'setBeat' | 'shown' | 'asked'>) {
+  /*
+   * Which kind is open is the address's — `/files/images` — and the kind
+   * last chosen on this machine only fills in a bare `/files`, settled with
+   * `replace` so back does not walk through it. Whose stays a remembered
+   * view of the list. Recently Deleted is a place of its own,
+   * `/files/deleted`, and never remembered: Files opening on the bin would
+   * surprise whoever left it there. `docs/specs/docs.md`, "Four kinds and
+   * whose"; the deleting docs spec.
+   */
+  const [docsView, setDocsView] = useState(() => readDocsView(meId))
+  const place = placeOf(kind)
+  const inBin = place === 'deleted'
+  const docsFilter: DocsFilter = place && place !== 'deleted' ? place : docsView.kind
+  const docsWhose = docsView.whose
+  const setDocsFilter = (next: DocsFilter) => onNavigate({ kind: next })
+  const setDocsWhose = (whose: DocsWhose) => {
+    setDocsView((v) => ({ ...v, whose }))
+    keepDocsView(meId, { whose })
+    /* A choice of whose from the bin's menu leaves the bin for the kind
+       last open, as a kind's tab does. */
+    if (inBin) onNavigate({ kind: docsView.kind })
+  }
+  const openBin = () => onNavigate({ kind: 'deleted' })
+  /*
+   * Files' lists. One per kind and whose, read
+   * a page at a time and kept per project, so a tab opens on what it held
+   * last and the server's answer replaces it in place.
+   */
+  const heldKey = `files-pages:${project.id}`
+  const [held, setHeld] = useState<FilesHeld>(() => heldFrom(recall(heldKey)))
+  const heldNow = useRef(held)
+  heldNow.current = held
+  const keepHeld = useCallback(
+    (change: (h: FilesHeld) => FilesHeld) =>
+      setHeld((h) => {
+        const next = change(h)
+        return next === h ? h : remember(heldKey, next)
+      }),
+    [heldKey],
+  )
+  const viewKey = viewOf(docsFilter, docsWhose)
+  const view = held.views[viewKey]
+  /* A list not read yet draws what another list of its kind holds — the
+     screen narrows it to this one on the device — until its own answer
+     comes: rows that are true, never an empty claim. */
+  const standIn = view
+    ? null
+    : (['recent', 'mine', 'shared'] as const).map((w) => held.views[viewOf(docsFilter, w)]).find((v) => v !== undefined)
+  /* Rows drawn before the server has them — a link just added — in no
+     list until it is read again with them, and on top of whichever is open:
+     the screen's narrowing puts each under its own kind. */
+  const [pending, setPending] = useState<FileRow[]>([])
+  const listRows = view?.rows ?? standIn?.rows ?? null
+  const files = pending.length ? [...pending, ...(listRows ?? [])] : listRows
+  /**
+   * A change to rows already held, made to every list that holds them — a
+   * row deleted, pinned, or drawn before the server has it. Each list's own
+   * narrowing is the screen's, so a row put in all of them shows only where
+   * it belongs.
+   */
+  const setFiles = useCallback(
+    (change: (had: FileRow[] | null) => FileRow[] | null) =>
+      keepHeld((h) => {
+        const views: Record<string, FilesView> = {}
+        for (const [k, v] of Object.entries(h.views)) views[k] = { ...v, rows: change(v.rows) ?? [] }
+        return { ...h, views }
+      }),
+    [keepHeld],
+  )
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: revision and beat are triggers: a new load is a new read, for the effects that hold it
   const load = useCallback(async () => {
     const turn = ++asked.current
@@ -46,10 +153,18 @@ export function useProjectContent({
       setPosts(remember(`posts:${project.id}`, keep(got, project.id, 'post')))
     }
     if (shown === 'files') {
-      const got = (await api<{ files: FileRow[] }>(`/projects/${project.id}/files`)).files
+      /* As deep as the list is held — a hundred at least, five hundred at
+         most — so a list somebody scrolled does not shrink under them. */
+      const key = viewKey
+      const depth = Math.min(DEEPEST, Math.max(PAGE, heldNow.current.views[key]?.rows.length ?? 0))
+      const got = await api<FilesPage>(filesAt(project.id, docsFilter, docsWhose, `&limit=${depth}`))
       if (turn !== asked.current) return
-      setFiles(remember(`files:${project.id}`, keep(got, project.id, 'file')))
-      holdPictures(got.map((f) => f.thumb_url))
+      keep(got.files, project.id, 'file')
+      keepHeld((h) => ({
+        views: { ...h.views, [key]: readAgain(h.views[key], got, depth) },
+        kinds: kindsOf(got.kinds) ?? h.kinds,
+      }))
+      holdPictures(got.files.map((f) => f.thumb_url))
       /* What "New document" offers, so its menu opens with it. */
       void readTemplates().catch(() => {})
     }
@@ -57,8 +172,106 @@ export function useProjectContent({
        through it, and the list it goes back to was waiting for the socket
        to bring the same news — which on a slow runner arrived after the
        test had looked, and showed the deleted announcement still there. */
-  }, [project.id, shown, revision, beat, asked, setFiles, setPosts])
+  }, [project.id, shown, revision, beat, asked, setPosts, viewKey, keepHeld])
   useEffect(() => void load(), [load])
+  /* The list open now, read again — for a write that awaited the server
+     while the screen turned to the kind it lands in. */
+  const loadNow = useRef(load)
+  loadNow.current = load
+
+  /** A list's first page, kept, unless it is held already. */
+  const readFirst = useCallback(
+    async (kind: DocsFilter, whose: DocsWhose): Promise<FilesPage | null> => {
+      const key = viewOf(kind, whose)
+      if (heldNow.current.views[key]) return null
+      const got = await api<FilesPage>(filesAt(project.id, kind, whose, `&limit=${PAGE}`))
+      keep(got.files, project.id, 'file')
+      keepHeld((h) =>
+        h.views[key]
+          ? h
+          : { views: { ...h.views, [key]: { rows: got.files, next: got.next_cursor ?? null } }, kinds: kindsOf(got.kinds) ?? h.kinds },
+      )
+      return got
+    },
+    [project.id, keepHeld],
+  )
+  /* Once the open list is in, the other three kinds' first pages, so a tab
+     pressed is drawn at once — four pages of a hundred, where the whole
+     project used to be read for the same purpose. */
+  const viewHeld = Boolean(view)
+  useEffect(() => {
+    if (shown !== 'files' || !viewHeld) return
+    const soon = setTimeout(() => {
+      for (const k of KINDS) if (k !== docsFilter) void readFirst(k, docsWhose).catch(() => {})
+    }, 250)
+    return () => clearTimeout(soon)
+  }, [shown, viewHeld, docsFilter, docsWhose, readFirst])
+
+  /*
+   * Find — `docs/specs/find.md`. The words narrow what is held at once, on
+   * the screen; when the list has more pages than it holds, they go to the
+   * server too, a beat after the last key, and its matches join the ones on
+   * the screen. With every row held nothing is asked.
+   */
+  const [docsWords, setDocsWords] = useState('')
+  const [found, setFound] = useState<{ key: string; words: string; rows: FileRow[]; next: string | null } | null>(null)
+  const words = docsWords.trim()
+  const whole = Boolean(view && !view.next)
+  useEffect(() => {
+    if (!words || shown !== 'files' || whole) return
+    let alive = true
+    const soon = setTimeout(() => {
+      void api<FilesPage>(filesAt(project.id, docsFilter, docsWhose, `&limit=${PAGE}&q=${encodeURIComponent(words)}`))
+        .then((got) => {
+          if (!alive) return
+          keep(got.files, project.id, 'file')
+          setFound({ key: viewKey, words, rows: got.files, next: got.next_cursor ?? null })
+        })
+        .catch(() => {})
+    }, 150)
+    return () => {
+      alive = false
+      clearTimeout(soon)
+    }
+  }, [words, shown, whole, project.id, docsFilter, docsWhose, viewKey])
+  const foundHere = found && found.key === viewKey && found.words === words ? found : null
+  /** Whether the words have had their whole answer: every row is held, or the server's has come. */
+  const findSettled = !words || whole || foundHere !== null
+
+  /*
+   * Scrolling reads further — the open list's next page, or the found
+   * rows' when words are in the field. Asked once at a time; a page that
+   * comes after the list moved on is let go.
+   */
+  const reading = useRef(false)
+  const more = words && !whole ? (foundHere?.next ?? null) : (view?.next ?? null)
+  const readMore = useCallback(async () => {
+    if (reading.current || !more) return
+    reading.current = true
+    try {
+      const key = viewKey
+      if (words && !whole) {
+        const got = await api<FilesPage>(
+          filesAt(project.id, docsFilter, docsWhose, `&limit=${PAGE}&q=${encodeURIComponent(words)}&cursor=${encodeURIComponent(more)}`),
+        )
+        keep(got.files, project.id, 'file')
+        setFound((f) =>
+          f && f.key === key && f.words === words && f.next === more ? { ...f, ...addPage({ rows: f.rows, next: f.next }, got) } : f,
+        )
+        return
+      }
+      const got = await api<FilesPage>(filesAt(project.id, docsFilter, docsWhose, `&limit=${PAGE}&cursor=${encodeURIComponent(more)}`))
+      keep(got.files, project.id, 'file')
+      keepHeld((h) => {
+        const had = h.views[key]
+        return had && had.next === more ? { ...h, views: { ...h.views, [key]: addPage(had, got) } } : h
+      })
+    } catch {
+      // Asked again when the foot comes into view again.
+    } finally {
+      reading.current = false
+    }
+  }, [more, viewKey, words, whole, project.id, docsFilter, docsWhose, keepHeld])
 
   /*
    * The other tools, fetched when the project opens rather than when they
@@ -104,13 +317,12 @@ export function useProjectContent({
         )
       }
       if (project.tools.includes('files') && shown !== 'files') {
+        /* The list Files opens on: the kind and whose last chosen here. */
         jobs.push(
-          api<{ files: FileRow[] }>(`/projects/${project.id}/files`)
+          readFirst(docsView.kind, docsView.whose)
             .then((r) => {
-              if (!alive) return
-              setFiles(remember(`files:${project.id}`, keep(r.files, project.id, 'file')))
-              /* Its pictures decoded before Docs is opened — `holdPictures`. */
-              holdPictures(r.files.map((f) => f.thumb_url))
+              /* Its pictures decoded before Files is opened — `holdPictures`. */
+              if (alive && r) holdPictures(r.files.map((f) => f.thumb_url))
             })
             .catch(() => {}),
         )
@@ -142,7 +354,7 @@ export function useProjectContent({
     }
     // Once per project. Not on every tab change: that is the thing being
     // avoided, not a reason to ask again.
-  }, [project.id, setPosts, setFiles])
+  }, [project.id, setPosts])
 
   /*
    * Somebody else's change arrives without a reload.
@@ -189,7 +401,13 @@ export function useProjectContent({
         if (e.payload?.object_type === 'task' && e.payload.object_id) taskChanged(e.payload.object_id)
         /* A document deleted from another window is said gone where it is
            open — this tab's own delete has already left it. */
-        if (e.kind === 'file.delete' && e.payload?.object_id) fileGone(e.payload.object_id)
+        if (e.kind === 'file.delete' && e.payload?.object_id) {
+          const gone = e.payload.object_id
+          fileGone(gone)
+          /* And every list here, the rows past the first page too, which
+             reading the list again does not reach. */
+          setFiles((had) => had && had.filter((f) => f.id !== gone))
+        }
         /*
          * The echo is this tab's, not this person's.
          *
@@ -249,18 +467,19 @@ export function useProjectContent({
       if (statusSoon) clearTimeout(statusSoon)
       socket.stop()
     }
-  }, [project.id, load, meId, setBeat])
+  }, [project.id, load, meId, setBeat, setFiles])
 
   const pendingFile = (name: string, kind: FileRow['kind'], request: Promise<{ id: string } | null>, url: string | null = null) => {
     const temp = `pending:${Date.now()}`
-    setFiles((had) => [
+    setPending((had) => [
       { id: temp, name, kind, url, folder_id: folder, is_document: kind === 'document', author_id: meId, author_name: '' },
-      ...(had ?? []),
+      ...had,
     ])
     resolving.current.set(
       temp,
       request.then((r) => r?.id ?? null),
     )
+    return temp
   }
 
   /*
@@ -293,29 +512,6 @@ export function useProjectContent({
   }
   /* The shell's doors, for a file's room, which is not this project's tab. */
   const doors = useContext(PersonDoorsContext)
-  /*
-   * Which kind is open is the address's — `/files/images` — and the kind
-   * last chosen on this machine only fills in a bare `/files`, settled with
-   * `replace` so back does not walk through it. Whose stays a remembered
-   * view of the list. Recently Deleted is a place of its own,
-   * `/files/deleted`, and never remembered: Files opening on the bin would
-   * surprise whoever left it there. `docs/specs/docs.md`, "Four kinds and
-   * whose"; the deleting docs spec.
-   */
-  const [docsView, setDocsView] = useState(() => readDocsView(meId))
-  const place = placeOf(kind)
-  const inBin = place === 'deleted'
-  const docsFilter: DocsFilter = place && place !== 'deleted' ? place : docsView.kind
-  const docsWhose = docsView.whose
-  const setDocsFilter = (next: DocsFilter) => onNavigate({ kind: next })
-  const setDocsWhose = (whose: DocsWhose) => {
-    setDocsView((v) => ({ ...v, whose }))
-    keepDocsView(meId, { whose })
-    /* A choice of whose from the bin's menu leaves the bin for the kind
-       last open, as a kind's tab does. */
-    if (inBin) onNavigate({ kind: docsView.kind })
-  }
-  const openBin = () => onNavigate({ kind: 'deleted' })
   /* A bare `/files` settles on the kind last open. `kind` is `''`, not
      null, while the address names a file whose id is still being looked up
      — `/files/7` must not be replaced by a kind before it opens. */
@@ -337,7 +533,6 @@ export function useProjectContent({
     if (docsFilter !== next || inBin) setDocsFilter(next)
     if (docsWhose === 'shared') setDocsWhose('recent')
   }
-  const [docsWords, setDocsWords] = useState('')
   /* The window a link is added in — `docs/specs/docs.md`. */
   const [linking, setLinking] = useState(false)
   const picker = useRef<HTMLInputElement>(null)
@@ -366,7 +561,7 @@ export function useProjectContent({
     if (!made) return amend(key, { failed: W.couldNotUpload })
     /* The row gives way only once the list holds the file, so nothing
        blinks out between the two. */
-    await load()
+    await loadNow.current()
     goingFiles.current.delete(key)
     setGoing((g) => g.filter((x) => x.key !== key))
   }
@@ -425,12 +620,23 @@ export function useProjectContent({
       body: JSON.stringify({ name, url, folder_id: folder }),
     }).catch(() => null)
     showAdded('links')
-    pendingFile(name, 'link', request, url)
+    const temp = pendingFile(name, 'link', request, url)
     await request
-    await load()
+    /* The row gives way once the list holds the link, so nothing blinks
+       out between the two. */
+    await loadNow.current().catch(() => {})
+    setPending((had) => had.filter((f) => f.id !== temp))
   }
   return {
     load,
+    files,
+    setFiles,
+    kinds: held.kinds,
+    answered: Boolean(view),
+    found: foundHere?.rows ?? null,
+    findSettled,
+    more: Boolean(more),
+    readMore,
     newDocument,
     doors,
     docsFilter,

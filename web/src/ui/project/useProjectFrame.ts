@@ -5,7 +5,7 @@ import { warmRoom } from '../../data/warm.js'
 import { digit } from '../../data/keys.js'
 import { roomCount } from '../Sidebar.jsx'
 import { recall } from '../../data/memory.js'
-import { type Post, type FileRow, firstTool, type ProjectProps } from '../Project.jsx'
+import { type Post, firstTool, type ProjectProps } from '../Project.jsx'
 
 /**
  * The frame of an open project: which tool is shown, how wide its columns
@@ -49,7 +49,8 @@ export function useProjectFrame({
      been posted here" — and one made before the server has spoken is a claim
      that is usually false, held for a frame and taken back. */
   const [posts, setPosts] = useState<Post[] | null>(() => recall(`posts:${project.id}`))
-  const [files, setFiles] = useState<FileRow[] | null>(() => recall(`files:${project.id}`))
+  /* Files' rows are read a page at a time, one list per kind and whose —
+     `useProjectContent`. */
 
   /** Which folder is being looked into; null is the top level. */
   const [folder] = useState<string | null>(null)
@@ -228,8 +229,6 @@ export function useProjectFrame({
     onNavigate,
     posts,
     setPosts,
-    files,
-    setFiles,
     folder,
     beat,
     setBeat,

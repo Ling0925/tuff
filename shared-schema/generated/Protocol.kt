@@ -1774,7 +1774,10 @@ data class FileInList (
 @Serializable
 data class Preview (
     val lines: List<Line>,
-    val picture: String? = null
+    val picture: String? = null,
+
+    @SerialName("picture_url")
+    val pictureURL: String? = null
 )
 
 @Serializable
@@ -1808,7 +1811,11 @@ data class FileRead (
 
 @Serializable
 data class FilesInProject (
-    val files: List<FileInList>
+    val files: List<FileInList>,
+    val kinds: List<String>? = null,
+
+    @SerialName("next_cursor")
+    val nextCursor: String? = null
 )
 
 @Serializable

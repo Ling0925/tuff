@@ -1091,7 +1091,8 @@ export const PublicShare = z.object({ token: z.string().nullable().optional() })
 
 /**
  * A row of a project's Docs — `GET /api/projects/:id/files`, pinned first
- * and then newest: a document, an upload or a link, where it was first put,
+ * and then the latest change (a page) or the newest (the whole list): a
+ * document, an upload or a link, where it was first put,
  * and a picture's copy for showing signed for this reader. `docs/specs/docs.md`.
  */
 export const FileInList = z.object({
@@ -1138,10 +1139,23 @@ export const FileInList = z.object({
       lines: z.array(z.object({ h: z.number().int(), t: z.string() })),
       /** The file id of the first picture in it, or null. */
       picture: Uuid.nullable(),
+      /** That picture's copy for showing, signed for this reader — null when there is none or it is not theirs to open; absent from a server before pages. */
+      picture_url: SignedLink.nullable().optional(),
     })
     .optional(),
 })
-export const FilesInProject = z.object({ files: z.array(FileInList) })
+/**
+ * A project's Files — `GET /api/projects/:id/files`. Asked with `limit` or
+ * `cursor`, a page (`next_cursor` for the rest, `kinds` on the first);
+ * asked with neither, every row, for the apps installed before pages.
+ */
+export const FilesInProject = z.object({
+  files: z.array(FileInList),
+  /** Opaque: hand it back as `?cursor=` for the page after; null on the last page and on the whole list. Absent from a server before pages. */
+  next_cursor: z.string().nullable().optional(),
+  /** On a first page only: which of `docs`, `images`, `uploads`, `links` hold anything this reader may see, whoever's. */
+  kinds: z.array(z.string()).optional(),
+})
 
 /**
  * A row in a project's Recently Deleted — `GET /api/projects/:id/files/deleted`,

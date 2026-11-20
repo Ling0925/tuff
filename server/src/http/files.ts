@@ -99,87 +99,245 @@ const Body = z.object({
   folder_id: z.uuid().nullish(),
 })
 
+/*
+ * The list's cursor: the last row's pin (or `-`), its last change to the
+ * microsecond, and its id — opaque to a client. A place in the order, not a
+ * row, so a row restored, deleted or changed between pages does not end the
+ * list.
+ */
+const STAMP = String.raw`\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z`
+const listCursor = (pinned: string | null, updated: string, id: string) =>
+  Buffer.from(`${pinned ?? '-'}|${updated}|${id}`).toString('base64url')
+function readListCursor(raw: string): { pinned: string | null; updated: string; id: string } | null {
+  const m = new RegExp(`^(-|${STAMP})\\|(${STAMP})\\|([0-9a-f-]{36})$`, 'i').exec(Buffer.from(raw, 'base64url').toString())
+  if (!m || Number.isNaN(Date.parse(m[2]!)) || (m[1] !== '-' && Number.isNaN(Date.parse(m[1]!)))) return null
+  return { pinned: m[1] === '-' ? null : m[1]!, updated: m[2]!, id: m[3]! }
+}
+
+/* The four kinds the screen's tabs are — `docs/specs/docs.md`, "Four kinds
+   and whose". Written with what the read policy lets go first (a null
+   test, `^@`, `=`), so each narrows the rows before the policy is asked
+   about them. A folder left from before is in none. */
+const LIST_KINDS = ['docs', 'images', 'uploads', 'links'] as const
+type ListKind = (typeof LIST_KINDS)[number]
+const kindIs = (tx: Tx, kind: ListKind) =>
+  kind === 'docs'
+    ? tx`f.url is null and f.storage_key is null and f.body is not null`
+    : kind === 'images'
+      ? tx`f.url is null and f.storage_key is not null and f.content_type ^@ 'image/'`
+      : kind === 'uploads'
+        ? tx`f.url is null and f.storage_key is not null and (f.content_type is null or not f.content_type ^@ 'image/')`
+        : tx`f.url is not null`
+
+/*
+ * A project's Files. Asked with `limit` or
+ * `cursor`, a page, pinned first and then the latest change; asked with
+ * neither, every row in the order it always had, for the apps installed
+ * before pages. `kind`, `whose` and `q` narrow both.
+ */
 files.get('/projects/:projectId/files', async (c) => {
   const ctx = c.get('ctx')
-  const rows = await withActor(
-    ctx.actorId,
-    ctx.workspaceId,
-    (tx) =>
-      tx<Record<string, unknown>[]>`select f.id, f.number, f.name, f.folder_id, f.content_type, f.size_bytes, f.version,
-              f.author_id, a.name as author_name, f.updated_at,
-              f.url, f.folder_id, (f.body is not null) as is_document,
-              /* Shared to the web. */
-              (f.public_token is not null) as is_public,
-              /* Saved as a template. */
-              f.template_at,
-              /* Who it is for: author, chosen or project. */
-              f.audience,
-              /* What it wears -- docs/specs/docs.md, "A document's mark". */
-              f.mark_icon, f.mark_tint,
-              /* The head of a pinned document, for its card's page: the
-                 first eight blocks, cut short below. docs/specs/docs.md,
-                 "A pinned document is a page". */
-              case when f.pinned_at is not null and f.body is not null and f.url is null
-                   then jsonb_path_query_array(f.body, '$.content[0 to 7]') end as head_blocks,
-              f.storage_key, f.display_key, f.pinned_at, f.created_at,
-              f.origin_type,
-              /* Never the id of a document the reader cannot open. */
-              case when f.origin_type = 'file' and not exists (select 1 from file od where od.id = f.origin_id)
-                   then null else f.origin_id end as origin_id,
-              /* Where it was first put, named and addressable: the room a
-                 message was in, the task or the announcement it was on.
-                 docs/specs/docs.md. No backticks in here. */
-              om.conversation_id as origin_room,
-              coalesce(oc.name, oc_people.names) as origin_room_name, oc.channel as origin_room_channel,
-              op.slug as origin_room_project_slug,
-              ot.number as origin_task_number, ot.title as origin_task_title, otp.key as origin_task_key,
-              opo.title as origin_post_title,
-              case when f.url is not null then 'link'
-                   when f.storage_key is not null then 'upload'
-                   when f.body is null then 'folder'
-                   else 'document' end as kind
-       from file f join actor a on a.id = f.author_id
-       left join message om on f.origin_type = 'message' and om.id = f.origin_id
-       left join conversation oc on oc.id = om.conversation_id
-       left join project op on op.id = oc.project_id
-       left join lateral (
-         select string_agg(pa.name, ', ' order by pa.name) as names
-         from conversation_member cm join actor pa on pa.id = cm.actor_id
-         where cm.conversation_id = oc.id and cm.deleted_at is null and cm.actor_id <> ${ctx.actorId}
-           and oc.channel = false
-       ) oc_people on true
-       left join task ot on f.origin_type = 'task' and ot.id = f.origin_id and ot.deleted_at is null
-       left join project otp on otp.id = ot.project_id
-       left join post opo on f.origin_type = 'post' and opo.id = f.origin_id and opo.deleted_at is null
-       where f.project_id = ${c.req.param('projectId')} and f.deleted_at is null
-       -- Pinned first, the latest pin at the top; then the newest first, so
-       -- what was just added is where the eye starts. docs/specs/docs.md.
-       order by f.pinned_at desc nulls last, f.created_at desc`,
-  )
+  const projectId = c.req.param('projectId')
+  if (!isId(projectId)) return c.json(missing, 404)
+  const rawCursor = c.req.query('cursor')
+  const cursor = rawCursor === undefined ? null : readListCursor(rawCursor)
+  if (rawCursor !== undefined && !cursor) return c.json({ error: { code: 'invalid' } }, 400)
+  const paged = rawCursor !== undefined || c.req.query('limit') !== undefined
+  const limit = paged ? pageSize(c.req.query('limit'), 100, 500) : null
+  const rawKind = c.req.query('kind')
+  const kind = rawKind === undefined ? null : (LIST_KINDS as readonly string[]).includes(rawKind) ? (rawKind as ListKind) : undefined
+  const rawWhose = c.req.query('whose')
+  const whose = rawWhose === undefined ? null : rawWhose === 'mine' || rawWhose === 'others' ? rawWhose : undefined
+  const words = (c.req.query('q') ?? '').trim().slice(0, 200)
+  if (kind === undefined || whose === undefined) return c.json({ error: { code: 'invalid' } }, 400)
+  const like = `%${words.replace(/[\\%_]/g, (x) => `\\${x}`)}%`
+
+  const { rows, kinds, pictures } = await withActor(ctx.actorId, ctx.workspaceId, async (tx) => {
+    /* The rows this page is, in the list's order and nothing joined but
+       what narrows them: read from the head of `file_listed` and stopped
+       once there is a page. Where each was first put is joined below, for
+       the page alone. */
+    const narrowed = tx`
+      f.project_id = ${projectId} and f.deleted_at is null
+      ${kind ? tx`and ${kindIs(tx, kind)}` : tx``}
+      ${whose === 'mine' ? tx`and f.author_id = ${ctx.actorId}` : whose === 'others' ? tx`and f.author_id <> ${ctx.actorId}` : tx``}
+      ${
+        words
+          ? tx`and (f.name ilike ${like} or f.url ilike ${like}
+              or exists (select 1 from actor fa where fa.id = f.author_id and fa.name ilike ${like})
+              or (f.origin_type = 'message' and exists (
+                select 1 from message wm join conversation wc on wc.id = wm.conversation_id
+                left join project wp on wp.id = wc.project_id
+                where wm.id = f.origin_id
+                  and (wc.name ilike ${like}
+                       or ('#' || coalesce(wp.slug || '-', '') || regexp_replace(lower(wc.name), '[[:space:]]+', '-', 'g')) ilike ${like}
+                       or (wc.channel = false and exists (
+                         select 1 from conversation_member wcm join actor wpa on wpa.id = wcm.actor_id
+                         where wcm.conversation_id = wc.id and wcm.deleted_at is null
+                           and wcm.actor_id <> ${ctx.actorId} and wpa.name ilike ${like})))))
+              or (f.origin_type = 'task' and exists (
+                select 1 from task wt join project wtp on wtp.id = wt.project_id
+                where wt.id = f.origin_id and wt.deleted_at is null
+                  and (wt.title ilike ${like} or (coalesce(wtp.key, '') || '-' || wt.number) ilike ${like})))
+              or (f.origin_type = 'post' and exists (
+                select 1 from post wpo where wpo.id = f.origin_id and wpo.deleted_at is null and wpo.title ilike ${like})))`
+          : tx``
+      }`
+    /* `::text` first: a parameter the driver knows is a timestamp goes
+       through a JavaScript Date, which keeps milliseconds — and rows of one
+       moment past the first page were skipped. */
+    const after = !cursor
+      ? tx``
+      : cursor.pinned
+        ? tx`and (f.pinned_at is null
+                  or (f.pinned_at, f.updated_at, f.id) < (${cursor.pinned}::text::timestamptz, ${cursor.updated}::text::timestamptz, ${cursor.id}::uuid))`
+        : tx`and f.pinned_at is null and (f.updated_at, f.id) < (${cursor.updated}::text::timestamptz, ${cursor.id}::uuid)`
+    const rows = await tx<Record<string, unknown>[]>`
+      select f.id, f.number, f.name, f.folder_id, f.content_type, f.size_bytes, f.version,
+             f.author_id, a.name as author_name, f.updated_at,
+             f.url, f.has_body as is_document,
+             /* Shared to the web. */
+             f.is_public,
+             /* Saved as a template. */
+             f.template_at,
+             /* Who it is for: author, chosen or project. */
+             f.audience,
+             /* What it wears -- docs/specs/docs.md, "A document's mark". */
+             f.mark_icon, f.mark_tint,
+             f.head_blocks,
+             f.storage_key, f.display_key, f.pinned_at, f.created_at,
+             f.pinned_key, f.updated_key,
+             f.origin_type,
+             /* Never the id of a document the reader cannot open. */
+             case when f.origin_type = 'file' and not exists (select 1 from file od where od.id = f.origin_id)
+                  then null else f.origin_id end as origin_id,
+             /* Where it was first put, named and addressable: the room a
+                message was in, the task or the announcement it was on.
+                docs/specs/docs.md. No backticks in here. */
+             om.conversation_id as origin_room,
+             coalesce(oc.name, oc_people.names) as origin_room_name, oc.channel as origin_room_channel,
+             op.slug as origin_room_project_slug,
+             ot.number as origin_task_number, ot.title as origin_task_title, otp.key as origin_task_key,
+             opo.title as origin_post_title,
+             f.kind
+      from (
+        select f.id, f.number, f.name, f.folder_id, f.content_type, f.size_bytes, f.version,
+               f.author_id, f.updated_at, f.url, f.body is not null as has_body,
+               (f.public_token is not null) as is_public, f.template_at, f.audience,
+               f.mark_icon, f.mark_tint,
+               /* The head of a pinned document, for its card's page: the
+                  first eight blocks, cut short below. docs/specs/docs.md,
+                  "A pinned document is a page". */
+               case when f.pinned_at is not null and f.body is not null and f.url is null
+                    then jsonb_path_query_array(f.body, '$.content[0 to 7]') end as head_blocks,
+               f.storage_key, f.display_key, f.pinned_at, f.created_at, f.origin_type, f.origin_id,
+               to_char(f.pinned_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as pinned_key,
+               to_char(f.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_key,
+               case when f.url is not null then 'link'
+                    when f.storage_key is not null then 'upload'
+                    when f.body is null then 'folder'
+                    else 'document' end as kind
+        from file f
+        where ${narrowed} ${after}
+        ${
+          limit === null
+            ? /* Pinned first, the latest pin at the top; then the newest
+                 first -- the order the installed apps were given. */
+              tx`order by f.pinned_at desc nulls last, f.created_at desc`
+            : /* The screen's order, which is the index's -- and the id, so
+                 rows written in one moment keep one order across pages. */
+              tx`order by f.pinned_at desc nulls last, f.updated_at desc, f.id desc limit ${limit + 1}`
+        }
+      ) f
+      join actor a on a.id = f.author_id
+      left join message om on f.origin_type = 'message' and om.id = f.origin_id
+      left join conversation oc on oc.id = om.conversation_id
+      left join project op on op.id = oc.project_id
+      left join lateral (
+        select string_agg(pa.name, ', ' order by pa.name) as names
+        from conversation_member cm join actor pa on pa.id = cm.actor_id
+        where cm.conversation_id = oc.id and cm.deleted_at is null and cm.actor_id <> ${ctx.actorId}
+          and oc.channel = false
+      ) oc_people on true
+      left join task ot on f.origin_type = 'task' and ot.id = f.origin_id and ot.deleted_at is null
+      left join project otp on otp.id = ot.project_id
+      left join post opo on f.origin_type = 'post' and opo.id = f.origin_id and opo.deleted_at is null
+      ${
+        limit === null
+          ? tx`order by f.pinned_at desc nulls last, f.created_at desc`
+          : tx`order by f.pinned_at desc nulls last, f.updated_at desc, f.id desc`
+      }`
+    /* Which kinds hold anything this reader may see, whoever's — on the
+       first page, for the screen to tell an empty project from an empty
+       kind from an empty choice of whose. One row each, stopped at the
+       first. */
+    const kinds =
+      paged && !cursor
+        ? await tx<Record<ListKind, boolean>[]>`
+            select exists (select 1 from file f where f.project_id = ${projectId} and f.deleted_at is null and ${kindIs(tx, 'docs')}) as docs,
+                   exists (select 1 from file f where f.project_id = ${projectId} and f.deleted_at is null and ${kindIs(tx, 'images')}) as images,
+                   exists (select 1 from file f where f.project_id = ${projectId} and f.deleted_at is null and ${kindIs(tx, 'uploads')}) as uploads,
+                   exists (select 1 from file f where f.project_id = ${projectId} and f.deleted_at is null and ${kindIs(tx, 'links')}) as links`.then(
+            ([r]) => LIST_KINDS.filter((k) => r?.[k]),
+          )
+        : null
+    /* The first picture of each pinned document on the page, for its card —
+       read under the file's own policy, so a picture the reader may not
+       open has no link. It was found among the list's other rows, which a
+       page of Docs does not hold. */
+    const wanted = [
+      ...new Set(
+        rows.slice(0, limit ?? rows.length).flatMap((r) => {
+          const p = r.head_blocks ? previewOf(r.head_blocks).picture : null
+          return p ? [p] : []
+        }),
+      ),
+    ]
+    const pictures = wanted.length
+      ? await tx<
+          { id: string; storage_key: string | null; display_key: string | null; content_type: string | null; size_bytes: string | null }[]
+        >`
+          select id, storage_key, display_key, content_type, size_bytes from file
+          where id = any(${wanted}::uuid[]) and deleted_at is null`
+      : []
+    return { rows, kinds, pictures }
+  })
+
+  const more = limit !== null && rows.length > limit
+  const page = more ? rows.slice(0, limit) : rows
+  const last = page[page.length - 1]
+  const thumbs = new Map(pictures.map((p) => [p.id, thumbFor(p, ctx.actorId)]))
   /* A picture is shown in the list, not behind a click — its copy for
      showing, signed for this reader, beside the row. The keys themselves do
-     not leave. `docs/specs/docs.md`. */
+     not leave. `docs/specs/docs.md`. Only the page's. */
   return c.json({
-    files: rows.map(({ storage_key, display_key, head_blocks, ...r }) => ({
-      ...r,
-      ...(head_blocks ? { preview: previewOf(head_blocks) } : {}),
-      /* The copy for showing, or the original only when it is small. A
-         list of pictures uploaded with no copy — by an agent, which has no
-         browser to make one — drew every original, eight megabytes and
-         four thousand pixels each, as a 48-pixel tile; Safari on a phone
-         ran out of memory on the list and reloaded it over and over. Past
-         the line the row shows the picture's mark. */
-      thumb_url:
-        typeof r.content_type === 'string' && r.content_type.startsWith('image/') && storage_key
-          ? display_key
-            ? linkForReader(String(display_key), ctx.actorId)
-            : Number(r.size_bytes ?? Infinity) <= THUMB_ORIGINAL_BYTES
-              ? linkForReader(String(storage_key), ctx.actorId)
-              : null
-          : null,
-    })),
+    files: page.map(({ storage_key, display_key, head_blocks, pinned_key: _p, updated_key: _u, ...r }) => {
+      const preview = head_blocks ? previewOf(head_blocks) : null
+      return {
+        ...r,
+        ...(preview ? { preview: { ...preview, picture_url: preview.picture ? (thumbs.get(preview.picture) ?? null) : null } } : {}),
+        thumb_url: thumbFor({ storage_key, display_key, content_type: r.content_type, size_bytes: r.size_bytes }, ctx.actorId),
+      }
+    }),
+    next_cursor: more && last ? listCursor((last.pinned_key as string | null) ?? null, String(last.updated_key), String(last.id)) : null,
+    ...(kinds ? { kinds } : {}),
   })
 })
+
+/* The copy for showing, or the original only when it is small. A list of
+   pictures uploaded with no copy — by an agent, which has no browser to
+   make one — drew every original, eight megabytes and four thousand pixels
+   each, as a 48-pixel tile; Safari on a phone ran out of memory on the list
+   and reloaded it over and over. Past the line the row shows the picture's
+   mark. */
+function thumbFor(
+  f: { storage_key: unknown; display_key: unknown; content_type: unknown; size_bytes: unknown },
+  actorId: string,
+): string | null {
+  if (typeof f.content_type !== 'string' || !f.content_type.startsWith('image/') || !f.storage_key) return null
+  if (f.display_key) return linkForReader(String(f.display_key), actorId)
+  return Number(f.size_bytes ?? Number.POSITIVE_INFINITY) <= THUMB_ORIGINAL_BYTES ? linkForReader(String(f.storage_key), actorId) : null
+}
 
 /*
  * What a new document starts from: one of the four built in, or a document

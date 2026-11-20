@@ -41,10 +41,13 @@ moment; a reply opens its thread.
 
 ## Docs
 
-Every row is already on the screen — Docs is one list — so the words narrow
-it there, with nothing asked of the server: the name, the address of a link,
-who put it there, and where it was sent from. It narrows together with the
-kind filters.
+The words narrow the rows on the screen at once — the name, the address of
+a link, who put it there, and where it was sent from — together with the
+kind and whose. Files is read in pages, so when the list
+holds fewer rows than it has, the same words go to the server as well
+(`GET /projects/:id/files?q=`, a beat after the last key) and its matches
+join the ones already drawn; scrolling reads further into them. With every
+row held, nothing is asked.
 
 ## Activity
 

@@ -10511,6 +10511,12 @@
                   "type": "null"
                 }
               ]
+            },
+            "picture_url": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -10533,6 +10539,18 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/FileInList"
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kinds": {
+          "type": "array",
+          "items": {
+            "type": "string"
           }
         }
       },

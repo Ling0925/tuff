@@ -136,7 +136,8 @@ export function tuffServer(given: Call, site: string, reader?: Reader): McpServe
   const addressed = async (projectId: string, tool: Tool, said: unknown) => {
     const o = { ...(said as Record<string, unknown>) }
     for (const [key, value] of Object.entries(o)) {
-      if (!Array.isArray(value)) continue
+      /* Rows only: the files page's `kinds` is a list of words. */
+      if (!Array.isArray(value) || value.some((v) => typeof v !== 'object' || v === null)) continue
       o[key] = await Promise.all(
         value.map(async (row: { number?: number | null }) => ({ ...row, url: await url(projectId, tool, row.number) })),
       )
@@ -417,7 +418,10 @@ export function tuffServer(given: Call, site: string, reader?: Reader): McpServe
         call(`/api/projects/${project_id}/lists`),
         call(`/api/projects/${project_id}/posts`),
         call(`/api/projects/${project_id}/tasks`),
-        call(`/api/projects/${project_id}/files`),
+        /* The first hundred, newest change first, and the cursor: a
+           project of four thousand files was all of them in the agent's
+           context. `search` finds the rest. */
+        call(`/api/projects/${project_id}/files?limit=100`),
       ])
       const answer = {
         project: { ...(project as Record<string, unknown>), url: await url(project_id) },

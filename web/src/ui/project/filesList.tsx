@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { MAKE, SAYS } from '../../data/words.js'
 import { PROJECT_SAID as W } from '../../words/project.js'
 import { api } from '../../data/api.js'
@@ -20,6 +21,12 @@ export function filesList({
   onNavigate,
   files,
   setFiles,
+  kinds,
+  answered,
+  found,
+  findSettled,
+  more,
+  readMore,
   shown,
   load,
   newDocument,
@@ -57,10 +64,18 @@ export function filesList({
   /** Whether Recently Deleted is offered: somebody who may delete anything here. */
   mayBin: boolean
 } & Pick<ProjectProps, 'canWrite' | 'objectId'> &
-  Pick<ProjectFrame, 'onNavigate' | 'files' | 'setFiles' | 'shown'> &
+  Pick<ProjectFrame, 'onNavigate' | 'shown'> &
   Pick<
     ProjectContent,
     | 'load'
+    | 'files'
+    | 'setFiles'
+    | 'kinds'
+    | 'answered'
+    | 'found'
+    | 'findSettled'
+    | 'more'
+    | 'readMore'
     | 'newDocument'
     | 'doors'
     | 'docsFilter'
@@ -84,13 +99,28 @@ export function filesList({
   >): React.ReactNode {
   if (shown !== 'files' || objectId) return false
   /* Every file, wherever a folder once put it — the folders are gone and
-     what was in them is not. Pins first, then what moved last. */
-  const listed = (files ?? []).filter((f) => f.kind !== 'folder')
+     what was in them is not. Pins first, then what moved last. The rows
+     held for this kind and whose, and what the server found for the words
+     beyond them; narrowed here too, so a row drawn before the server has
+     it lands under its own kind. */
+  const held = files ?? []
+  const pool = found ? [...held, ...found.filter((f) => !held.some((h) => h.id === f.id))] : held
+  const listed = pool.filter((f) => f.kind !== 'folder')
   const ofKind = listed.filter((f) => fits(f, docsFilter))
   const theirs = ofKind.filter((f) => whoseFits(f, docsWhose, meId))
   const rows = theirs.filter((f) => says(f, docsWords)).sort(byRecent)
-  /* Every picture's copy for showing, for a pinned document's page. */
-  const thumbs = new Map(listed.flatMap((f) => (f.thumb_url ? [[f.id, f.thumb_url] as const] : [])))
+  /* Whether the project, and this kind, hold anything at all, whoever's —
+     the server's answer, or what is on the screen when that is more. */
+  const anything = listed.length > 0 || (kinds?.length ?? 0) > 0
+  const kindHas = ofKind.length > 0 || (kinds?.includes(docsFilter) ?? false)
+  /* Every picture's copy for showing, for a pinned document's page: its
+     own, which the page answers beside it, or a row's. */
+  const thumbs = new Map(
+    listed.flatMap((f) => [
+      ...(f.thumb_url ? [[f.id, f.thumb_url] as const] : []),
+      ...(f.preview?.picture && f.preview.picture_url ? [[f.preview.picture, f.preview.picture_url] as const] : []),
+    ]),
+  )
   return (
     shown === 'files' &&
     !objectId && (
@@ -193,7 +223,7 @@ export function filesList({
         </Toolbar>
 
         <GoingRows going={going} onCancel={stopUp} onRetry={(key) => void sendUp(key)} />
-        {files && !inBin && going.length === 0 && files.filter((f) => f.kind !== 'folder').length === 0 && (
+        {answered && !inBin && going.length === 0 && !anything && (
           <EmptyState art="holder" title={SAYS.nothingHereYet}>
             {canWrite ? W.docsHint : W.docsWait}
           </EmptyState>
@@ -201,7 +231,7 @@ export function filesList({
 
         {/* Not over an empty list: tabs that narrow nothing sat at the
                 foot of an empty screen as the only thing on it. */}
-        {(listed.length > 0 || inBin) && (
+        {(anything || inBin) && (
           <DocsFilters
             value={docsFilter}
             onPick={setDocsFilter}
@@ -213,17 +243,19 @@ export function filesList({
           />
         )}
         {inBin && <RecentlyDeleted projectId={projectId} meId={meId} words={docsWords} onChanged={() => void load()} />}
-        {!inBin && docsWords.trim() !== '' && theirs.length > 0 && rows.length === 0 && (
+        {!inBin && docsWords.trim() !== '' && theirs.length > 0 && rows.length === 0 && findSettled && (
           <p data-testid="found-nothing" className="text-base text-ink-3">
             {W.noResults(docsWords.trim())}
           </p>
         )}
-        {!inBin && listed.length > 0 && ofKind.length === 0 && (
+        {/* Said once the list has answered: a kind not read yet is not
+            a kind with nothing in it. */}
+        {!inBin && answered && anything && !kindHas && (
           <p className="text-base text-ink-3">
             {docsFilter === 'docs' ? W.noDocuments : docsFilter === 'images' ? W.noImages : docsFilter === 'links' ? W.noLinks : W.noFiles}
           </p>
         )}
-        {!inBin && ofKind.length > 0 && theirs.length === 0 && (
+        {!inBin && answered && kindHas && docsWhose !== 'recent' && theirs.length === 0 && (
           <p data-testid="none-whose" className="text-base text-ink-3">
             {docsWhose === 'mine' ? W.noneMine : W.noneShared}
           </p>
@@ -259,7 +291,42 @@ export function filesList({
               : undefined
           }
         />
+        {/* The rest of a long list, read as its foot comes near — a
+            screen and a half ahead, so the rows land below where the
+            reader is. No spinner. */}
+        {!inBin && more && <ReadsFurther onNear={readMore} />}
       </div>
     )
   )
+}
+
+/** An empty line after the last row that asks for the next page as it nears the screen. */
+function ReadsFurther({ onNear }: { onNear: () => void }) {
+  const at = useRef<HTMLDivElement>(null)
+  const near = useRef(onNear)
+  near.current = onNear
+  useEffect(() => {
+    const el = at.current
+    if (!el) return
+    /* The column that scrolls, so "near" is measured in it. */
+    const root = el.closest('[data-foot]')
+    const seen = new IntersectionObserver((e) => e.some((x) => x.isIntersecting) && near.current(), {
+      root,
+      rootMargin: '0px 0px 150% 0px',
+    })
+    seen.observe(el)
+    return () => seen.disconnect()
+  }, [])
+  /* Each page that lands moves the line down; asked again while it is
+     still within reach, so a short page does not leave the list stopped. */
+  useEffect(() => {
+    const el = at.current
+    const root = el?.closest('[data-foot]')
+    if (!el || !root) return
+    const box = el.getBoundingClientRect()
+    const view = root.getBoundingClientRect()
+    if (box.top < view.bottom + view.height * 1.5) near.current()
+  })
+  /* Pulled up by the column's gap, so it takes no room of its own. */
+  return <div ref={at} data-reads-further aria-hidden className="-mt-5 h-0 shrink-0" />
 }

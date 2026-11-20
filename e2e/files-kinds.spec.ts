@@ -309,3 +309,50 @@ test('a pin moves the row to the head rather than redrawing it there', async ({ 
   await again.getByTestId('file-pin').click()
   await expect(again).toHaveCount(0, { timeout: 15_000 })
 })
+
+test('a long list reads further as it is scrolled, and nothing above moves', async ({ page, browser }) => {
+  /* A hundred a page. A project of its own,
+     made through the API, so the count is known. */
+  test.setTimeout(60_000)
+  await login(page)
+  const token = await page.evaluate(() => JSON.parse(localStorage.getItem('session')!).access_token as string)
+  const h = { authorization: `Bearer ${token}`, 'x-api-version': '1', 'content-type': 'application/json' }
+  const made = await page.request.post('/api/projects', { headers: h, data: { name: `Long list ${Date.now()}` } })
+  expect(made.ok()).toBe(true)
+  const { id, slug } = (await made.json()) as { id: string; slug: string }
+  const LINKS = 130
+  for (let i = 0; i < LINKS; i += 10) {
+    await Promise.all(
+      Array.from({ length: 10 }, (_, k) =>
+        page.request.post(`/api/projects/${id}/files`, {
+          headers: h,
+          data: { name: `Link ${String(i + k).padStart(3, '0')}`, url: `https://example.com/${i + k}` },
+        }),
+      ),
+    )
+  }
+  const ws = new URL(page.url()).pathname.split('/')[1]!
+  await page.goto(`/${ws}/${slug}/files/links`)
+  const rows = page.locator('[data-file]')
+  await expect(rows).toHaveCount(100, { timeout: 15_000 })
+  /* The first row, where it stands, while the rest arrive below. */
+  const first = rows.first()
+  const before = (await first.boundingBox())!.y
+  const name = await first.innerText()
+  await rows.nth(99).scrollIntoViewIfNeeded()
+  await expect(rows).toHaveCount(LINKS, { timeout: 15_000 })
+  await page.locator('[data-foot]').evaluate((el) => el.scrollTo({ top: 0 }))
+  expect(await first.innerText()).toBe(name)
+  expect(Math.round((await first.boundingBox())!.y)).toBe(Math.round(before))
+  /* Words find a row past the first page too: a browser that has not been
+     here holds a hundred, and the same words go to the server. */
+  const fresh = await (await browser.newContext({ baseURL: 'http://localhost:5180' })).newPage()
+  await login(fresh)
+  await fresh.goto(`/${ws}/${slug}/files/links`)
+  const theirRows = fresh.locator('[data-file]')
+  await expect(theirRows).toHaveCount(100, { timeout: 15_000 })
+  await fresh.getByTestId('find-docs').click()
+  await fresh.getByTestId('find-docs-field').fill('Link 003')
+  await expect(theirRows).toHaveCount(1, { timeout: 15_000 })
+  await expect(theirRows.first()).toContainText('Link 003')
+})
