@@ -2326,6 +2326,27 @@ read it, but a lock screen is read by whoever holds the phone. VAPID keys are
 made with `pnpm --filter @tracker/server vapid` and kept; without them the
 product runs and the switch in Settings says there is nothing to turn on.
 
+**A push key of its own** (migration 305). On your own server with
+no `VAPID_PUBLIC_KEY` or `VAPID_PRIVATE_KEY` in the environment, the first
+start makes a P-256 pair and keeps it in `instance_push_key`: one row, the
+public key (base64url, as `GET /api/push` answers it) and the private key
+**sealed** (`private_key_enc` — the `vapid` sealing of `auth/seal.ts`, under
+`ENCRYPTION_KEY` when it is set, moved by `reseal`). Row-level security on,
+nothing granted: read only through `instance_push_key_kept()` and written
+only through `instance_push_key_keep(public, sealed)`, which inserts only if
+there is no row and answers the row that is there — so it is made once and
+never replaced. Both are granted to `tracker_app` alone (the worker process
+reads through the application's connection) and answer nothing on the
+service, which keeps its keys in the environment.
+`instance_setting.push_public_key` is the public key the serving app signs
+with, written on its every start by `instance_push_app_key_said` (table
+owner only) and read by the worker through `instance_push_app_key()`, which
+logs loudly when its own differs. With `VAPID_SUBJECT` unset the subject is
+the origin of `APP_URL` when it is `https:`; only otherwise is it `mailto:`
+the address mail is sent from, never a person's own. Keys in the
+environment win and the kept pair is then neither made nor read. No
+endpoint changes.
+
 The Apple apps register a device with `{ "apns": { "token": "<hex>",
 "sandbox": true }, "said": "Tuff on iPhone" }`: the token the system handed
 over and which of Apple's two services gave it — a build from Xcode the

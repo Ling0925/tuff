@@ -4,6 +4,7 @@ import type { Tx } from '../db.js'
 import { env, readMailFrom } from '../env.js'
 import { envMailSender, forgetSavedMail, nearbyHost, savedMail } from '../mail.js'
 import { mailServerAddress } from '../outbound.js'
+import { forgetPushSubject } from '../pushKey.js'
 
 /*
  * Mail set up from the screen — the setup screen's first step and Server
@@ -154,5 +155,7 @@ export async function clearMail(tx: Tx, setupHash: string | null): Promise<boole
 /** After a write has committed: this process reads it now, not in thirty seconds. */
 export async function mailChanged(): Promise<void> {
   forgetSavedMail()
+  /* The address push services are told, before there is an owner — `pushKey.ts`. */
+  forgetPushSubject()
   await savedMail()
 }

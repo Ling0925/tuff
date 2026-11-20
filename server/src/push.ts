@@ -19,12 +19,26 @@ import { edition } from './edition.js'
 import { apnsConfigured, countToPhone, phones, sendToPhone, type Post } from './apns.js'
 import { fcmConfigured, sendToAndroid, type Send } from './fcm.js'
 import { languageFor, say, type Language } from './words.js'
+import { freshPushKey, keptSubject, vapidPair, type VapidPair } from './pushKey.js'
 
-/** How a push service reaches whoever runs this: `VAPID_SUBJECT`, else the service's own. None on your own server until it is given one. */
-export const vapidSubject = (): string => env.vapidSubject || edition.vendor?.vapidSubject || ''
+/**
+ * How a push service reaches whoever runs this: `VAPID_SUBJECT`, else the
+ * service's own; on your own server, its `https:` address, and only without
+ * one `mailto:` its owner or the address mail is sent from, as `pushKey.ts`
+ * last read it. Empty: push stays off.
+ */
+export const vapidSubject = (): string => env.vapidSubject || edition.vendor?.vapidSubject || keptSubject()
 
-/** A browser can be written to: the deployment has its VAPID pair, and says who it is. */
-export const webPushConfigured = (): boolean => Boolean(env.vapidPublicKey && env.vapidPrivateKey && vapidSubject())
+/**
+ * A browser can be written to: the deployment has its VAPID pair — the
+ * environment's, or on your own server the one it keeps (`pushKey.ts`) —
+ * and says who it is. Synchronous, on what was last read: `freshPushKey`
+ * is awaited at start and before every pass and push endpoint.
+ */
+export const webPushConfigured = (): boolean => Boolean(vapidPair() && vapidSubject())
+
+/** The public half a browser subscribes with, when a browser can be written to. Public; the private half never leaves `vapid()`. */
+export const vapidPublicKey = (): string | null => (webPushConfigured() ? (vapidPair()?.publicKey ?? null) : null)
 
 /** Anything can be: a browser, one of the Apple apps — `apns.ts` — or the Android app — `fcm.ts`. */
 export const pushConfigured = (): boolean => webPushConfigured() || apnsConfigured() || fcmConfigured()
@@ -92,17 +106,19 @@ function encrypt(payload: string, p256dh: string, auth: string): Buffer {
  *
  * The audience is the origin of the push service, not ours: it is the party
  * checking it. Twelve hours because the services refuse anything longer, and
- * `sub` has to be a `mailto:` — Apple in particular refuses without one.
+ * `sub` has to be a `mailto:` or an `https:` URI (RFC 8292) — Apple in
+ * particular refuses without one; the service has always signed with
+ * `https://usetuff.com`.
  */
-async function vapid(endpoint: string): Promise<string> {
+async function vapid(endpoint: string, pair: VapidPair): Promise<string> {
   const aud = new URL(endpoint).origin
   const key = createPrivateKey({
     key: {
       kty: 'EC',
       crv: 'P-256',
-      d: env.vapidPrivateKey,
-      x: b64(Buffer.from(env.vapidPublicKey, 'base64url').subarray(1, 33)),
-      y: b64(Buffer.from(env.vapidPublicKey, 'base64url').subarray(33, 65)),
+      d: pair.privateKey,
+      x: b64(Buffer.from(pair.publicKey, 'base64url').subarray(1, 33)),
+      y: b64(Buffer.from(pair.publicKey, 'base64url').subarray(33, 65)),
     },
     format: 'jwk',
   })
@@ -153,11 +169,14 @@ export async function sendTo(
   told: Told,
   fetchImpl: (url: string, init: RequestInit) => Promise<Response> = fetch,
 ): Promise<number> {
+  /* No pair, nothing signed: not reached, as a service that never answered. */
+  const pair = vapidPair()
+  if (!pair) return 0
   const sealed = encrypt(JSON.stringify(told), to.p256dh, to.auth)
   const res = await fetchImpl(to.endpoint, {
     method: 'POST',
     headers: {
-      authorization: `vapid t=${await vapid(to.endpoint)}, k=${env.vapidPublicKey}`,
+      authorization: `vapid t=${await vapid(to.endpoint, pair)}, k=${pair.publicKey}`,
       'content-encoding': 'aes128gcm',
       'content-type': 'application/octet-stream',
       // Long enough that a phone asleep for a weekend still hears about
@@ -370,6 +389,10 @@ export async function about(d: Due, language?: Language): Promise<Told | null> {
 const timed = (url: string, init: RequestInit) => fetch(url, { ...init, signal: AbortSignal.timeout(10_000) })
 
 export async function pushDue(limit = 50, fetchImpl: typeof timed = timed, phoneImpl?: Post, androidImpl?: Send): Promise<number> {
+  /* On your own server, the kept pair and its subject, read when missing or
+     old — so a worker that started before the app made them picks them up
+     here. Nothing on the service. `pushKey.ts`. */
+  await freshPushKey()
   if (!pushConfigured()) return 0
   /* Connected on the first phone written to, closed when the pass is done. */
   const apple = phones()

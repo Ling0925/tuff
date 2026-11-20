@@ -3,6 +3,7 @@ import type { Edition } from './editionShape.js'
 import { env } from './env.js'
 import { createHash } from 'node:crypto'
 import { mailOn, savedMail } from './mail.js'
+import { freshPushKey, sayAppKey } from './pushKey.js'
 import { releaseCheck } from './updates.js'
 import { sayDatabaseRights } from './db/rights.js'
 
@@ -160,6 +161,12 @@ export const edition: Edition = {
     await startInstance(sql, true)
     /* The mail saved in Server settings, read before the first page asks. */
     await savedMail().catch(() => null)
+    /* The push key this server keeps when its environment has none, made
+       on the first start and read on every one after — `pushKey.ts`. After
+       `startInstance`, which tells the database it is a server of one's own. */
+    await freshPushKey()
+    /* And which public key it signs with, for the worker to compare its own against. */
+    await sayAppKey(sql)
     await sayHowToClaim(sql)
   },
   /* Nothing counted, nothing kept, nothing sent: whoever runs it can read

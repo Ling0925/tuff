@@ -4,6 +4,7 @@ import { purgeAfterDays } from './env.js'
 import { PRESET, remove } from './storage.js'
 import { deliverDue } from './webhooks.js'
 import { pushDue, recountDue, webPushConfigured } from './push.js'
+import { compareWithApp, freshPushKey, pushKeyLine, vapidPair } from './pushKey.js'
 import { apnsConfigured } from './apns.js'
 import { edition } from './edition.js'
 import { mailFrom } from './mail.js'
@@ -70,6 +71,8 @@ async function pushes(): Promise<void> {
   try {
     const pushed = await pushDue(50)
     if (pushed > 0) console.log(`worker: pushed ${pushed}`)
+    /* On your own server, once a minute: the same key as the app's — `pushKey.ts`. */
+    await compareWithApp()
     /* After the notifications: a phone one of them has just told its
        number is not told it again. */
     const counted = await recountDue(50)
@@ -286,11 +289,6 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   })
 }
 
-console.log(
-  `worker: delivering every ${DELIVER_EVERY_MS}ms, clearing out every hour` +
-    (webPushConfigured() ? '' : ' — no VAPID keys, so nothing is pushed to a browser') +
-    (apnsConfigured() ? '' : ' — no APNs key, so nothing is pushed to the apps'),
-)
 /*
  * As the server asks it at every start (`main.ts`): a worker asking as the
  * database's owner is under no policy. It did, for months, with nothing
@@ -323,6 +321,27 @@ for (let waited = 0; wanted && waited < cap && !stopping; waited += 5_000) {
   if (waited > 0 && waited % 60_000 === 0) console.log(`[worker] Waiting for the database to be migrated to ${wanted}…`)
   await new Promise((r) => setTimeout(r, 5_000))
 }
+
+/* After the schema: on your own server, the push key it keeps — made here
+   if the app has not made it yet, the same one if it has (`pushKey.ts`) —
+   so the line below says what is true. Asked again on every pass. */
+await freshPushKey()
+console.log(
+  `worker: delivering every ${DELIVER_EVERY_MS}ms, clearing out every hour` +
+    (webPushConfigured()
+      ? ''
+      : vapidPair()
+        ? ' — no VAPID_SUBJECT, no https APP_URL and no mail sender to give the push services, so nothing is pushed to a browser: set VAPID_SUBJECT'
+        : ' — no VAPID keys, so nothing is pushed to a browser') +
+    (apnsConfigured() ? '' : ' — no APNs key, so nothing is pushed to the apps'),
+)
+/* Which key it signs with, by a short name the app's log says too; and
+   whether that is the app's — `pushKey.ts`. */
+{
+  const line = pushKeyLine('worker')
+  if (line) console.log(line)
+}
+await compareWithApp()
 
 await Promise.all([
   every(DELIVER_EVERY_MS, deliver),

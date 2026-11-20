@@ -131,7 +131,7 @@ in it reaches the app and the worker. After a change, run
 | `APP_DB_PASSWORD` | Password of `tracker_app`. |
 | `WORKER_DB_PASSWORD` | Password of `tracker_worker`. |
 | `JWT_SECRET` | Signs sessions. Changing it signs everybody out. |
-| `ENCRYPTION_KEY` | Encrypts what the server keeps to read back: second-factor secrets, GitHub and Slack tokens, an import's API key, the mail password or key saved in Server settings. At least 32 characters (`openssl rand -hex 32`). `setup.sh` writes it for a new server; without it they are encrypted with a key derived from `JWT_SECRET`, as before. See [Rotating the secrets](#rotating-the-secrets). |
+| `ENCRYPTION_KEY` | Encrypts what the server keeps to read back: second-factor secrets, GitHub and Slack tokens, an import's API key, the mail password or key saved in Server settings, the browser push key the server made for itself. At least 32 characters (`openssl rand -hex 32`). `setup.sh` writes it for a new server; without it they are encrypted with a key derived from `JWT_SECRET`, as before. See [Rotating the secrets](#rotating-the-secrets). |
 | `SETUP_TOKEN` | The setup link's one-time token: `APP_URL/setup?token=…` opens the screen that sets up email and creates the owner's account. `setup.sh` writes it and prints the link; the app prints it in its log on every start until the server has an owner. It stops working the moment there is one. At least 32 letters and digits; anything shorter refuses to start. See [The first opening](#the-first-opening). |
 | `OWNER_EMAIL` | Your email, as the server's owner. Until somebody owns the server, only this address can become the owner, on the setup screen or by signing up and confirming it. Left empty, any address can, through the setup link. **Left empty with no `SETUP_TOKEN` either, the first person to sign up and confirm an address owns the server.** It means nothing once the server has an owner. |
 
@@ -219,20 +219,43 @@ that are already there.
 
 | Variable | Default | Meaning |
 | -------- | ------- | ------- |
-| `VAPID_PUBLIC_KEY` | none | The public half of the server's push key. |
-| `VAPID_PRIVATE_KEY` | none | The private half. |
-| `VAPID_SUBJECT` | none | How a push service can reach you: `mailto:you@example.com`. Required with the keys: without it push stays off, and the app's log says so. |
+| `VAPID_PUBLIC_KEY` | made by the server | The public half of the server's push key. |
+| `VAPID_PRIVATE_KEY` | made by the server | The private half. |
+| `VAPID_SUBJECT` | the server's address | How a push service can reach you: `mailto:you@example.com` or `https://…`. |
 
-Without them, the app runs and its notification settings say push is not
-set up. Make the pair once:
+**Browser push works without setting anything.** With neither key in
+`.env`, the server makes its own pair on its first start and keeps it in
+the database, the private half encrypted like the other secrets there (under
+`ENCRYPTION_KEY` when it is set; `reseal` moves it with the rest). The app
+and the worker use the same pair, and it is never made again. Without
+`VAPID_SUBJECT` the push services are given the server's own address, the
+origin of `APP_URL` (`https://tuff.example.com`), and nobody's email. Only
+when `APP_URL` is not `https:` — trying it on localhost — is it `mailto:`
+the address mail is sent from (`MAIL_FROM` when `.env` sends mail, else
+the sender saved in Server settings), never a person's own; with neither,
+push is off and the app's log says to set `VAPID_SUBJECT`.
+
+**The app and the worker must sign with the same pair.** Put `VAPID_*` on
+both or on neither, and give both the same `ENCRYPTION_KEY` and
+`JWT_SECRET`: with the compose file they share `.env`, but on a host where
+each service has its own variables (Railway) one side can be missed. Each
+logs the key it signs with by a short name (`signs browser push with key
+1a2b3c4d`), and the worker says loudly when its key is not the app's.
+
+Keys in `.env` win over the kept pair. Set them only if you want the pair
+outside the database, for instance to move it between servers. Make it once:
 
 ```bash
 docker compose exec app node -e "const c=require('crypto');const k=c.generateKeyPairSync('ec',{namedCurve:'prime256v1'});const p=k.publicKey.export({format:'jwk'});console.log('VAPID_PUBLIC_KEY='+Buffer.concat([Buffer.from([4]),Buffer.from(p.x,'base64url'),Buffer.from(p.y,'base64url')]).toString('base64url'));console.log('VAPID_PRIVATE_KEY='+k.privateKey.export({format:'jwk'}).d)"
 ```
 
-Add both lines and `VAPID_SUBJECT` to `.env`, then `docker compose up -d`.
-**Keep the pair.** A new one ends every subscription anybody has made, and
-people have to turn notifications on again.
+Add both lines to `.env`, then `docker compose up -d`. **Keep the pair,
+wherever it is.** A new one ends every subscription anybody has made, and
+people have to turn notifications on again — which is also what happens
+when keys are added to `.env` on a server that made its own, or taken out
+of `.env` on one that had them. If the log says the kept key will not open,
+it names the key that sealed it and the fix; the server never replaces it
+on its own (see [Rotating the secrets](#rotating-the-secrets)).
 
 Push reaches browsers and the installed web app. The iPhone and Android
 apps talk only to usetuff.com, so they get nothing from your server, and
@@ -714,6 +737,22 @@ factor cannot be opened can still sign in with a recovery code, then turn
 the factor off and on again. A GitHub or Slack link that cannot be opened
 has to be connected again, and so does mail saved in Server settings: until
 then no email is sent, and the log says so once.
+
+**Browser push** is affected too, when the server made its own push key:
+it is kept encrypted, and one that will not open turns browser push off.
+The log says which key sealed it — `JWT_SECRET`, or an `ENCRYPTION_KEY` by
+a short id — so the fix is to put that key back (`ENCRYPTION_KEY_PREVIOUS`,
+or the old `JWT_SECRET`) on both the app and the worker and run
+`reseal.js`; push comes back within a minute. If the key is lost, start
+again with a new pair:
+
+```bash
+docker compose exec -T postgres psql -U tracker -d tracker -c "delete from instance_push_key"
+docker compose restart app worker
+```
+
+Restart both the app and the worker. Everyone then has to turn
+notifications on again.
 
 ## Logs and health
 

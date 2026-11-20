@@ -4,8 +4,8 @@ import { z } from 'zod'
 import { v7 as uuidv7 } from 'uuid'
 import { withActor } from '../db.js'
 import { type AuthContext } from '../auth/context.js'
-import { env } from '../env.js'
-import { reachable, sendTo, webPushConfigured, type DeviceKind } from '../push.js'
+import { reachable, sendTo, vapidPublicKey, type DeviceKind } from '../push.js'
+import { freshPushKey } from '../pushKey.js'
 import { apnsConfigured, apnsEndpoint, askPhone, phones } from '../apns.js'
 import { askAndroid, fcmConfigured } from '../fcm.js'
 import { heard, languageFor, say } from '../words.js'
@@ -85,6 +85,8 @@ function anAndroid(raw: unknown): Device | null {
  */
 push.get('/push', async (c) => {
   const ctx = c.get('ctx')
+  /* On your own server, the pair it keeps and its subject — `pushKey.ts`. */
+  await freshPushKey()
   const rows = await withActor(
     ctx.actorId,
     ctx.workspaceId,
@@ -98,7 +100,7 @@ push.get('/push', async (c) => {
   return c.json({
     // Empty means the deployment has no keys, which the switch says out loud
     // rather than failing when somebody presses it.
-    key: webPushConfigured() ? env.vapidPublicKey : null,
+    key: vapidPublicKey(),
     // Whether the Apple apps can be, which their switch says the same way.
     apns: apnsConfigured(),
     // And the Android app.
@@ -115,6 +117,7 @@ push.post('/push', async (c) => {
   if (ctx.viaMcp) return c.json({ error: { code: 'forbidden', message: 'Connected tools can’t turn on notifications.' } }, 403)
   const raw: unknown = await c.req.json().catch(() => ({}))
   const kind: DeviceKind = typeof raw === 'object' && raw !== null ? ('apns' in raw ? 'apns' : 'fcm' in raw ? 'fcm' : 'web') : 'web'
+  if (kind === 'web') await freshPushKey()
   if (!reachable(kind)) return c.json({ error: { code: 'unavailable' } }, 503)
   const device = kind === 'apns' ? aPhone(raw) : kind === 'fcm' ? anAndroid(raw) : aBrowser(raw)
   if (!device) return c.json({ error: { code: 'invalid' } }, 400)
@@ -175,6 +178,7 @@ export const trial: { phones: typeof phones; android?: import('../fcm.js').Send 
 push.post('/push/test', async (c) => {
   const ctx = c.get('ctx')
   if (ctx.viaMcp) return c.json({ error: { code: 'forbidden', message: 'Connected tools can’t send notifications.' } }, 403)
+  await freshPushKey()
   const rows = await withActor(
     ctx.actorId,
     ctx.workspaceId,

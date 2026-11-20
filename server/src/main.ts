@@ -14,6 +14,7 @@ import { whereBytesGo } from './storage.js'
 import { env } from './env.js'
 import { mailFrom, mailOn } from './mail.js'
 import { webPushConfigured } from './push.js'
+import { pushKeyLine, vapidPair } from './pushKey.js'
 import { alive, authenticate, type AuthContext } from './auth/context.js'
 import { subscribe } from './realtime.js'
 import { sql } from './db.js'
@@ -588,8 +589,26 @@ needSiteUrl({ appUrl: env.appUrl, vendorSite: edition.vendor?.site ?? null, live
 /* Who letters are from, asked now so a server that would send them from
    nobody — or from the service, on your own — stops here, saying so. */
 mailFrom()
-if (env.vapidPublicKey && env.vapidPrivateKey && !webPushConfigured()) {
-  console.error('[push] VAPID_SUBJECT is not set, so browser push is off. Set it to mailto:you@example.com — see .env.example.')
+/* Browser push, as `pushKey.ts` read it in `edition.ready`: the environment's
+   pair, or on your own server the one it keeps. */
+if (!webPushConfigured()) {
+  if (Boolean(env.vapidPublicKey) !== Boolean(env.vapidPrivateKey)) {
+    console.error(
+      '[push] Only one of VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY is set, so browser push is off. Set both' +
+        (edition.instance ? ', or neither and this server keeps a key of its own.' : '.'),
+    )
+  } else if (vapidPair() && edition.instance) {
+    console.error(
+      '[push] Browser push is off: no VAPID_SUBJECT, APP_URL is not https, and no mail sender is set up to give the push services. Set VAPID_SUBJECT=mailto:you@example.com.',
+    )
+  } else if (vapidPair()) {
+    console.error('[push] VAPID_SUBJECT is not set, so browser push is off. Set it to mailto:you@example.com — see .env.example.')
+  }
+}
+/* Which key it signs with, by a short name the worker's log says too. */
+{
+  const line = pushKeyLine('app')
+  if (line) console.log(line)
 }
 
 /* Once, before listening — on the service, IndexNow told of the pages that

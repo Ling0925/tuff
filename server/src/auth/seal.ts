@@ -30,11 +30,12 @@ import { env } from '../env.js'
  * keys apart and says nothing about either.
  */
 /** `webhook`: the receiver's own key a webhook sends as `Authorization` (migration 266).
-    `mail`: the SMTP password or Resend key Server settings keeps (migration 301). */
-export type Sealing = 'totp' | 'github' | 'webhook' | 'mail'
+    `mail`: the SMTP password or Resend key Server settings keeps (migration 301).
+    `vapid`: the private half of the push key your own server makes for itself (migration 305). */
+export type Sealing = 'totp' | 'github' | 'webhook' | 'mail' | 'vapid'
 
 /** The labels version 0 derived its keys under — unchanged, or nothing old opens. */
-const V0: Record<Sealing, string> = { totp: 'totp-v1', github: 'github-v1', webhook: 'webhook-v1', mail: 'mail-v1' }
+const V0: Record<Sealing, string> = { totp: 'totp-v1', github: 'github-v1', webhook: 'webhook-v1', mail: 'mail-v1', vapid: 'vapid-v1' }
 
 /** What a sealing can be opened or made with: the session secret, and the keys at rest. */
 export type Ring = { jwt: string; current: string; previous: string }
@@ -99,3 +100,19 @@ export function stale(sealed: string, ring: Ring = envRing()): boolean {
   const parts = sealed.split('.')
   return !(parts.length === 5 && parts[0] === 'v1' && parts[1] === keyId(ring.current))
 }
+
+/**
+ * Which key sealed it, never the key: version 0, under `JWT_SECRET`, or
+ * version 1 and the id of the `ENCRYPTION_KEY` — the id says which key and
+ * nothing about it. Null for something that is no sealing. For a log line
+ * that has to say what to put back.
+ */
+export function sealedWith(sealed: string): { version: 0 } | { version: 1; keyId: string } | null {
+  const parts = sealed.split('.')
+  if (parts.length === 3) return { version: 0 }
+  if (parts.length === 5 && parts[0] === 'v1') return { version: 1, keyId: parts[1]! }
+  return null
+}
+
+/** The id `sealedWith` names a key by, for a key this server has; empty for none. */
+export const keyIdOf = (root: string): string => (root ? keyId(root) : '')

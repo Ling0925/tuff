@@ -33,6 +33,7 @@ export const SEALED: readonly { table: string; id: string; column: string; kind:
   { table: 'webhook', id: 'id', column: 'authorization_enc', kind: 'webhook' },
   { table: 'instance_mail', id: 'id', column: 'smtp_password_enc', kind: 'mail' },
   { table: 'instance_mail', id: 'id', column: 'resend_key_enc', kind: 'mail' },
+  { table: 'instance_push_key', id: 'id', column: 'private_key_enc', kind: 'vapid' },
 ]
 
 export type Resealed = { moved: number; unreadable: number /** `table.column id=…` of each one that would not open. */; which: string[] }
