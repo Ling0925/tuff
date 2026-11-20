@@ -37,6 +37,7 @@ import { invites, publicInvites } from './invites.js'
 import { publicDocs } from './publicDocs.js'
 import { access, bindBrowser, origin, sendAlreadyHere, sendChoosePassword } from './access.js'
 import { setup } from './setup.js'
+import { addCookies } from './afterward.js'
 import { asksOf, codeFromInbox, itIsThem, tellFactorOn } from '../auth/address.js'
 import { projects } from './projects.js'
 import { places } from './places.js'
@@ -683,9 +684,11 @@ app.use('/api/*', async (c, next) => {
   const now = readFileCookie(had)
   if (now && now.actorId === ctx.actorId && now.left > 86_400) return
   try {
-    for (const h of cookieHeaders(fileCookie(ctx.actorId))) c.res.headers.append('set-cookie', h)
+    /* Made again with the cookies in it, not appended: appended, the
+       running server dropped them from every GET — `afterward.ts`. */
+    addCookies(c, cookieHeaders(fileCookie(ctx.actorId)))
   } catch {
-    // A response whose headers are fixed: the next answer sets it.
+    // An answer that cannot be made again (a socket's upgrade): the next answer sets it.
   }
 })
 
