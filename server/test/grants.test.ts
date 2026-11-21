@@ -82,6 +82,9 @@ const AS_OWNER = new Set([
   // start as the owner (`backup.ts`); no request may write it.
   'instance_migrated',
   'instance_ran',
+  // The public half of the push key the serving app signs with, for the
+  // worker to compare (`pushKey.ts`); written as the owner, never a request.
+  'instance_push_app_key_said',
 ])
 
 function sources(d: string, out: string[] = []): string[] {
