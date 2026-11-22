@@ -70,7 +70,10 @@ The server connects as `tracker_app`, a role that row-level security
 applies to and that cannot bypass it. Migrations run as the database's
 owner (`DATABASE_URL`), on start, from `server/migrations/` in order; they
 only go forward. The worker has a role of its own, `tracker_worker`, with
-only what its jobs need.
+only what its jobs need. Signing in has one too, `tracker_auth`: a member of
+`tracker_app` that alone writes a way in, makes or ends a session or a
+token, or deletes an account, so a fault in any other request cannot take
+over an account.
 
 Lists are paged by cursor, never by page number.
 

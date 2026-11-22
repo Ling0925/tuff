@@ -1,6 +1,6 @@
 import { Hono, type Context, type Next } from 'hono'
 import { DEFAULT_SETTINGS } from '@tracker/shared-schema'
-import { sql, withoutActor } from '../db.js'
+import { authSql, sql, withoutActor } from '../db.js'
 import { edition } from '../edition.js'
 import { faced } from '../storage.js'
 import { allow, type AuthContext } from '../auth/context.js'
@@ -115,7 +115,7 @@ function personOnly(actorId: string, sessionId: string, p: Person, signUpClosed:
  * workspace session later with none.
  */
 async function endNowhere(who: Who): Promise<void> {
-  await sql`select nowhere_session_end(${who.actorId}, ${who.sessionId})`
+  await authSql()`select nowhere_session_end(${who.actorId}, ${who.sessionId})`
 }
 async function thenEnd(who: Who, res: Response): Promise<Response> {
   if (res.status < 300) await endNowhere(who)

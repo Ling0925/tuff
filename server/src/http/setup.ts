@@ -5,7 +5,7 @@ import { v7 as uuidv7 } from 'uuid'
 import { z } from 'zod'
 import { hashPassword } from '../auth/crypto.js'
 import { ownWorkspaceName, planNewWorkspace, startSession } from '../auth/flows.js'
-import { withoutActor } from '../db.js'
+import { asAuth } from '../db.js'
 import { edition } from '../edition.js'
 import { env, PLAIN_ADDRESS } from '../env.js'
 import { letter, mailOn, mailSetup, oneLine, send } from '../mail.js'
@@ -55,7 +55,7 @@ async function admit(c: Context): Promise<Admitted> {
   if (!armed) return { answer: await c.notFound() }
   const tried = await attempt(`fail:setup:${clientOf(c)}`, 10, 900)
   if (!tried.ok) return { answer: c.json(tooMany, 429) }
-  const [state] = await withoutActor((tx) => tx<{ s: { claimed: boolean } }[]>`select instance_setup_state() as s`)
+  const [state] = await asAuth((tx) => tx<{ s: { claimed: boolean } }[]>`select instance_setup_state() as s`)
   if (state?.s.claimed) {
     await tried.right()
     return { answer: c.json(done, 410) }
@@ -82,7 +82,7 @@ setup.put('/setup/mail', async (c) => {
   if ('answer' in a) return a.answer
   const body = MailInput.safeParse(await c.req.json().catch(() => ({})))
   if (!body.success) return c.json({ error: { code: 'invalid', message: 'Fill in every field.' } }, 400)
-  const said = await withoutActor((tx) => saveMail(tx, body.data, a.hash))
+  const said = await asAuth((tx) => saveMail(tx, body.data, a.hash))
   if (said !== 'saved') {
     /* The database's refusal: the server was claimed, or the token changed, between the two. */
     if (said.code === 'forbidden') return c.json(badToken, 403)
@@ -95,7 +95,7 @@ setup.put('/setup/mail', async (c) => {
 setup.delete('/setup/mail', async (c) => {
   const a = await admit(c)
   if ('answer' in a) return a.answer
-  const said = await withoutActor((tx) => clearMail(tx, a.hash))
+  const said = await asAuth((tx) => clearMail(tx, a.hash))
   if (said === false) return c.json(badToken, 403)
   if (said !== true) return c.json(refusalBody(said), said.status)
   await mailChanged()
@@ -161,7 +161,7 @@ setup.post('/setup/owner', async (c) => {
   const wsName = ownWorkspaceName(body.data.name)
   let made: { actor_id: string; workspace_id: string; made: boolean; workspace_made: boolean }
   try {
-    made = await withoutActor(async (tx) => {
+    made = await asAuth(async (tx) => {
       const [free] = await tx<{ slug: string }[]>`select free_workspace_slug(${wsName}) as slug`
       const [r] = await tx<{ r: typeof made }[]>`
         select instance_setup_owner(${a.hash}, ${uuidv7()}, ${body.data.name}, ${email}, ${passwordHash},

@@ -43,6 +43,7 @@ await migrate(at(shared))
 process.env.DATABASE_URL = at(shared)
 process.env.DATABASE_URL_APP = at(process.env.DATABASE_URL_APP ?? shared)
 if (process.env.DATABASE_URL_WORKER) process.env.DATABASE_URL_WORKER = at(process.env.DATABASE_URL_WORKER)
+if (process.env.DATABASE_URL_AUTH) process.env.DATABASE_URL_AUTH = at(process.env.DATABASE_URL_AUTH)
 /* GitHub sign-in on, before anything reads the environment. */
 process.env.GITHUB_SIGNIN_CLIENT_ID = 'signin-id'
 process.env.GITHUB_SIGNIN_CLIENT_SECRET = 'signin-secret'
@@ -56,7 +57,7 @@ const { SignUpClosed } = await import('../src/instance.js')
 const { authenticate, allowedActions } = await import('../src/auth/context.js')
 const { outbox } = await import('../src/mail.js')
 const { generateToken, hashPassword, hashToken } = await import('../src/auth/crypto.js')
-const { closeDb, withoutActor, withActor, inWorkspace, bearerFor, makeProject } = await import('./helpers.js')
+const { closeDb, withoutActor, withActor, inWorkspace, bearerFor, makeProject, asAuth, asAuthEverywhere } = await import('./helpers.js')
 
 /* The service's edition, where this tree has it. The edition's own tree
    has only the community's (`edition.ts` is it there), so the service is
@@ -123,7 +124,7 @@ const register = (s: string) => call('/auth/register', { body: registration(s) }
 const script = (s = uid()) => registerUser({ ...registration(s), workspace_slug: `ins-${s}` })
 
 async function accountOf(email: string): Promise<string | null> {
-  const [r] = await withoutActor((tx) => tx<{ actor_id: string }[]>`select actor_id from auth_lookup_user(${email})`)
+  const [r] = await asAuth((tx) => tx<{ actor_id: string }[]>`select actor_id from auth_lookup_user(${email})`)
   return r?.actor_id ?? null
 }
 async function bearerOf(actorId: string): Promise<string> {
@@ -173,7 +174,7 @@ test('on the service nothing changes: sign-up open, no owners, /api/instance is 
   const ctx = await authenticate(`Bearer ${someone.access_token}`)
   assert.ok(ctx)
   assert.equal(allowedActions(ctx).includes('instance'), false)
-  const [d] = await withActor(someone.actor_id, (tx) => tx<{ d: { why?: string } }[]>`select delete_my_account(true) as d`)
+  const [d] = await asAuthEverywhere(someone.actor_id, (tx) => tx<{ d: { why?: string } }[]>`select delete_my_account(true) as d`)
   assert.notEqual(d?.d.why, 'last_instance_owner')
   await owner`truncate instance_owner`
 })
@@ -279,10 +280,10 @@ test('the application role cannot make itself an owner', async () => {
   )
   const undone = await owner`update app_user set email_verified_at = null where actor_id = ${old.actor_id}`
   assert.equal(undone.count, 1)
-  await withoutActor((tx) => tx`select auth_confirm_email(${old.actor_id})`)
+  await asAuth((tx) => tx`select auth_confirm_email(${old.actor_id})`)
   assert.equal(await confirmed(old.actor_id), true)
   /* Nor does somebody who is not an owner name one, or open sign-up. */
-  const [said] = await withActor(
+  const [said] = await asAuthEverywhere(
     old.actor_id,
     (tx) => tx<{ a: string; b: boolean }[]>`
     select instance_add_owner('x@example.com'::citext) as a, instance_set_sign_up(true) as b`,
@@ -299,7 +300,7 @@ test('an account made on somebody’s behalf never claims the server', async () 
   await script()
   /* Even made through `register_owner` itself, confirmed, by a script. */
   const id = randomUUID()
-  await withoutActor(
+  await asAuth(
     (tx) => tx`select register_owner(${id}, 'Script', ${`s${uid()}@example.com`}, null,
     ${randomUUID()}, 'Script', ${`scr-${uid()}`}, true, false)`,
   )
@@ -417,11 +418,12 @@ test('after the claim, sign-up is closed on every path', async () => {
     await assert.rejects(whoIs(p, `${p}-${uid()}`, email, true, 'New'), SignUpClosed)
     assert.equal(await accountOf(email), null)
   }
-  /* `register_owner` called straight, as the application role: refused,
-     and nothing made — the database's rule, not a route's. */
+  /* `register_owner` called straight, as the sign-in role: refused, and
+     nothing made — the database's rule, not a route's. (The application
+     role may not call it at all — migration 308.) */
   const id = randomUUID()
   await assert.rejects(
-    withoutActor(
+    asAuth(
       (tx) => tx`select register_owner(${id}, 'Direct', ${`d${uid()}@example.com`}, null,
       ${randomUUID()}, 'Direct', ${`dir-${uid()}`})`,
     ),
@@ -602,7 +604,7 @@ test('the owner opens sign-up, names and removes owners, never the last, and tes
   }
 
   /* The last owner does not delete their account. */
-  const [d] = await withActor(first!, (tx) => tx<{ d: { why?: string } }[]>`select delete_my_account(true) as d`)
+  const [d] = await asAuthEverywhere(first!, (tx) => tx<{ d: { why?: string } }[]>`select delete_my_account(true) as d`)
   assert.equal(d?.d.why, 'last_instance_owner')
 
   /* A test letter, to the owner's own address and nobody else's. */
@@ -645,8 +647,8 @@ test('two owners deleting their accounts at once leave one owner', async () => {
   /* Three owners; the first stays out of it. Take it out of the count. */
   await owner`delete from instance_owner where actor_id = ${first!}`
   const tries = await Promise.allSettled([
-    withActor(a.actor_id, (tx) => tx<{ d: { ok: boolean; why?: string } }[]>`select delete_my_account(false) as d`),
-    withActor(b.actor_id, (tx) => tx<{ d: { ok: boolean; why?: string } }[]>`select delete_my_account(false) as d`),
+    asAuthEverywhere(a.actor_id, (tx) => tx<{ d: { ok: boolean; why?: string } }[]>`select delete_my_account(false) as d`),
+    asAuthEverywhere(b.actor_id, (tx) => tx<{ d: { ok: boolean; why?: string } }[]>`select delete_my_account(false) as d`),
   ])
   const said = tries.map((t) => (t.status === 'fulfilled' ? t.value[0]!.d : { ok: false, why: String(t.reason) }))
   assert.equal(said.filter((d) => d.ok).length, 1, JSON.stringify(said))
@@ -661,8 +663,8 @@ test('two owners deleting their accounts at once leave one owner', async () => {
   const c = await script()
   await owner`insert into instance_owner (actor_id) values (${c.actor_id})`
   await Promise.allSettled([
-    withActor(left!, (tx) => tx`select instance_remove_owner(${c.actor_id})`),
-    withActor(left!, (tx) => tx`select delete_my_account(false)`),
+    asAuthEverywhere(left!, (tx) => tx`select instance_remove_owner(${c.actor_id})`),
+    asAuthEverywhere(left!, (tx) => tx`select delete_my_account(false)`),
   ])
   assert.ok((await owners()).length >= 1)
 
@@ -687,7 +689,7 @@ test('racing the first confirmation makes one owner, never two or none', async (
   for (const s of tries) await signUp(registration(s))
   /* `signUp` mails nothing; confirm as the link does. */
   const ids = await Promise.all(tries.map((s) => accountOf(`ines${s}@example.com`)))
-  const confirms = await Promise.allSettled(ids.map((id) => withoutActor((tx) => tx`select auth_confirm_email(${id!})`)))
+  const confirms = await Promise.allSettled(ids.map((id) => asAuth((tx) => tx`select auth_confirm_email(${id!})`)))
   const won = confirms.findIndex((r) => r.status === 'fulfilled')
   assert.equal(confirms.filter((r) => r.status === 'fulfilled').length, 1)
   assert.ok(confirms.every((r) => r.status === 'fulfilled' || /sign_up_closed/.test(String(r.reason))))
@@ -937,10 +939,10 @@ test('with OWNER_EMAIL set, a stranger cannot sign up on an unclaimed server, an
     assert.equal(r.body.error.code, 'sign_up_closed')
     assert.match(r.body.error.message, /Sign-up is closed on this server/)
     assert.equal(await accountOf(`ines${stranger}@example.com`), null)
-    /* Called straight, as the application role: the database's rule. */
+    /* Called straight, as the sign-in role: the database's rule. */
     const id = randomUUID()
     await assert.rejects(
-      withoutActor(
+      asAuth(
         (tx) => tx`select register_owner(${id}, 'Direct', ${`d${uid()}@example.com`}, ${'x'},
         ${randomUUID()}, 'Direct', ${`dir-${uid()}`}, false, true)`,
       ),
@@ -987,7 +989,7 @@ test('the database compares the named address without regard to case', async () 
   await owner`select instance_started(${`Named${s}@Example.com`}::citext, true)`
   try {
     const id = randomUUID()
-    await withoutActor(
+    await asAuth(
       (tx) => tx`select register_owner(${id}, 'Named', ${`NAMED${s}@EXAMPLE.COM`}, ${'x'},
       ${randomUUID()}, 'Named', ${`nam-${uid()}`}, false, true)`,
     )

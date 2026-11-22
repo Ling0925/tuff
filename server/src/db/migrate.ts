@@ -6,10 +6,12 @@
  * unique indexes or triggers anyway, and hiding those behind an abstraction is
  * more dangerous than keeping them in SQL you can read whole.
  */
+import { createHash, createHmac, pbkdf2Sync, randomBytes } from 'node:crypto'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import postgres from 'postgres'
+import { authUrlFrom } from './authUrl.js'
 
 const MIGRATIONS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'migrations')
 
@@ -187,6 +189,10 @@ export async function migrate(
     }
     await letTheAppIn(sql)
     await letTheAppIn(sql, process.env.DATABASE_URL_WORKER, 'tracker_worker')
+    /* The sign-in role from `DATABASE_URL_AUTH`, or from what `db/authUrl.ts`
+       makes of `DATABASE_URL_APP` — the string the serving start connects
+       with, so the two cannot disagree. Once it exists (migration 308). */
+    await letTheAppIn(sql, authUrlFrom(process.env.DATABASE_URL_AUTH, process.env.DATABASE_URL_APP), 'tracker_auth')
     await after?.(sql)
     return applied
   } finally {
@@ -227,11 +233,41 @@ async function letTheAppIn(sql: postgres.Sql, url = process.env.DATABASE_URL_APP
   const role = decodeURIComponent(who.username)
   const secret = decodeURIComponent(who.password)
   if (!role || !secret || (only && role !== only)) return
+  /* A role a migration has not made yet — the sign-in role on a database
+     migrated by a build older than 308 — is left for the start that makes it. */
+  const [known] = await sql<{ yes: boolean }[]>`select exists (select 1 from pg_roles where rolname = ${role}) as yes`
+  if (!known?.yes) return
   // Identifiers cannot be parameters, and the password must not be one either
   // — `alter role` takes a literal. Both are quoted by the server rather than
   // by hand: `format` with %I and %L is the escaping, not a concatenation
   // somebody has to get right.
-  await sql`select format('alter role %I login password %L', ${role}::text, ${secret}::text)`.then((rows) =>
-    sql.unsafe((rows[0] as { format: string }).format),
-  )
+  //
+  // And what is sent is a SCRAM-SHA-256 verifier made here, never the
+  // password: a statement that fails, or a server set to `log_statement =
+  // ddl` (or `all`, which logs the parameter of the `format` too), writes it
+  // to the log whole, and a verifier there cannot be signed in with.
+  // Postgres stores a verifier it is handed as it is.
+  const [made] = await sql<{ format: string }[]>`
+    select format('alter role %I login password %L', ${role}::text, ${scramVerifier(secret)}::text)`
+  await sql.unsafe(made!.format)
+}
+
+/**
+ * The SCRAM-SHA-256 verifier Postgres would store for `password` — RFC 5802
+ * and 7677, as `pg_authid.rolpassword` holds it:
+ * `SCRAM-SHA-256$<iterations>:<salt>$<StoredKey>:<ServerKey>`, base64.
+ *
+ * Over the password's raw UTF-8 bytes, nothing normalised: that is what the
+ * client proves against when it signs in — postgres.js runs PBKDF2 over the
+ * password exactly as given — so a verifier made from anything else (a
+ * SASLprep or NFKC form of a non-ASCII password) would lock the role out.
+ * Every password made for these roles is printable ASCII anyway
+ * (`setup.sh`, the template's `secret()`, `db/authUrl.ts`).
+ */
+export function scramVerifier(password: string, salt: Buffer = randomBytes(16), iterations = 4096): string {
+  const salted = pbkdf2Sync(Buffer.from(password, 'utf8'), salt, iterations, 32, 'sha256')
+  const hmac = (key: Buffer, text: string) => createHmac('sha256', key).update(text).digest()
+  const stored = createHash('sha256').update(hmac(salted, 'Client Key')).digest()
+  const server = hmac(salted, 'Server Key')
+  return `SCRAM-SHA-256$${iterations}:${salt.toString('base64')}$${stored.toString('base64')}:${server.toString('base64')}`
 }

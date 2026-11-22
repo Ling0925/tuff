@@ -2,7 +2,7 @@ import { Hono, type Context } from 'hono'
 import { keyFor, legacyKey, mac, same } from '../auth/keys.js'
 import { z } from 'zod'
 import { v7 as uuidv7 } from 'uuid'
-import { withActor, withoutActor } from '../db.js'
+import { asAuthActor, withActor, withoutActor } from '../db.js'
 import { env } from '../env.js'
 import { UNPROVED, allow, allowIn, type AuthContext } from '../auth/context.js'
 import {
@@ -490,7 +490,8 @@ githubApi.post('/github/me', async (c) => {
   }
   const [taken] = await withoutActor((tx) => tx<{ yes: boolean }[]>`select github_account_taken(${user.id}, ${ctx.actorId}) as yes`)
   if (taken?.yes) return c.json({ error: { code: 'conflict', message: 'That GitHub account is linked to somebody else.' } }, 409)
-  await withActor(
+  /* Written by the sign-in role alone, as the person (migration 308). */
+  await asAuthActor(
     ctx.actorId,
     ctx.workspaceId,
     (tx) => tx`
@@ -510,7 +511,7 @@ githubApi.delete('/github/me', async (c) => {
   const ctx = c.get('ctx')
   if (ctx.viaMcp || ctx.viaGithub) return c.json(forbidden, 403)
   const token = await personToken(ctx.actorId)
-  await withActor(ctx.actorId, ctx.workspaceId, (tx) => tx`delete from github_person where actor_id = ${ctx.actorId}`)
+  await asAuthActor(ctx.actorId, ctx.workspaceId, (tx) => tx`delete from github_person where actor_id = ${ctx.actorId}`)
   void letGo(token)
   return c.body(null, 204)
 })

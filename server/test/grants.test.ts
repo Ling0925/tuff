@@ -47,19 +47,22 @@ test('no definer function is anybody’s to run but the roles it is granted to',
     open.map((r) => r.f),
     [],
   )
-  // The worker's role, which has no table of its own, reaches no sign-in function.
-  const [w] = await owner<{ ok: boolean }[]>`select has_function_privilege('tracker_worker', 'auth_lookup_user(citext)', 'execute') as ok`
-  assert.equal(w!.ok, false)
+  // The worker's role, which has no table of its own, reaches no sign-in
+  // function (the application's is phase 2, `auth-role-refused.test.ts`).
+  const [w] = await owner<{ worker: boolean }[]>`
+    select has_function_privilege('tracker_worker', 'auth_lookup_user(citext)', 'execute') as worker`
+  assert.equal(w!.worker, false)
 })
 
 test('a function made from now on is nobody’s until it is granted', async () => {
   await owner
     .begin(async (tx) => {
       await tx`create function grants_probe() returns int language sql security definer as 'select 1'`
-      const [r] = await tx<{ app: boolean; worker: boolean }[]>`
+      const [r] = await tx<{ app: boolean; worker: boolean; auth: boolean }[]>`
         select has_function_privilege('tracker_app', 'grants_probe()', 'execute') as app,
-               has_function_privilege('tracker_worker', 'grants_probe()', 'execute') as worker`
-      assert.deepEqual({ ...r }, { app: false, worker: false })
+               has_function_privilege('tracker_worker', 'grants_probe()', 'execute') as worker,
+               has_function_privilege('tracker_auth', 'grants_probe()', 'execute') as auth`
+      assert.deepEqual({ ...r }, { app: false, worker: false, auth: false })
       throw new Error('rolled back')
     })
     .catch((e: Error) => assert.equal(e.message, 'rolled back'))
@@ -67,8 +70,10 @@ test('a function made from now on is nobody’s until it is granted', async () =
 
 /*
  * Every definer function the server names, runnable by whoever runs it:
- * the application role, or the worker's (`asWorker`), or the owner where
- * the code asks as the owner. Read from the source, so a function the code
+ * the application role, or the worker's (`asWorker`), or the sign-in
+ * role's (`asAuth`, migration 308), or the owner where the code asks as
+ * the owner. Which of them a given call is on is asked by running it — the
+ * flows' own tests, as each role. Read from the source, so a function the code
  * starts calling tomorrow is held to it too.
  */
 const AS_OWNER = new Set([
@@ -100,16 +105,17 @@ test('every definer function the server calls is granted to the role that calls 
   const text = sources(join(import.meta.dirname, '..', 'src'))
     .map((p) => readFileSync(p, 'utf8'))
     .join('\n')
-  const fns = await owner<{ name: string; app: boolean; worker: boolean }[]>`
+  const fns = await owner<{ name: string; app: boolean; worker: boolean; auth: boolean }[]>`
     select p.proname as name,
            bool_or(has_function_privilege('tracker_app', p.oid, 'execute')) as app,
-           bool_or(has_function_privilege('tracker_worker', p.oid, 'execute')) as worker
+           bool_or(has_function_privilege('tracker_worker', p.oid, 'execute')) as worker,
+           bool_or(has_function_privilege('tracker_auth', p.oid, 'execute')) as auth
     from pg_proc p
     where p.pronamespace = 'public'::regnamespace and p.prosecdef and p.prorettype <> 'trigger'::regtype
     group by p.proname`
   const missing = fns
     .filter((f) => new RegExp(`\\b${f.name}\\s*\\(`).test(text))
-    .filter((f) => !f.app && !f.worker && !AS_OWNER.has(f.name))
+    .filter((f) => !f.app && !f.worker && !f.auth && !AS_OWNER.has(f.name))
     .map((f) => f.name)
   assert.deepEqual(missing, [])
 })

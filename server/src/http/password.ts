@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { withoutActor } from '../db.js'
+import { asAuth } from '../db.js'
 import type { AuthContext } from '../auth/context.js'
 import { asksOf, emailOf, itIsThem } from '../auth/address.js'
 import { hashPassword } from '../auth/crypto.js'
@@ -64,7 +64,7 @@ password.post('/me/password', async (c) => {
   await tries.right()
 
   const hash = await hashPassword(body.data.password)
-  const [r] = await withoutActor((tx) => tx<{ n: number }[]>`select auth_change_password(${ctx.actorId}, ${hash}, ${ctx.sessionId!}) as n`)
+  const [r] = await asAuth((tx) => tx<{ n: number }[]>`select auth_change_password(${ctx.actorId}, ${hash}, ${ctx.sessionId!}) as n`)
   const language = await languageFor(ctx.actorId, heard(c))
   const w = say(
     {

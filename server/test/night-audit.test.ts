@@ -23,7 +23,7 @@ import {
   makeProject,
   stamp,
   uuidv7,
-  withoutActor,
+  asAuth,
 } from './helpers.js'
 
 /*
@@ -165,7 +165,7 @@ test('a passcode is taken once: at signing in, at a re-ask, and the one that tur
 
   // A step that is not one of now's is never kept: kept, it would refuse
   // every code the authenticator ever showed again (the review, F2).
-  const far = await withoutActor((tx) => tx<{ ok: boolean }[]>`select auth_totp_spend(${u.actor_id}, 9000000000000000000) as ok`)
+  const far = await asAuth((tx) => tx<{ ok: boolean }[]>`select auth_totp_spend(${u.actor_id}, 9000000000000000000) as ok`)
   assert.equal(far[0]?.ok, false)
   const [kept] = await asTableOwner()<
     { step: string | null }[]

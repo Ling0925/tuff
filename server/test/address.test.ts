@@ -5,7 +5,7 @@ import { app } from '../src/http/routes.js'
 import { whoIs } from '../src/http/access.js'
 import { outbox } from '../src/mail.js'
 import { issueApiToken, registerUser } from '../src/auth/flows.js'
-import { withoutActor } from '../src/db.js'
+import { asAuth } from '../src/db.js'
 import { closeDb, stamp as fresh, withActor } from './helpers.js'
 
 after(async () => {
@@ -139,7 +139,7 @@ test('a second factor is asked for too, and a wrong code counts like a wrong pas
   const me = await someone(stamp, 'twofa')
   const { generateSecret, seal } = await import('../src/auth/totp.js')
   const secret = generateSecret()
-  await withoutActor(async (tx) => {
+  await asAuth(async (tx) => {
     await tx`select auth_totp_begin(${me.actor_id}, ${seal(secret)})`
     await tx`select auth_totp_enable(${me.actor_id})`
   })
@@ -249,7 +249,7 @@ test('the second factor is turned off with the password and a code from it', asy
   const me = await someone(stamp, 'factoroff')
   const { generateSecret, seal } = await import('../src/auth/totp.js')
   const secret = generateSecret()
-  await withoutActor(async (tx) => {
+  await asAuth(async (tx) => {
     await tx`select auth_totp_begin(${me.actor_id}, ${seal(secret)})`
     await tx`select auth_totp_enable(${me.actor_id})`
   })

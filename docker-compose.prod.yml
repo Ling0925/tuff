@@ -15,7 +15,7 @@
 # Everything secret comes from `.env` beside this file — never from here,
 # because this file is in git.
 
-# Three roles in one database, as on the service — and the second and third
+# Four roles in one database, as on the service — and the second and third
 # are why this file is longer than it looks like it needs to be:
 #
 #   tracker          owns the tables and runs the migrations. It bypasses
@@ -24,6 +24,9 @@
 #   tracker_app      every request. Row-level security holds for it: a
 #                    query that forgets its workspace gets nothing back.
 #   tracker_worker   the worker's own functions — queues, the clear-out.
+#   tracker_auth     signing in: passwords, second factors, sessions and
+#                    tokens. Nothing to set — its URL and password are made
+#                    from DATABASE_URL_APP.
 #
 # The migrations make the two roles without a password (a password in a
 # migration is a password in git), and the app's migration step gives each

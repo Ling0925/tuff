@@ -6,7 +6,9 @@ import { outbox } from '../src/mail.js'
 import { registerUser } from '../src/auth/flows.js'
 import { closeDb } from './helpers.js'
 import postgres from 'postgres'
-import { withoutActor } from '../src/db.js'
+/* The sign-in role's connection: the tickets, links and passwords these
+   fixtures make by hand are its definers' alone (migration 308). */
+import { asAuth as withoutActor } from '../src/db.js'
 import { hashPassword } from '../src/auth/crypto.js'
 
 /* As the tables' owner, for what only a fixture writes or reads. */

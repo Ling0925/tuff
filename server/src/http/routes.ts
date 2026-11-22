@@ -14,7 +14,7 @@ import { HTTPException } from 'hono/http-exception'
 import { z } from 'zod'
 import { v7 as uuidv7 } from 'uuid'
 import { API_VERSION, MAX_FILE_BYTES, MarkIcon, MarkTint, WorkspaceSettings } from '@tracker/shared-schema'
-import { bounded, sql, withActor, withoutActor } from '../db.js'
+import { asAuth, asAuthActor, authSql, bounded, sql, withActor } from '../db.js'
 import { digestOffValid } from '../digest.js'
 import { COMMIT, VERSION } from '../version.js'
 import { chose } from '../presence.js'
@@ -334,7 +334,7 @@ app.get('/digest/off', (c) =>
 app.post('/digest/off', async (c) => {
   const u = digestOwner(c)
   if (!u) return c.html(digestPage(DIGEST_BAD), 400)
-  await withoutActor((tx) => tx`select digest_off(${u})`)
+  await asAuth((tx) => tx`select digest_off(${u})`)
   return c.html(digestPage('You won’t get these emails any more. You can turn them back on under Notifications in your account.'))
 })
 
@@ -444,7 +444,7 @@ app.post('/auth/register', async (c) => {
      account, so the answer is the same for every address. */
   if (!(await signUpOpen())) return c.json(SIGN_UP_CLOSED, 403)
   const email = body.data.email.toLowerCase()
-  const [had] = await sql<{ actor_id: string }[]>`select actor_id from auth_lookup_user(${email})`
+  const [had] = await authSql()<{ actor_id: string }[]>`select actor_id from auth_lookup_user(${email})`
   if (had) {
     await sendAlreadyHere(c, had.actor_id, email)
     await bindBrowser(c, had.actor_id)
@@ -471,7 +471,7 @@ app.post('/auth/register', async (c) => {
        answer is the one that counts. */
     if (isClosed(e)) return c.json(SIGN_UP_CLOSED, 403)
     if (taken(e)) {
-      const [now] = await sql<{ actor_id: string }[]>`select actor_id from auth_lookup_user(${email})`
+      const [now] = await authSql()<{ actor_id: string }[]>`select actor_id from auth_lookup_user(${email})`
       if (now) await bindBrowser(c, now.actor_id)
       return c.json(pending(email), 202)
     }
@@ -922,7 +922,7 @@ app.get('/api/sessions', async (c) => {
 app.delete('/api/sessions', async (c) => {
   const ctx = c.get('ctx')
   if (ctx.viaMcp || !ctx.sessionId) return c.json({ error: { code: 'forbidden' } }, 403)
-  const [r] = await withActor(
+  const [r] = await asAuthActor(
     ctx.actorId,
     ctx.workspaceId,
     (tx) => tx<{ n: number }[]>`select auth_revoke_others(${ctx.actorId}, ${ctx.sessionId!}) as n`,
@@ -933,7 +933,7 @@ app.delete('/api/sessions', async (c) => {
 app.delete('/api/sessions/:id', async (c) => {
   const ctx = c.get('ctx')
   if (ctx.viaMcp) return c.json({ error: { code: 'forbidden' } }, 403)
-  const done = await withActor(ctx.actorId, ctx.workspaceId, async (tx) => {
+  const done = await asAuthActor(ctx.actorId, ctx.workspaceId, async (tx) => {
     const [r] = await tx<{ ok: boolean }[]>`
       select auth_revoke_session(${ctx.actorId}, ${c.req.param('id')}) as ok`
     return r?.ok ?? false

@@ -36,8 +36,9 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U tracker -d tracker"
           --health-interval 2s --health-timeout 3s --health-retries 30
-    # The same three roles as a server: the migrations make tracker_app and
-    # tracker_worker, and give them the passwords in these URLs.
+    # The same roles as a server: the migrations make tracker_app and
+    # tracker_worker, and give them the passwords in these URLs, and
+    # tracker_auth, whose URL and password are made from DATABASE_URL_APP.
     env:
       DATABASE_URL: postgres://tracker:tracker@localhost:5455/tracker
       DATABASE_URL_APP: postgres://tracker_app:tracker_app@localhost:5455/tracker

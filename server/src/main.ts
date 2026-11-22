@@ -17,7 +17,7 @@ import { webPushConfigured } from './push.js'
 import { pushKeyLine, vapidPair } from './pushKey.js'
 import { alive, authenticate, type AuthContext } from './auth/context.js'
 import { subscribe } from './realtime.js'
-import { sql } from './db.js'
+import { authSql, sql } from './db.js'
 import { guardRls } from './rlsGuard.js'
 import { needSiteUrl } from './publicUrl.js'
 import { mayListen, mayWatch, tokenHears } from './listening.js'
@@ -579,6 +579,26 @@ if (existsSync(join(client, 'index.html'))) {
  * refuses never answers. `rlsGuard.ts`.
  */
 await guardRls(sql, 'app', process.env.NODE_ENV === 'production' && edition.rlsFailClosed)
+/* And the sign-in connection the same way (`tracker_auth`, migration 308):
+   a member of the application role and nothing more, so the same policies
+   bind it. Its password was given it by the migration above, from the same
+   string it connects with (`db/authUrl.ts`). */
+if (env.databaseUrlAuth) {
+  await guardRls(authSql(), 'app’s sign-in connection', process.env.NODE_ENV === 'production' && edition.rlsFailClosed)
+} else if (process.env.NODE_ENV === 'production' && env.databaseUrlApp !== env.databaseUrl) {
+  /* No sign-in connection to be had, and the application is not the owner
+     who could stand in for it. Until migration 311 the application role
+     still holds every sign-in right, so signing in goes on through its
+     connection and this is said, loudly; once 311 is applied nobody could
+     sign in, and the start refuses instead. A
+     `DATABASE_URL_APP` with no password — trust, peer, `.pgpass` — lands
+     here. */
+  console.error(
+    '\n!!! DATABASE_URL_AUTH is not set, and it cannot be made from DATABASE_URL_APP (that needs the user tracker_app and a password).\n' +
+      '!!! Signing in runs on the application’s connection for now; after the next update it will be refused.\n' +
+      '!!! Set DATABASE_URL_AUTH to the tracker_auth role (docs/self-hosting.md).\n',
+  )
+}
 
 /* And never without an address of its own: in production every link it
    mails is made from `APP_URL` (else the service's own), never from the

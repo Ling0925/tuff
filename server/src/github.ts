@@ -1,7 +1,7 @@
 import { createHmac, createPrivateKey, timingSafeEqual } from 'node:crypto'
 import { SignJWT } from 'jose'
 import { env } from './env.js'
-import { asWorker, withActorEverywhere, type Tx } from './db.js'
+import { asAuthEverywhere, asWorker, type Tx } from './db.js'
 import { open, seal } from './auth/seal.js'
 
 /**
@@ -301,7 +301,9 @@ export function openSecret(sealed: string | null): string | null {
  * to ask.
  */
 export async function personToken(actor: string, within?: { workspace: string; project: string }): Promise<string | null> {
-  const as = <T>(fn: (tx: Tx) => Promise<T>) => (within ? asWorker(fn) : withActorEverywhere(actor, fn))
+  /* By a request, on the sign-in connection: the token and its renewal are
+     `tracker_auth`'s and the worker's, never the application's (migration 308). */
+  const as = <T>(fn: (tx: Tx) => Promise<T>) => (within ? asWorker(fn) : asAuthEverywhere(actor, fn))
   type Row = { token_enc: string | null; refresh_enc: string | null; token_until: Date | null }
   const [row] = await as((tx) =>
     within

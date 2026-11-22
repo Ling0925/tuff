@@ -9,7 +9,7 @@ import { secureAttr } from '../tryLocalhost.js'
 import { edition } from '../edition.js'
 import { origin } from '../publicUrl.js'
 import { fullRefusal } from '../ceilings.js'
-import { withoutActor } from '../db.js'
+import { asAuth } from '../db.js'
 import { generateToken, hashPassword, hashToken } from '../auth/crypto.js'
 import {
   confirmed,
@@ -235,7 +235,7 @@ access.get('/oauth/:provider/start', async (c) => {
        account waiting for the sender to finish. */
     if (!sheet || !challenge) return c.redirect('/signin?ways=failed')
     const key = appLinkKey(challenge)
-    const [t] = await withoutActor((tx) => tx<{ binding: string | null }[]>`select auth_ticket_binding(${key}, 'link') as binding`)
+    const [t] = await asAuth((tx) => tx<{ binding: string | null }[]>`select auth_ticket_binding(${key}, 'link') as binding`)
     const b = linkBinding(t?.binding)
     if (!b || b.p !== p || b.challenge !== challenge) return c.redirect('/signin?ways=failed')
     /* Once: the challenge is in this address, and an address is kept in
@@ -243,7 +243,7 @@ access.get('/oauth/:provider/start', async (c) => {
        ticket is made, so somebody racing it makes the real one fail where
        the person sees it, never succeed behind their back. */
     const mark = b64url(randomBytes(16))
-    const [won] = await withoutActor((tx) => tx<{ ok: boolean }[]>`select auth_ticket_start(${key}, 'link', ${mark}) as ok`)
+    const [won] = await asAuth((tx) => tx<{ ok: boolean }[]>`select auth_ticket_start(${key}, 'link', ${mark}) as ok`)
     startMark = mark
     if (!won?.ok) return c.redirect('/signin?ways=failed')
     link = key
@@ -251,7 +251,7 @@ access.get('/oauth/:provider/start', async (c) => {
   } else if (c.req.query('link')) {
     const ticket = readCookie(c, LINK)
     const [t] = ticket
-      ? await withoutActor((tx) => tx<{ binding: string | null }[]>`select auth_ticket_binding(${hashToken(ticket)}, 'link') as binding`)
+      ? await asAuth((tx) => tx<{ binding: string | null }[]>`select auth_ticket_binding(${hashToken(ticket)}, 'link') as binding`)
       : []
     /* Made for this provider, and for the web: only the hash goes on, as
        the state is signed, not sealed, and the ticket itself would be a
@@ -274,7 +274,7 @@ access.get('/oauth/:provider/start', async (c) => {
     if (!onThisMachine(from) && !(await spendOn(`appstart:${networkOf(from)}`, 120, 600))) {
       return c.redirect('/signin?oauth=failed')
     }
-    const [once] = await withoutActor((tx) => tx<{ ok: boolean }[]>`select auth_app_start_once(${challenge}) as ok`)
+    const [once] = await asAuth((tx) => tx<{ ok: boolean }[]>`select auth_app_start_once(${challenge}) as ok`)
     if (!once?.ok) return c.redirect('/signin?oauth=failed')
   }
   const sealed = await new SignJWT({
@@ -406,7 +406,7 @@ async function callback(c: Context, p: Provider, params: { code?: string; state?
     binding = `web:${hashToken(browser)}`
     c.header('set-cookie', `${HANDOFF}=${browser}; Path=/; Max-Age=120; HttpOnly; Secure; SameSite=Lax`, { append: true })
   }
-  await withoutActor(
+  await asAuth(
     (tx) =>
       tx`select auth_ticket_make_bound(${hashToken(ticket)}, 'handoff', ${who.actorId}, ${who.workspaceId}, interval '2 minutes', ${binding})`,
   )
@@ -437,15 +437,13 @@ async function linked(
   app: boolean,
 ) {
   c.header('set-cookie', `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=None`)
-  const [t] = await withoutActor(
+  const [t] = await asAuth(
     (tx) => tx<{ actor_id: string; workspace_id: string | null; binding: string | null }[]>`
       select k.*, auth_ticket_binding(${hash}, 'link') as binding from auth_ticket_peek(${hash}, 'link') k`,
   )
   if (!t) return c.redirect(app ? '/signin?ways=failed' : '/')
   const [w] =
-    !app && t.workspace_id
-      ? await withoutActor((tx) => tx<{ slug: string | null }[]>`select auth_workspace_slug(${t.workspace_id}) as slug`)
-      : []
+    !app && t.workspace_id ? await asAuth((tx) => tx<{ slug: string | null }[]>`select auth_workspace_slug(${t.workspace_id}) as slug`) : []
   const back = (why: 'added' | 'taken' | 'failed') =>
     c.redirect(app ? '/signin?ways=failed' : w?.slug ? `/${w.slug}/account?ways=${why}` : '/')
 
@@ -455,7 +453,7 @@ async function linked(
      app's, nor the other way round. */
   const b = linkBinding(t.binding)
   if (!b || b.p !== p || Boolean(b.challenge) !== app) return back('failed')
-  const [alive] = await withoutActor((tx) => tx<{ ok: boolean }[]>`select auth_session_alive(${b.sid}) as ok`)
+  const [alive] = await asAuth((tx) => tx<{ ok: boolean }[]>`select auth_session_alive(${b.sid}) as ok`)
   if (!alive?.ok) return back('failed')
 
   const said = p === 'github' ? await fromGithub(c, params.code ?? '', bound.verifier) : await fromOidc(c, p, params, bound)
@@ -463,20 +461,20 @@ async function linked(
 
   if (app) {
     /* From the one start this ticket allowed, and no other. */
-    const [s] = await withoutActor((tx) => tx<{ started: string | null }[]>`select auth_ticket_started(${hash}, 'link') as started`)
+    const [s] = await asAuth((tx) => tx<{ started: string | null }[]>`select auth_ticket_started(${hash}, 'link') as started`)
     if (!bound.startMark || s?.started !== bound.startMark) return back('failed')
     /* Who the provider named, for this link ticket and this start, once
        and briefly. The link ticket is spent when the app finishes. */
     const waiting = generateToken('lkd')
     const what = JSON.stringify({ link: hash, start: bound.startMark, p, subject: said.subject, email: said.email || null })
-    await withoutActor(
+    await asAuth(
       (tx) =>
         tx`select auth_ticket_make_bound(${hashToken(waiting)}, 'linked', ${t.actor_id}, ${t.workspace_id}, interval '2 minutes', ${what})`,
     )
     return c.redirect(`/signin?linked=${encodeURIComponent(waiting)}`)
   }
 
-  const [spent] = await withoutActor((tx) => tx<{ ok: boolean }[]>`select auth_ticket_spend(${hash}, 'link') as ok`)
+  const [spent] = await asAuth((tx) => tx<{ ok: boolean }[]>`select auth_ticket_spend(${hash}, 'link') as ok`)
   if (!spent?.ok) return back('failed')
   return back(await attachWay(c, t.actor_id, p, said))
 }
@@ -494,19 +492,19 @@ async function attachWay(
 ): Promise<'added' | 'taken' | 'failed'> {
   /* Never for an address nobody has proved — refused where it starts too. */
   if (!(await confirmed(actorId))) return 'failed'
-  const [known] = await withoutActor((tx) => tx<{ actor: string | null }[]>`select auth_identity_actor(${p}, ${said.subject}) as actor`)
+  const [known] = await asAuth((tx) => tx<{ actor: string | null }[]>`select auth_identity_actor(${p}, ${said.subject}) as actor`)
   if (known?.actor && known.actor !== actorId) return 'taken'
   if (p === 'github') {
-    const [taken] = await withoutActor(
+    const [taken] = await asAuth(
       (tx) => tx<{ taken: boolean }[]>`select github_account_taken(${said.subject}::bigint, ${actorId}) as taken`,
     )
     if (taken?.taken) return 'taken'
   }
   if (!known?.actor) {
-    await withoutActor((tx) => tx`select auth_identity_link(${actorId}, ${p}, ${said.subject}, ${said.email || null})`)
+    await asAuth((tx) => tx`select auth_identity_link(${actorId}, ${p}, ${said.subject}, ${said.email || null})`)
     /* Whose it is now: two accounts linking the same one at once, the
        second did nothing and must not be told it did. */
-    const [now] = await withoutActor((tx) => tx<{ actor: string | null }[]>`select auth_identity_actor(${p}, ${said.subject}) as actor`)
+    const [now] = await asAuth((tx) => tx<{ actor: string | null }[]>`select auth_identity_actor(${p}, ${said.subject}) as actor`)
     if (now?.actor !== actorId) return 'taken'
     await tellWayIn(origin(c), actorId, 'added', p, said.email || null)
   }
@@ -539,7 +537,7 @@ export async function finishAppLink(
 ): Promise<{ outcome: 'added' | 'taken' | 'failed'; email: string | null } | 'refused'> {
   if (!isOn(p)) return 'refused'
   const key = hashToken(waiting)
-  const [r] = await withoutActor(
+  const [r] = await asAuth(
     (tx) => tx<{ actor_id: string; binding: string | null }[]>`
       select k.actor_id, auth_ticket_binding(${key}, 'linked') as binding from auth_ticket_peek(${key}, 'linked') k`,
   )
@@ -553,7 +551,7 @@ export async function finishAppLink(
   const what = Waiting.safeParse(parsed)
   if (!what.success || what.data.p !== p) return 'refused'
   const link = what.data.link
-  const [t] = await withoutActor(
+  const [t] = await asAuth(
     (tx) => tx<{ actor_id: string; binding: string | null; started: string | null }[]>`
       select k.actor_id, auth_ticket_binding(${link}, 'link') as binding, auth_ticket_started(${link}, 'link') as started
       from auth_ticket_peek(${link}, 'link') k`,
@@ -565,11 +563,11 @@ export async function finishAppLink(
   const brought = Buffer.from(b64url(createHash('sha256').update(verifier).digest()))
   const made = Buffer.from(b.challenge)
   if (brought.length !== made.length || !timingSafeEqual(brought, made)) return 'refused'
-  const [alive] = await withoutActor((tx) => tx<{ ok: boolean }[]>`select auth_session_alive(${b.sid}) as ok`)
+  const [alive] = await asAuth((tx) => tx<{ ok: boolean }[]>`select auth_session_alive(${b.sid}) as ok`)
   if (!alive?.ok) return 'refused'
-  const [spent] = await withoutActor((tx) => tx<{ ok: boolean }[]>`select auth_ticket_spend(${link}, 'link') as ok`)
+  const [spent] = await asAuth((tx) => tx<{ ok: boolean }[]>`select auth_ticket_spend(${link}, 'link') as ok`)
   if (!spent?.ok) return 'refused'
-  await withoutActor((tx) => tx`select auth_ticket_spend(${key}, 'linked')`)
+  await asAuth((tx) => tx`select auth_ticket_spend(${key}, 'linked')`)
   const outcome = await attachWay(c, actorId, p, { subject: what.data.subject, email: what.data.email })
   return { outcome, email: what.data.email }
 }
@@ -742,7 +740,7 @@ export async function whoIs(
        provider makes nothing either (migration 207): only a mailed link or
        the machine's `instance:owner` claims one. */
     await orClosed(
-      withoutActor(async (tx) => {
+      asAuth(async (tx) => {
         const [s] = await tx<{ slug: string }[]>`select free_workspace_slug(${wsName}) as slug`
         await tx`select register_owner(${id}, ${who}, ${email}, ${null}, ${workspaceId}, ${wsName}, ${s!.slug}, true, true)`
       }),
@@ -750,7 +748,7 @@ export async function whoIs(
     await planNewWorkspace(id, workspaceId)
     actorId = id
   }
-  await withoutActor((tx) => tx`select auth_identity_link(${actorId}, ${p}, ${subject}, ${email || null})`)
+  await asAuth((tx) => tx`select auth_identity_link(${actorId}, ${p}, ${subject}, ${email || null})`)
   /* In no workspace: signed in all the same, to the screen for that —
      the exchange decides whether this client can be given it. */
   return { actorId, workspaceId: await firstWorkspace(actorId) }
@@ -763,7 +761,7 @@ export async function whoIs(
  * address would be handed their account.
  */
 async function knownActor(p: Provider, subject: string, email: string, verified: boolean): Promise<string | 'conflict' | null> {
-  const known = await withoutActor(async (tx) => {
+  const known = await asAuth(async (tx) => {
     const [r] = await tx<{ actor: string | null }[]>`select auth_identity_actor(${p}, ${subject}) as actor`
     return r?.actor ?? null
   })
@@ -774,13 +772,13 @@ async function knownActor(p: Provider, subject: string, email: string, verified:
        provider vouches for the account's own address, which is a proof and
        goes through `auth_claim_email` like any other. */
     if (await confirmed(known)) return known
-    const [acc] = await withoutActor((tx) => tx<{ email: string | null }[]>`select auth_email_of(${known}) as email`)
+    const [acc] = await asAuth((tx) => tx<{ email: string | null }[]>`select auth_email_of(${known}) as email`)
     if (!verified || !email || acc?.email?.toLowerCase() !== email.toLowerCase()) return 'conflict'
-    await orClosed(withoutActor((tx) => tx`select auth_claim_email(${known})`))
+    await orClosed(asAuth((tx) => tx`select auth_claim_email(${known})`))
     return known
   }
   if (!email) return null
-  const existing = await withoutActor(async (tx) => {
+  const existing = await asAuth(async (tx) => {
     const [r] = await tx<{ actor_id: string }[]>`select actor_id from auth_lookup_user(${email})`
     return r?.actor_id ?? null
   })
@@ -791,7 +789,7 @@ async function knownActor(p: Provider, subject: string, email: string, verified:
      chose — `auth_claim_email`. */
   /* On your own server, confirming an address that asked to sign up
      claims the server or is refused (`instance_confirming`). */
-  await orClosed(withoutActor((tx) => tx`select auth_claim_email(${existing})`))
+  await orClosed(asAuth((tx) => tx`select auth_claim_email(${existing})`))
   return existing
 }
 
@@ -832,7 +830,7 @@ export async function joinByProvider(
   } else {
     if (!email || !verified) return null
     try {
-      const [row] = await withoutActor(
+      const [row] = await asAuth(
         (tx) => tx<{ workspace_id: string; actor_id: string }[]>`
           select * from accept_invite(${tokenHash}::text, ${uuidv7()}::uuid,
                                       ${name.trim() || email.split('@')[0]!}::text, ${email}::citext, null::text,
@@ -854,14 +852,12 @@ export async function joinByProvider(
       throw e
     }
   }
-  await withoutActor((tx) => tx`select auth_identity_link(${joined.actorId}, ${p}, ${subject}, ${email || null})`)
+  await asAuth((tx) => tx`select auth_identity_link(${joined.actorId}, ${p}, ${subject}, ${email || null})`)
   return joined
 }
 
 async function hasSecondFactor(actorId: string): Promise<boolean> {
-  const [u] = await withoutActor(
-    (tx) => tx<{ on: boolean }[]>`select l.totp_enabled as on from auth_lookup_user(auth_email_of(${actorId})) l`,
-  )
+  const [u] = await asAuth((tx) => tx<{ on: boolean }[]>`select l.totp_enabled as on from auth_lookup_user(auth_email_of(${actorId})) l`)
   return Boolean(u?.on)
 }
 
@@ -897,14 +893,14 @@ access.post('/oauth/exchange', async (c) => {
   /* Only where the sign-in began — before the second factor, so a ticket
      that is not yours does not learn whether there is one. */
   const proof = await broughtBy(c, hash, body.data.verifier)
-  if (proof === 'burn') await withoutActor((tx) => tx`select auth_ticket_spend(${hash}, 'handoff')`)
+  if (proof === 'burn') await asAuth((tx) => tx`select auth_ticket_spend(${hash}, 'handoff')`)
   if (proof !== 'ok') return c.json({ error: { code: 'unauthorized' } }, 401)
-  const [t] = await withoutActor(
+  const [t] = await asAuth(
     (tx) => tx<{ actor_id: string; workspace_id: string | null }[]>`select * from auth_ticket_peek(${hash}, 'handoff')`,
   )
   if (!t) return c.json({ error: { code: 'unauthorized' } }, 401)
 
-  const [u] = await withoutActor(
+  const [u] = await asAuth(
     (tx) => tx<{ totp_enabled: boolean; email: string }[]>`
       select l.totp_enabled, auth_email_of(${t.actor_id}) as email
       from auth_lookup_user(auth_email_of(${t.actor_id})) l`,
@@ -922,7 +918,7 @@ access.post('/oauth/exchange', async (c) => {
     }
     await tried.right()
   }
-  const [spent] = await withoutActor((tx) => tx<{ ok: boolean }[]>`select auth_ticket_spend(${hash}, 'handoff') as ok`)
+  const [spent] = await asAuth((tx) => tx<{ ok: boolean }[]>`select auth_ticket_spend(${hash}, 'handoff') as ok`)
   if (!spent?.ok) return c.json({ error: { code: 'unauthorized' } }, 401)
   /* The invitation that waited for the code, taken now. */
   let workspaceId = t.workspace_id
@@ -957,7 +953,7 @@ access.post('/oauth/exchange', async (c) => {
  * and the ticket is spent so it is good to nobody.
  */
 async function broughtBy(c: Context, hash: string, verifier: string | undefined): Promise<'ok' | 'refuse' | 'burn'> {
-  const [row] = await withoutActor((tx) => tx<{ binding: string | null }[]>`select auth_ticket_binding(${hash}, 'handoff') as binding`)
+  const [row] = await asAuth((tx) => tx<{ binding: string | null }[]>`select auth_ticket_binding(${hash}, 'handoff') as binding`)
   const binding = row?.binding
   const browser = Boolean(c.req.header('origin') || c.req.header('sec-fetch-site'))
   /* None is made bound to nothing any more; one from before is no
@@ -986,7 +982,7 @@ const BIND = 'tuff_bind'
 
 export async function bindBrowser(c: Context, actorId: string): Promise<void> {
   const token = generateToken('bnd')
-  await withoutActor((tx) => tx`select auth_ticket_make(${hashToken(token)}, 'bind', ${actorId}, ${null}, interval '1 day')`)
+  await asAuth((tx) => tx`select auth_ticket_make(${hashToken(token)}, 'bind', ${actorId}, ${null}, interval '1 day')`)
   /* Without `Secure` only on a computer trying Tuff over plain http — `tryLocalhost.ts`. */
   c.header('set-cookie', `${BIND}=${token}; Path=/auth; Max-Age=86400; HttpOnly${secureAttr()}; SameSite=Lax`, { append: true })
 }
@@ -994,7 +990,7 @@ export async function bindBrowser(c: Context, actorId: string): Promise<void> {
 async function boundTo(c: Context): Promise<string | null> {
   const token = readCookie(c, BIND)
   if (!token) return null
-  const [b] = await withoutActor((tx) => tx<{ actor_id: string }[]>`select actor_id from auth_ticket_peek(${hashToken(token)}, 'bind')`)
+  const [b] = await asAuth((tx) => tx<{ actor_id: string }[]>`select actor_id from auth_ticket_peek(${hashToken(token)}, 'bind')`)
   return b?.actor_id ?? null
 }
 
@@ -1062,7 +1058,7 @@ export async function sendChoosePassword(
   language?: Awaited<ReturnType<typeof languageFor>>,
 ): Promise<void> {
   language ??= await languageFor(actorId, heard(c))
-  const [n] = await withoutActor((tx) => tx<{ n: number }[]>`select auth_ticket_recent(${actorId}, 'reset') as n`)
+  const [n] = await asAuth((tx) => tx<{ n: number }[]>`select auth_ticket_recent(${actorId}, 'reset') as n`)
   if ((n?.n ?? 0) >= 5) return
   const token = await chooseTicket(actorId)
   const w = say(
@@ -1090,7 +1086,7 @@ export async function sendChoosePassword(
 /** A reset ticket of a day for choosing a first password — `chs_`, see above. */
 async function chooseTicket(actorId: string): Promise<string> {
   const token = generateToken('chs')
-  await withoutActor((tx) => tx`select auth_ticket_make(${hashToken(token)}, 'reset', ${actorId}, ${null}, interval '1 day')`)
+  await asAuth((tx) => tx`select auth_ticket_make(${hashToken(token)}, 'reset', ${actorId}, ${null}, interval '1 day')`)
   return token
 }
 
@@ -1112,7 +1108,7 @@ access.post('/verify', async (c) => {
      the new one, and that confirmation takes a password set before it
      (migration 212) — so the new address is sent the letter that chooses
      one, or the person is left with no way in. */
-  const [before] = await withoutActor(
+  const [before] = await asAuth(
     (tx) => tx<{ actor_id: string; proved: boolean | null }[]>`
       select actor_id, auth_email_confirmed(actor_id) as proved from auth_email_ticket_peek(${hashToken(body.data.token)})`,
   )
@@ -1127,14 +1123,14 @@ access.post('/verify', async (c) => {
     return c.json(moved.kind === 'approved' ? { approved: true, email: moved.email } : { changed: true, email: moved.email })
   }
   const hash = hashToken(body.data.token)
-  const [t] = await withoutActor((tx) => tx<{ actor_id: string }[]>`select * from auth_ticket_peek(${hash}, 'verify')`)
+  const [t] = await asAuth((tx) => tx<{ actor_id: string }[]>`select * from auth_ticket_peek(${hash}, 'verify')`)
   if (!t) return c.json({ error: { code: 'gone', message: 'This link has already been used or has expired.' } }, 410)
-  const [spent] = await withoutActor((tx) => tx<{ ok: boolean }[]>`select auth_ticket_spend(${hash}, 'verify') as ok`)
+  const [spent] = await asAuth((tx) => tx<{ ok: boolean }[]>`select auth_ticket_spend(${hash}, 'verify') as ok`)
   if (!spent?.ok) return c.json({ error: { code: 'gone' } }, 410)
   /* On your own server, confirming an applicant claims it or is refused
      (`instance_confirming`): `sign_up_closed`, said by the error handler. */
-  await withoutActor((tx) => tx`select auth_confirm_email(${t.actor_id})`)
-  const [pw] = await withoutActor((tx) => tx<{ none: boolean }[]>`select auth_password_hash(${t.actor_id}) is null as none`)
+  await asAuth((tx) => tx`select auth_confirm_email(${t.actor_id})`)
+  const [pw] = await asAuth((tx) => tx<{ none: boolean }[]>`select auth_password_hash(${t.actor_id}) is null as none`)
   if (pw?.none) return c.json({ confirmed: true, choose_password: await chooseTicket(t.actor_id) })
   /* Confirmed before, by another way, with a password chosen since. */
   return c.json({ confirmed: true })
@@ -1148,12 +1144,12 @@ access.post('/password/forgot', async (c) => {
   const body = z.object({ email: z.email() }).safeParse(await c.req.json().catch(() => ({})))
   if (!body.success) return c.json({ error: { code: 'invalid' } }, 400)
   const email = body.data.email.toLowerCase()
-  const [u] = await withoutActor((tx) => tx<{ actor_id: string }[]>`select actor_id from auth_lookup_user(${email})`)
+  const [u] = await asAuth((tx) => tx<{ actor_id: string }[]>`select actor_id from auth_lookup_user(${email})`)
   if (u) {
-    const [n] = await withoutActor((tx) => tx<{ n: number }[]>`select auth_ticket_recent(${u.actor_id}, 'reset') as n`)
+    const [n] = await asAuth((tx) => tx<{ n: number }[]>`select auth_ticket_recent(${u.actor_id}, 'reset') as n`)
     if ((n?.n ?? 0) < 5) {
       const token = generateToken('rst')
-      await withoutActor((tx) => tx`select auth_ticket_make(${hashToken(token)}, 'reset', ${u.actor_id}, ${null}, interval '1 hour')`)
+      await asAuth((tx) => tx`select auth_ticket_make(${hashToken(token)}, 'reset', ${u.actor_id}, ${null}, interval '1 hour')`)
       const url = `${origin(c)}/reset/${encodeURIComponent(token)}`
       /* Sent, not waited for: waiting on the mail service only when there
          is an account made the answer slower for addresses that have one,
@@ -1197,12 +1193,12 @@ access.post('/password/reset', async (c) => {
   const body = z.object({ token: z.string().min(10), password: z.string().min(12) }).safeParse(await c.req.json().catch(() => ({})))
   if (!body.success) return c.json({ error: { code: 'invalid' } }, 400)
   const hash = hashToken(body.data.token)
-  const [t] = await withoutActor((tx) => tx<{ actor_id: string }[]>`select * from auth_ticket_peek(${hash}, 'reset')`)
+  const [t] = await asAuth((tx) => tx<{ actor_id: string }[]>`select * from auth_ticket_peek(${hash}, 'reset')`)
   if (!t) return c.json({ error: { code: 'gone', message: 'This link has already been used or has expired.' } }, 410)
-  const [spent] = await withoutActor((tx) => tx<{ ok: boolean }[]>`select auth_ticket_spend(${hash}, 'reset') as ok`)
+  const [spent] = await asAuth((tx) => tx<{ ok: boolean }[]>`select auth_ticket_spend(${hash}, 'reset') as ok`)
   if (!spent?.ok) return c.json({ error: { code: 'gone' } }, 410)
   const passwordHash = await hashPassword(body.data.password)
-  const [was] = await withoutActor(
+  const [was] = await asAuth(
     (tx) => tx<{ email: string; had: boolean; proved: boolean }[]>`
       select auth_email_of(${t.actor_id}) as email, auth_password_hash(${t.actor_id}) is not null as had,
              coalesce(auth_email_confirmed(${t.actor_id}), false) as proved`,
@@ -1210,11 +1206,11 @@ access.post('/password/reset', async (c) => {
   /* Asked before the password is set: setting it for an address nobody
      proved spends every open ticket, the browser's among them. */
   const here = !was?.proved && (await boundTo(c)) === t.actor_id
-  await withoutActor((tx) => tx`select auth_set_password(${t.actor_id}, ${passwordHash})`)
+  await asAuth((tx) => tx`select auth_set_password(${t.actor_id}, ${passwordHash})`)
   /* And every Google or Apple sign-in: a reset shuts the doors somebody
      thinks are open, and those were open beside the password. A provider
      that vouches for the address links again on the next sign-in. */
-  await withoutActor((tx) => tx`select auth_identity_forget(${t.actor_id}, ${null})`)
+  await asAuth((tx) => tx`select auth_identity_forget(${t.actor_id}, ${null})`)
   /* The first password, chosen from the letter: the proof and the sign-in. */
   if (was && !was.proved) {
     const workspaceId = here ? await firstWorkspace(t.actor_id) : null

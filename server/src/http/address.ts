@@ -1,6 +1,6 @@
 import { Hono, type Context } from 'hono'
 import { z } from 'zod'
-import { withoutActor } from '../db.js'
+import { asAuth } from '../db.js'
 import type { AuthContext } from '../auth/context.js'
 import { asksOf, byInbox, emailOf, itIsThem, mailCode, masked, sendForApproval, sendToNew } from '../auth/address.js'
 import { origin } from './access.js'
@@ -23,7 +23,7 @@ const refused = (c: Context) => c.json({ error: { code: 'forbidden', message: 'C
 
 /** Not more than five links an hour for one account, of either kind. */
 async function linksLeft(actorId: string): Promise<boolean> {
-  const [n] = await withoutActor(
+  const [n] = await asAuth(
     (tx) => tx<{ n: number }[]>`
       select auth_ticket_recent(${actorId}, 'email') + auth_ticket_recent(${actorId}, 'approve') as n`,
   )
@@ -89,7 +89,7 @@ address.post('/me/email', async (c) => {
   }
 
   // One change at a time: asking again calls off what was waiting.
-  await withoutActor((tx) => tx`select auth_email_cancel(${ctx.actorId})`)
+  await asAuth((tx) => tx`select auth_email_cancel(${ctx.actorId})`)
   if (byInbox(asks)) await sendForApproval(origin(c), ctx.actorId, now, to, heard(c))
   else await sendToNew(origin(c), ctx.actorId, to, heard(c))
   return c.json({ pending: to, inbox: byInbox(asks) }, 202)
@@ -107,7 +107,7 @@ address.post('/me/email/again', async (c) => {
   if (!(await linksLeft(ctx.actorId))) {
     return c.json({ error: { code: 'rate_limited', message: 'Too many links sent this hour. Try again later.' } }, 429)
   }
-  await withoutActor((tx) => tx`select auth_email_cancel(${ctx.actorId})`)
+  await asAuth((tx) => tx`select auth_email_cancel(${ctx.actorId})`)
   if (pending.kind === 'approve') await sendForApproval(origin(c), ctx.actorId, now, pending.email, heard(c))
   else await sendToNew(origin(c), ctx.actorId, pending.email, heard(c))
   return c.json({ pending: pending.email }, 202)
@@ -154,6 +154,6 @@ address.post('/me/inbox-code', (c) => inboxCode(c))
 address.delete('/me/email', async (c) => {
   const ctx = c.get('ctx')
   if (ctx.viaMcp) return refused(c)
-  await withoutActor((tx) => tx`select auth_email_cancel(${ctx.actorId})`)
+  await asAuth((tx) => tx`select auth_email_cancel(${ctx.actorId})`)
   return c.json({ ok: true })
 })

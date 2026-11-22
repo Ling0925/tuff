@@ -7,6 +7,7 @@ export type Tx = postgres.TransactionSql
 
 /**
  * The runtime connection: the tracker_app role, which RLS applies to.
+ * Its options are the sign-in role's too (`asAuth`, below).
  *
  * Prepared statements, on. They were off for a PgBouncer in transaction
  * mode that has not been put in front of the database — and the cost of
@@ -18,8 +19,7 @@ export type Tx = postgres.TransactionSql
  * statements across transaction mode since 1.21 (`max_prepared_statements`),
  * so this is no longer the thing in its way.
  */
-export const sql: Sql = postgres(env.databaseUrlApp, {
-  max: env.poolMax,
+const OPTIONS = {
   prepare: true,
   onnotice: () => {},
   /*
@@ -48,7 +48,9 @@ export const sql: Sql = postgres(env.databaseUrlApp, {
     // it into a Date would mix in the server's timezone.
     date: { to: 1082, from: [1082], serialize: (x: string) => x, parse: (x: string) => x },
   },
-})
+}
+
+export const sql: Sql = postgres(env.databaseUrlApp, { ...OPTIONS, max: env.poolMax })
 
 /**
  * The projects a token is limited to, for the request it came with.
@@ -85,10 +87,14 @@ function limitFor(actorId: string): [string, string] {
  * that skips it sees emptiness, not someone else's data.
  */
 export async function withActor<T>(actorId: string, workspaceId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return actorOn(sql, actorId, workspaceId, fn)
+}
+
+function actorOn<T>(pool: Sql, actorId: string, workspaceId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
   /* Read here, not inside: the driver may start the transaction from a
      socket's callback, where the request's store is not. */
   const [tokenActor, tokenProjects] = limitFor(actorId)
-  return sql.begin(async (tx) => {
+  return pool.begin(async (tx) => {
     /*
      * One statement for both, and not waited for.
      *
@@ -132,8 +138,12 @@ export async function withActor<T>(actorId: string, workspaceId: string, fn: (tx
  * the thing somebody has to choose.
  */
 export async function withActorEverywhere<T>(actorId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return everywhereOn(sql, actorId, fn)
+}
+
+function everywhereOn<T>(pool: Sql, actorId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
   const [tokenActor, tokenProjects] = limitFor(actorId)
-  return sql.begin(async (tx) => {
+  return pool.begin(async (tx) => {
     // Sent ahead of the handler's queries, as `withActor` does.
     const set = tx`select set_config('app.actor_id', ${actorId}, true),
                           set_config('app.token_actor', ${tokenActor}, true),
@@ -163,6 +173,55 @@ export async function asWorker<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
       : sql
   }
   return worker.begin(fn) as Promise<T>
+}
+
+/**
+ * The sign-in connection, as `tracker_auth` — migration 308,
+ *
+ * Writing a password, an address, a second factor, a provider's identity or
+ * a recovery code; making a session, a token, a reset ticket or an OAuth
+ * code; reading a password's hash or a factor's secret; deleting an
+ * account: the definer functions that do these are this role's to run and
+ * not the application's, and so are the inserts into `refresh_session` and
+ * `api_token`. SQL run as the application — an injection anywhere in the
+ * request code — cannot reach them. The role is a member of `tracker_app`,
+ * so a sign-in transaction reads and writes everything else as a request
+ * does, under the same policies.
+ *
+ * Used only by `auth/*` and the routes that sign somebody in, out or away,
+ * through the four functions below; anything else that called them would
+ * be a second door. Its own few connections, opened when first asked for.
+ * Without `DATABASE_URL_AUTH` and nothing to make it from (`db/authUrl.ts`)
+ * it is the application's connection — right for a developer running as
+ * the owner, and said loudly otherwise, since signing in is then refused.
+ */
+let auth: Sql | null = null
+function authPool(): Sql {
+  if (!auth) {
+    if (!env.databaseUrlAuth && env.databaseUrlApp !== env.databaseUrl) {
+      console.error('DATABASE_URL_AUTH is not set and cannot be made from DATABASE_URL_APP: signing in will be refused')
+    }
+    auth = env.databaseUrlAuth ? postgres(env.databaseUrlAuth, { ...OPTIONS, max: 6 }) : sql
+  }
+  return auth
+}
+
+/** The sign-in connection itself, for a statement outside a transaction. */
+export const authSql = (): Sql => authPool()
+
+/** A sign-in transaction with no actor — `withoutActor`, as `tracker_auth`. */
+export async function asAuth<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return authPool().begin(fn) as Promise<T>
+}
+
+/** A sign-in transaction for an actor in a workspace — `withActor`, as `tracker_auth`. */
+export async function asAuthActor<T>(actorId: string, workspaceId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return actorOn(authPool(), actorId, workspaceId, fn)
+}
+
+/** A sign-in transaction for an actor in no one workspace — `withActorEverywhere`, as `tracker_auth`. */
+export async function asAuthEverywhere<T>(actorId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return everywhereOn(authPool(), actorId, fn)
 }
 
 /*
@@ -225,6 +284,8 @@ export async function withoutActor<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
 export async function closeDb(): Promise<void> {
   if (worker && worker !== sql) await worker.end()
   worker = null
+  if (auth && auth !== sql) await auth.end()
+  auth = null
   if (boards) await boards.end()
   boards = null
   await sql.end()

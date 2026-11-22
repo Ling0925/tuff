@@ -7,7 +7,7 @@ import { whoIs } from '../src/http/access.js'
 import { outbox } from '../src/mail.js'
 import { firstWorkspace, newWorkspace, startSession } from '../src/auth/flows.js'
 import { generateToken, hashToken } from '../src/auth/crypto.js'
-import { closeDb, makeOwner, stamp, withoutActor } from './helpers.js'
+import { asAuth, closeDb, makeOwner, stamp } from './helpers.js'
 
 /*
  * An address nobody has proved builds nothing that outlives the proof,
@@ -44,7 +44,7 @@ const chooseLink = (email: string) => {
   return found ? decodeURIComponent(found[1]!) : null
 }
 const accountOf = async (email: string) =>
-  (await withoutActor((tx) => tx<{ actor_id: string }[]>`select actor_id from auth_lookup_user(${email})`))[0]?.actor_id ?? null
+  (await asAuth((tx) => tx<{ actor_id: string }[]>`select actor_id from auth_lookup_user(${email})`))[0]?.actor_id ?? null
 
 test('an invitation asked to make an account never joins one that appeared since', async () => {
   const boss = await makeOwner()
@@ -53,7 +53,7 @@ test('an invitation asked to make an account never joins one that appeared since
   // The sign-up lands first; the invitation, which looked a moment before, goes on.
   assert.equal((await send('/auth/register', null, { name: 'Victim', email: victim })).status, 202)
   await assert.rejects(
-    withoutActor(
+    asAuth(
       (tx) => tx`select * from accept_invite(${hashToken(link.body.token as string)}::text, ${uuidv7()}::uuid,
       'V'::text, ${victim}::citext, ${'x'}::text, true)`,
     ),
@@ -163,7 +163,7 @@ test('a provider sign-in on an unproved account is no way in unless the provider
   assert.equal((await send('/auth/register', null, { name: 'Lin', email })).status, 202)
   const id = (await accountOf(email))!
   // Linked before the password came after the proof by whoever held a session for the address.
-  await withoutActor((tx) => tx`select auth_identity_link(${id}, 'google', ${`pre-${s}`}, ${`stranger-${s}@gmail.com`})`)
+  await asAuth((tx) => tx`select auth_identity_link(${id}, 'google', ${`pre-${s}`}, ${`stranger-${s}@gmail.com`})`)
   // Signing in as that Google account, under another address: refused.
   assert.equal(await whoIs('google', `pre-${s}`, `stranger-${s}@gmail.com`, true, 'Stranger'), 'conflict')
   // Under the account's own address, vouched: that is a proof, and claims it.
@@ -194,7 +194,7 @@ test('changing the address while unproved sends the new address the letter that 
   const id = acc.body.actor_id as string
   const moved = `moved-${stamp()}@example.com`
   const t = generateToken('eml')
-  await withoutActor((tx) => tx`select auth_email_ticket(${hashToken(t)}, 'email', ${id}, ${moved}, interval '1 day')`)
+  await asAuth((tx) => tx`select auth_email_ticket(${hashToken(t)}, 'email', ${id}, ${moved}, interval '1 day')`)
   const r = await send('/auth/verify', null, { token: t })
   assert.equal(r.status, 200, JSON.stringify(r.body))
   assert.equal(r.body.changed, true)

@@ -95,15 +95,30 @@ The database has three roles, and each process uses the narrowest one:
   listens for live updates (`LISTEN`). Row-level security applies to it:
   one workspace cannot read another's rows, even through a bug in a query.
 - `tracker_worker` alone may call the worker's own functions.
+- `tracker_auth` alone may write a password, a second factor, an address or
+  a sign-in provider, make or end a session or a token, or delete an
+  account. The app uses it only for signing in, so a fault anywhere else in
+  the app cannot take over an account.
 
 The database functions that run as the owner can be run only by the role
 each is granted to. The purges, which delete whole workspaces, are the
 owner's alone.
 
-The migrations create `tracker_app` and `tracker_worker` with no password.
-Each time the app starts it gives them the passwords from `APP_DB_PASSWORD`
-and `WORKER_DB_PASSWORD`. To change one, change it in `.env` and run
+The migrations create `tracker_app`, `tracker_worker` and `tracker_auth`
+with no password. Each time the app starts it gives the first two the
+passwords from `APP_DB_PASSWORD` and `WORKER_DB_PASSWORD`, and
+`tracker_auth` one derived from `APP_DB_PASSWORD`, so there is nothing to
+set for it. To change one, change it in `.env` and run
 `docker compose up -d`.
+
+The app sends Postgres each password as a SCRAM verifier, never as the
+password itself, so a log of the statement holds nothing that signs in.
+Making `tracker_auth` a member of `tracker_app` needs the role that runs
+the migrations (`DATABASE_URL`) to be a superuser, as the compose file's
+`tracker` is — or, on Postgres 16 and later with a managed database whose
+owner is not a superuser, to hold ADMIN OPTION on `tracker_app`
+(`grant tracker_app to <owner> with admin option`, run once as a
+superuser). Without it the migration stops and says so.
 
 The app and the worker check this when they start. If the role they query
 as is a superuser, has `BYPASSRLS`, or owns the tables, they refuse to

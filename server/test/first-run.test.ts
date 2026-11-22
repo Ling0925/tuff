@@ -33,6 +33,7 @@ await migrate(at(shared))
 process.env.DATABASE_URL = at(shared)
 process.env.DATABASE_URL_APP = at(process.env.DATABASE_URL_APP ?? shared)
 if (process.env.DATABASE_URL_WORKER) process.env.DATABASE_URL_WORKER = at(process.env.DATABASE_URL_WORKER)
+if (process.env.DATABASE_URL_AUTH) process.env.DATABASE_URL_AUTH = at(process.env.DATABASE_URL_AUTH)
 delete process.env.SETUP_TOKEN
 delete process.env.OWNER_EMAIL
 

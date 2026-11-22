@@ -14,7 +14,7 @@ process.env.GITHUB_PRIVATE_KEY = generateKeyPairSync('rsa', { modulusLength: 204
 }) as string
 
 const { app } = await import('../src/http/routes.js')
-const { withActor } = await import('../src/db.js')
+const { asAuthActor, withActor } = await import('../src/db.js')
 const { githubWork } = await import('../src/githubWork.js')
 const { githubOut } = await import('../src/githubIssues.js')
 const { branchName, forwardTo, handlesIn } = await import('../src/github.js')
@@ -528,7 +528,7 @@ test('a person named on GitHub is a mention here, and a link stops when its pers
   const repo = Math.floor(Math.random() * 1e9)
   const githubId = Math.floor(Math.random() * 1e9)
   const link = uuidv7()
-  await withActor(ctx.actorId, workspaceId, async (tx) => {
+  await asAuthActor(ctx.actorId, workspaceId, async (tx) => {
     await tx`insert into task_list (id, workspace_id, project_id, author_id, name, icon, sort_key)
              values (${uuidv7()}, ${workspaceId}, ${project}, ${ctx.actorId}, 'Backlog', 'backlog', 'a0')`
     const install = uuidv7()
@@ -636,7 +636,7 @@ test('an installation is claimed only by whoever installed it', async () => {
   assert.equal(bare.status, 400)
   assert.equal(((await bare.json()) as { error: { code: string } }).error.code, 'link_first')
 
-  await withActor(
+  await asAuthActor(
     ctx.actorId,
     workspaceId,
     (tx) => tx`

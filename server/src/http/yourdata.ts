@@ -1,6 +1,6 @@
 import { Hono, type Context } from 'hono'
 import { z } from 'zod'
-import { withActor, withActorEverywhere, withoutActor } from '../db.js'
+import { asAuthEverywhere, withActor, withActorEverywhere, withoutActor } from '../db.js'
 import type { AuthContext } from '../auth/context.js'
 import { CHANGED_MEANWHILE, moreToStop } from '../ceilings.js'
 import { asksOf, byInbox, codeFromInbox, emailOf, itIsThem } from '../auth/address.js'
@@ -167,7 +167,8 @@ export async function deleteAccount(c: Context<{ Variables: Vars }>) {
   /* Deleting, with what was stopped first: in the same transaction the
      list is read again, and a plan not among them refuses the deletion. */
   const ask = async (dry: boolean, stopped: readonly string[] = []) => {
-    const [r] = await withActorEverywhere(me, async (tx) => {
+    /* On the sign-in connection: deleting an account is `tracker_auth`'s (migration 308). */
+    const [r] = await asAuthEverywhere(me, async (tx) => {
       if (!dry && moreToStop(await tx<{ id: string }[]>`select id from my_lone_subscriptions()`, stopped)) {
         return [{ d: { ok: false, why: 'changed' } as Deletion }]
       }

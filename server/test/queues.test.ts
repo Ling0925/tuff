@@ -2,7 +2,7 @@ import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { app } from '../src/http/routes.js'
 import { emit } from '../src/webhooks.js'
-import { asWorker, closeDb, makeOwner, makeProject, uuidv7, withActor, withoutActor } from './helpers.js'
+import { asAuthEverywhere, asWorker, closeDb, makeOwner, makeProject, uuidv7, withActor, withoutActor } from './helpers.js'
 
 after(async () => {
   await closeDb()
@@ -86,15 +86,15 @@ test('the worker’s functions are the worker’s: the application role is refus
   await asWorker((tx) => tx`select github_out_claim(0)`)
   // A GitHub token by person: as the application, only the asker's own.
   const other = await makeOwner()
-  await withActor(
+  await asAuthEverywhere(
     someone.ctx.actorId,
     (tx) => tx`
     insert into github_person (actor_id, github_id, login, token_enc)
     values (${someone.ctx.actorId}, ${Math.floor(Math.random() * 1e9)}, 'w', 'sealed')`,
   )
-  const asOther = await withActor(other.ctx.actorId, (tx) => tx`select * from github_person_token(${someone.ctx.actorId})`)
+  const asOther = await asAuthEverywhere(other.ctx.actorId, (tx) => tx`select * from github_person_token(${someone.ctx.actorId})`)
   assert.equal(asOther.length, 0)
-  const asThem = await withActor(someone.ctx.actorId, (tx) => tx`select * from github_person_token(${someone.ctx.actorId})`)
+  const asThem = await asAuthEverywhere(someone.ctx.actorId, (tx) => tx`select * from github_person_token(${someone.ctx.actorId})`)
   assert.equal(asThem.length, 1)
   // The worker asks only for a workspace and a project the person is still
   // in (`github_person_token_in`, migration 292); this one is not its.

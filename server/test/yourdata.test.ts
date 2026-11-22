@@ -2,6 +2,7 @@ import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { app } from '../src/http/routes.js'
 import {
+  asAuthEverywhere,
   closeDb,
   withActor,
   withoutActor,
@@ -124,7 +125,7 @@ test('an account is deleted by its owner, asked twice, and a workspace with othe
   assert.equal(wrong.status, 403)
   // Their GitHub, linked from Account, goes with them: kept, its token went
   // on editing their old comments on GitHub after the account was gone.
-  await withActor(
+  await asAuthEverywhere(
     lone.ctx.actorId,
     (tx) => tx`
     insert into github_person (actor_id, github_id, login, token_enc)

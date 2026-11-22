@@ -2470,8 +2470,8 @@ the same — a `public.orphan` holding seven ids made the clear-out delete
 seven people — and so could an overload it planted, such as
 `public.can_see_conversation(text)` answering true, which a parameter sent
 untyped resolves to. PUBLIC has neither CREATE on schema `public` nor TEMP
-on the database; `tracker_app` and `tracker_worker` are granted CONNECT by
-name, and the tables' owner, who runs the definers, keeps TEMP. The two
+on the database; `tracker_app`, `tracker_worker` and `tracker_auth`
+(migration 308) are granted CONNECT by name, and the tables' owner, who runs the definers, keeps TEMP. The two
 definers that make temporary tables (`purge_orphan_actors`,
 `account_deletion`) name them `pg_temp.orphan` and `pg_temp.owned`
 everywhere, and the tables they reach through `format` as `public.%I`. A
@@ -2494,44 +2494,95 @@ granted by name, as its read is; anything about getting in gets a
 definer function. A zone the database does not know is refused by a
 trigger on insert and on change (`22023`), whoever writes it.
 
-**This is not yet a boundary against SQL run as the application.** It
-removes direct writes and makes the definers the one list to audit, and
-that list is the problem: each trusts the actor id it is handed, and
-`current_actor()` is `current_setting('app.actor_id')`, which the
-application role sets for itself. So SQL run as `tracker_app` can still
-call, on anybody, the sign-in definers it may execute. Those that write
-`app_user`, `auth_identity`, `auth_ticket` or `recovery_code` directly are
-held by `app-user-rights.test.ts`: `accept_invite`, `auth_change_password`,
+**Getting in is the sign-in role's** (migrations 308 and 311). Those definers trusted the actor id they were
+handed, and `current_actor()` is `current_setting('app.actor_id')`, which
+the application role sets for itself, so SQL run as `tracker_app` — an
+injection, a bug — could call them on anybody. They are a role's own:
+`tracker_auth`, which only the sign-in code connects as (`asAuth`,
+`asAuthActor`, `asAuthEverywhere` and `authSql` in `server/src/db.ts`, on
+a pool of their own). The role is a member of `tracker_app`, inheriting,
+so a sign-in transaction reads and writes everything else under the same
+policies (each is `to public` or `to tracker_app`, and a member passes
+both); it owns nothing and bypasses nothing (`rlsGuard.ts` asks at
+start). Its connection string is `DATABASE_URL_AUTH`, or, unset, made
+from `DATABASE_URL_APP` — the user `tracker_auth` and a password derived
+from the application's (`server/src/db/authUrl.ts`) — and the migrating
+start gives the role that password, as a SCRAM verifier, so an upgrade
+needs no new variable. In production a server with neither, whose
+application is not the owner, says so loudly at start while the
+application still holds the sign-in rights, and refuses to start from
+311's deploy on.
+
+**In two deploys.** 308 makes the role and grants it every definer and
+table right below, taking nothing from `tracker_app`, so a container
+still running the code from before it signs people in as it did. 311,
+shipped in the deploy after, takes the same rights from `tracker_app`:
+from then on the application role may not execute any of them, whatever
+actor it sets, an operator's or a server owner's included.
+
+**The sign-in role's definers.** `accept_invite`, `agent_end_tokens`,
+`agent_oauth_end`, `auth_app_start_once`, `auth_change_password`,
 `auth_claim_email`, `auth_confirm_email`, `auth_confirm_if_invited`,
 `auth_email_cancel`, `auth_email_change`, `auth_email_ticket`,
-`auth_identity_forget`, `auth_identity_link`, `auth_identity_remove`,
-`auth_recovery_replace`, `auth_recovery_spend`, `auth_set_password`,
-`auth_ticket_make`, `auth_ticket_make_bound`, `auth_ticket_spend`,
-`auth_ticket_start`, `auth_totp_begin`, `auth_totp_disable`,
-`auth_totp_enable`, `auth_totp_spend`, `digest_off`,
-`instance_setup_owner`, `register_owner`. (The worker's `digest_claim`
-and `new_accounts_claim`, and the owner's `instance_name_owner`, are not
-the application's.) That list is not all of it: definers that reach those
-tables or a session indirectly trust the actor too — `delete_my_account`
-and `operator_delete_account`, both through the owner's `account_deletion`
-(the second behind `is_operator()`, which a forged actor passes), and the
-session and token definers `auth_revoke_others`, `auth_revoke_session`,
-`nowhere_session_end`, `oauth_token_bind`, `oauth_refresh_take`,
-`auth_spend_refresh`, `agent_end_tokens` and `agent_oauth_end`. The boundary is a
-follow-up: a role of its own for the credential and session definers
-(`tracker_auth`, its own pool), EXECUTE taken from `tracker_app`, and
-definers that consume a proof themselves rather than trust a caller's id.
+`auth_email_ticket_peek`, `auth_end_session`, `auth_identity_forget`,
+`auth_identity_link`, `auth_identity_remove`, `auth_lookup_user`,
+`auth_password_hash`, `auth_recovery_replace`, `auth_recovery_spend`,
+`auth_revoke_others`, `auth_revoke_session`, `auth_set_password`,
+`auth_spend_refresh`, `auth_ticket_binding`, `auth_ticket_make`,
+`auth_ticket_make_bound`, `auth_ticket_peek`, `auth_ticket_recent`,
+`auth_ticket_spend`, `auth_ticket_start`, `auth_ticket_started`,
+`auth_totp_begin`, `auth_totp_disable`, `auth_totp_enable`,
+`auth_totp_secret`, `auth_totp_secret_for`, `auth_totp_spend`,
+`delete_my_account`, `digest_off`, `github_person_retoken`,
+`github_person_token`, `instance_add_owner`, `instance_mail_clear`,
+`instance_mail_write`, `instance_remove_owner`, `instance_setup_owner`,
+`nowhere_session_end`, `oauth_agent_link`, `oauth_code_make`,
+`oauth_code_take`, `oauth_refresh_take`, `oauth_token_bind`,
+`operator_delete_account`, `register_owner`.
 
-Beside it, 306 narrows what was cheapest to narrow. `api_token` is
-updated by the application only to revoke it: UPDATE is `revoked_at`
-alone (it was every column, `actor_id` and `token_hash` among them), and
-a trigger keeps a revoked token revoked. `refresh_session`'s insert
-policy `sess_write` asks `actor_id = current_actor()` (it was
-`with check (true)`), and sessions are inserted as the person signing in
-— weak while the actor setting is the application's, and no longer open
-to a session written for anybody with no actor at all. Still open, for
-the same follow-up: INSERT on `api_token`, `github_person` written under
-a forgeable `gpe_self`, and INSERT and UPDATE on `push_subscription`.
+That is every definer that writes a password, an address, a second
+factor, a provider's identity, a ticket or a recovery code; that hands
+back what a way in is made of (a password's hash, a factor's sealed
+secret); that makes, trades or ends a session, an OAuth code or a token;
+that deletes an account; a person's GitHub token by request
+(`github_person_retoken` is the worker's too, as it was); and the server's
+mail and its owners on your own server — a way in too, since the mail
+carries every reset link and an owner may name another.
+`server/test/auth-role.test.ts` holds the list against the catalogue and
+against this paragraph; `auth-role-refused.test.ts`, once 311 is applied,
+runs every one as the application role, with the actor set to nobody, to
+the account and to an operator: each is refused (`42501`), which is
+asked before the function runs, so no actor setting gets past it. Beside them, INSERT on `refresh_session` and `api_token`,
+UPDATE of `api_token.revoked_at`, and INSERT, UPDATE and DELETE on
+`github_person` are granted to `tracker_auth` by 308 and taken from
+`tracker_app` by 311, which makes the insert policies `sess_write` and
+`tok_write` the sign-in role's, still asking that the row is for the
+actor of the transaction. The application keeps reading them as before,
+and `auth_lookup_api_token` — every request with a token asks it, with
+the token's hash — still stamps when a token was last used. A new
+definer about getting in is granted to `tracker_auth` alone and named
+here.
+
+**Still not a boundary against SQL run as the application:** anything
+but getting in. `current_actor()` is the application's to set, so such SQL
+reads and writes as anybody whatever row-level security lets that person
+do — the rest of what `is_operator()` and `is_instance_owner()` gate
+included (opening sign-up, a board, a gift) — and the application still
+inserts and updates `push_subscription` (a device planted on somebody
+hears what that SQL could read anyway).
+
+Before it, 306 narrowed what was cheapest to narrow. `api_token` is
+updated only to revoke it: UPDATE is `revoked_at` alone (it was every
+column, `actor_id` and `token_hash` among them) — granted to the
+sign-in role by 308, and the sign-in role's alone once 311 takes it from
+the application — and a trigger keeps a revoked token revoked.
+`refresh_session`'s insert policy `sess_write` asks
+`actor_id = current_actor()` (it was `with check (true)`), and sessions
+are inserted as the person signing in. 308 grants the sign-in role
+INSERT on `api_token` and `refresh_session` and the writes on
+`github_person`, and 311 is the migration that takes them from the
+application; INSERT and UPDATE on `push_subscription` stay the
+application's, above.
 
 **And the webhook table's policies keep to the workspace's own webhooks**
 (`agent_id is null` in `wh_read`, `wh_write` and `wh_update`, migration
@@ -2540,7 +2591,8 @@ functions that ask who manages the agent.
 
 **Each is granted to the role that calls it, by name** (migration 227).
 PUBLIC runs no definer function; `tracker_app` runs the ones a request
-calls, `tracker_worker` the worker's (migration 153), and the purges —
+calls, `tracker_worker` the worker's (migration 153), `tracker_auth` the
+ones about getting in (migration 308, above), and the purges —
 `purge_workspace`, `purge_workspaces_like`, `purge_orphan_actors` — are the
 owner's alone, reached by the worker through its own clear-out. A function
 a migration makes is nobody's until it is granted (`alter default

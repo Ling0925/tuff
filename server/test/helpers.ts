@@ -1,7 +1,7 @@
 import { RIGHTS_ON_JOINING } from '@tracker/shared-schema'
 import { v7 as uuidv7 } from 'uuid'
 import postgres from 'postgres'
-import { asWorker, withActor, withActorEverywhere, withoutActor, closeDb as closeAppDb } from '../src/db.js'
+import { asAuth, asAuthEverywhere, asWorker, withActor, withActorEverywhere, withoutActor, closeDb as closeAppDb } from '../src/db.js'
 import { registerUser } from '../src/auth/flows.js'
 import { authenticate, type AuthContext } from '../src/auth/context.js'
 import { issueAccessToken } from '../src/auth/tokens.js'
@@ -25,6 +25,14 @@ edition.instance = false
  * that is about the session's workspace says so with `inWorkspace`.
  */
 export { withActorEverywhere as withActor, withoutActor, asWorker, uuidv7 }
+
+/*
+ * The sign-in role's connection (migration 308),
+ * for a fixture that calls a definer only it may run — a ticket made by
+ * hand, a factor turned on without the screens. `asAuthEverywhere` is the
+ * unbounded one, as `withActor` is above.
+ */
+export { asAuth, asAuthEverywhere }
 
 /*
  * The tables' owner, for the fixtures the application may not write: a

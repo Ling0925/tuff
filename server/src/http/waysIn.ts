@@ -1,6 +1,6 @@
 import { Hono, type Context } from 'hono'
 import { z } from 'zod'
-import { withoutActor } from '../db.js'
+import { asAuth } from '../db.js'
 import { confirmed } from '../auth/flows.js'
 import type { AuthContext } from '../auth/context.js'
 import { asksOf, byInbox, codeFromInbox, emailOf, itIsThem, tellWayIn } from '../auth/address.js'
@@ -56,7 +56,7 @@ waysIn.get('/me/ways-in', async (c) => {
   const ctx = c.get('ctx')
   if (ctx.viaMcp || !ctx.sessionId) return refused(c)
   const [rows, asks] = await Promise.all([
-    withoutActor(
+    asAuth(
       (tx) => tx<{ id: string; provider: string; email: string | null; created_at: Date }[]>`
         select * from auth_identities_of(${ctx.actorId})`,
     ),
@@ -99,7 +99,7 @@ waysIn.post('/me/ways-in/:provider', async (c) => {
   if (!(await confirmed(ctx.actorId)))
     return c.json({ error: { code: 'email_unverified', message: 'Confirm your email first. Check your inbox for the link.' } }, 403)
   if (challenge) {
-    const made = await withoutActor(
+    const made = await asAuth(
       (tx) =>
         tx`select auth_ticket_make_bound(${appLinkKey(challenge)}, 'link', ${ctx.actorId}, ${ctx.workspaceId}, interval '10 minutes', ${`${p}:${ctx.sessionId}:app:${challenge}`})`,
     ).then(
@@ -113,7 +113,7 @@ waysIn.post('/me/ways-in/:provider', async (c) => {
   /* For this provider, and for this session: ended by a reset or by
      signing out everywhere, the ticket goes with it. */
   const ticket = generateToken('lnk')
-  await withoutActor(
+  await asAuth(
     (tx) =>
       tx`select auth_ticket_make_bound(${hashToken(ticket)}, 'link', ${ctx.actorId}, ${ctx.workspaceId}, interval '10 minutes', ${`${p}:${ctx.sessionId}`})`,
   )
@@ -157,7 +157,7 @@ waysIn.delete('/me/ways-in/:id', async (c) => {
   if (!z.uuid().safeParse(id).success) return c.json({ error: { code: 'not_found' } }, 404)
   const no = await proven(c, ctx.actorId, Proof.safeParse(await c.req.json().catch(() => ({}))))
   if (no) return no
-  const [r] = await withoutActor(
+  const [r] = await asAuth(
     (tx) => tx<{ outcome: string; provider: string | null; email: string | null }[]>`
       select * from auth_identity_remove(${ctx.actorId}, ${id})`,
   )

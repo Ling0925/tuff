@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { authUrlFrom } from './db/authUrl.js'
 function required(name: string): string {
   const v = process.env[name]
   if (!v) throw new Error(`${name} is not set — see .env.example`)
@@ -187,6 +188,10 @@ export const env = {
   databaseUrlApp: process.env.DATABASE_URL_APP ?? required('DATABASE_URL'),
   /** The worker's role, which alone may call the worker's functions — migration 153. */
   databaseUrlWorker: process.env.DATABASE_URL_WORKER ?? '',
+  /** The sign-in role, which alone may write a way in, make a session or a
+      token, or delete an account — migration 308.
+      `DATABASE_URL_AUTH`, or made from `DATABASE_URL_APP` (`db/authUrl.ts`). */
+  databaseUrlAuth: authUrlFrom(process.env.DATABASE_URL_AUTH, process.env.DATABASE_URL_APP),
   jwtSecret: required('JWT_SECRET'),
   /**
    * The key for secrets kept to be read back — a second factor's seed, an

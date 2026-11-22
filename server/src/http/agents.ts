@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { v7 as uuidv7 } from 'uuid'
-import { withActor, withoutActor } from '../db.js'
+import { asAuthActor, withActor, withoutActor } from '../db.js'
 import { allow, type AuthContext } from '../auth/context.js'
 import { generateToken } from '../auth/crypto.js'
 import { issueApiToken } from '../auth/flows.js'
@@ -416,7 +416,8 @@ agents.post('/agents/:id/token', async (c) => {
   const may = await mayManage(ctx, id)
   if (may === 'gone') return c.json({ error: { code: 'not_found' } }, 404)
   if (may === 'no') return c.json(forbidden, 403)
-  const name = await withActor(ctx.actorId, ctx.workspaceId, async (tx) => {
+  /* On the sign-in connection: ending tokens is `tracker_auth`'s (migration 308). */
+  const name = await asAuthActor(ctx.actorId, ctx.workspaceId, async (tx) => {
     const [r] = await tx<{ ok: boolean }[]>`select agent_end_tokens(${id}) as ok`
     if (!r?.ok) return null
     const [a] = await tx<{ name: string }[]>`select name from actor where id = ${id}`
@@ -441,7 +442,7 @@ agents.delete('/agents/:id/connections/:grant', async (c) => {
   const may = await mayManage(ctx, id, 'agent.remove')
   if (may === 'gone' || !z.uuid().safeParse(grant).success) return c.json({ error: { code: 'not_found' } }, 404)
   if (may === 'no') return c.json(forbidden, 403)
-  const client = await withActor(ctx.actorId, ctx.workspaceId, async (tx) => {
+  const client = await asAuthActor(ctx.actorId, ctx.workspaceId, async (tx) => {
     const [r] = await tx<{ client: string | null }[]>`select agent_oauth_end(${id}, ${grant}) as client`
     return r?.client ?? null
   })

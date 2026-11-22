@@ -9,7 +9,7 @@ import { guess, metaOf, spendOn } from './limits.js'
 import { z } from 'zod'
 import { Role, Right, RIGHTS_ON_JOINING } from '@tracker/shared-schema'
 import { v7 as uuidv7 } from 'uuid'
-import { withActor, withoutActor } from '../db.js'
+import { asAuth, withActor, withoutActor } from '../db.js'
 import { allow, type AuthContext } from '../auth/context.js'
 import { generateToken, hashToken, hashPassword } from '../auth/crypto.js'
 import { confirmed, credentials, startSession, takeInvite, type Session } from '../auth/flows.js'
@@ -575,7 +575,7 @@ publicInvites.post('/invite/:token/accept', async (c) => {
    * an invite link could type somebody else's address and be signed in as
    * them.
    */
-  const existing = await withoutActor(async (tx) => {
+  const existing = await asAuth(async (tx) => {
     const [r] = await tx<{ actor_id: string }[]>`select actor_id from auth_lookup_user(${body.data.email})`
     return r ?? null
   })
@@ -606,7 +606,7 @@ publicInvites.post('/invite/:token/accept', async (c) => {
   const passwordHash = await hashPassword(body.data.password)
   let row: { workspace_id: string; actor_id: string; created_account: boolean } | undefined
   try {
-    ;[row] = await withoutActor(async (tx) => {
+    ;[row] = await asAuth(async (tx) => {
       return tx<{ workspace_id: string; actor_id: string; created_account: boolean }[]>`
         select * from accept_invite(
           ${hashToken(c.req.param('token'))}::text, ${uuidv7()}::uuid,
@@ -663,7 +663,7 @@ publicInvites.post('/invite/:token/accept', async (c) => {
    * password.
    */
   if (row.created_account) {
-    const [ok] = await withoutActor(
+    const [ok] = await asAuth(
       (tx) => tx<{ yes: boolean }[]>`select auth_confirm_if_invited(${row!.actor_id}, ${hashToken(c.req.param('token'))}) as yes`,
     )
     if (!ok?.yes) await sendChoosePassword(c, row.actor_id, body.data.email.toLowerCase())

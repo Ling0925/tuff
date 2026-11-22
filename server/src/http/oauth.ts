@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { v7 as uuidv7 } from 'uuid'
 import { z } from 'zod'
 import { origin } from '../publicUrl.js'
-import { withActor, withoutActor } from '../db.js'
+import { asAuth, withActor, withoutActor } from '../db.js'
 import { generateToken, hashToken } from '../auth/crypto.js'
 import { issueApiToken } from '../auth/flows.js'
 import { allow, contextOf, type AuthContext } from '../auth/context.js'
@@ -252,7 +252,7 @@ oauthApi.post('/oauth/authorize', async (c) => {
     if (may !== 'yes') return c.json({ error: { code: 'forbidden', message: 'You don’t manage this agent.' } }, 403)
   }
   const code = generateToken('code')
-  const [made] = await withoutActor(
+  const [made] = await asAuth(
     (tx) => tx<{ ok: boolean }[]>`
       select oauth_code_make(${hashToken(code)}, ${ctx.workspaceId}, ${d.client_id},
                              ${ctx.actorId}, ${d.redirect_uri}, ${d.code_challenge}, ${agentId}) as ok`,
@@ -301,7 +301,7 @@ async function pair(actorId: string, workspaceId: string, clientId: string, name
   if (linkedBy && !(await stillManages(linkedBy, actorId, workspaceId))) return null
   const access = await issueApiToken(actorId, workspaceId, name, [], ACCESS_DAYS)
   const refresh = generateToken('ref')
-  await withoutActor((tx) => tx`select oauth_token_bind(${hashToken(access)}, ${clientId}, ${hashToken(refresh)}, ${grant})`)
+  await asAuth((tx) => tx`select oauth_token_bind(${hashToken(access)}, ${clientId}, ${hashToken(refresh)}, ${grant})`)
   return {
     access_token: access,
     token_type: 'Bearer',
@@ -343,7 +343,7 @@ oauth.post('/oauth/token', async (c) => {
 
   c.header('cache-control', 'no-store')
   if (p('grant_type') === 'authorization_code') {
-    const [code] = await withoutActor(
+    const [code] = await asAuth(
       (tx) =>
         tx<
           {
@@ -368,16 +368,14 @@ oauth.post('/oauth/token', async (c) => {
        refused at its refresh, so a crash between the two ends nothing
        worse than this one connection. */
     if (code.agent_id) {
-      await withoutActor(
-        (tx) => tx`select oauth_agent_link(${grant}, ${code.workspace_id}, ${code.agent_id}, ${clientId}, ${code.actor_id})`,
-      )
+      await asAuth((tx) => tx`select oauth_agent_link(${grant}, ${code.workspace_id}, ${code.agent_id}, ${clientId}, ${code.actor_id})`)
     }
     const made = await pair(as, code.workspace_id, clientId, client.name, grant, linkedBy)
     return made ? c.json(made) : grantError(c, 'invalid_grant', 'You are no longer in this workspace.')
   }
 
   if (p('grant_type') === 'refresh_token') {
-    const [was] = await withoutActor(
+    const [was] = await asAuth(
       (tx) => tx<{ actor_id: string; workspace_id: string; name: string; grant_id: string }[]>`
         select * from oauth_refresh_take(${hashToken(p('refresh_token'))}, ${clientId})`,
     )

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { v7 as uuidv7 } from 'uuid'
-import { withoutActor, withActor, withActorEverywhere } from '../db.js'
+import { asAuth, asAuthActor, asAuthEverywhere, withActor, withActorEverywhere } from '../db.js'
 import { edition } from '../edition.js'
 import { orClosed } from '../instance.js'
 import { hashPassword, verifyPassword, hashToken, generateToken } from './crypto.js'
@@ -27,9 +27,10 @@ export type NowhereSession = Omit<Session, 'workspace_id'> & { workspace_id: nul
 export async function startNowhereSession(actorId: string, meta: Meta): Promise<NowhereSession> {
   const refreshToken = generateToken('rft')
   const sid = uuidv7()
-  /* As the person: `sess_write` takes a session only for the actor of its
-     transaction (migration 306). */
-  await withActorEverywhere(
+  /* As the person, on the sign-in connection: `sess_write` is the sign-in
+     role's alone and takes a session only for the actor of its transaction
+     (migrations 306, 308). */
+  await asAuthEverywhere(
     actorId,
     (tx) => tx`
       insert into refresh_session (id, actor_id, workspace_id, token_hash, user_agent, ip, device, expires_at, family)
@@ -77,8 +78,8 @@ export type Meta = {
 export async function startSession(actorId: string, workspaceId: string, meta: Meta, signIn: string | null): Promise<Session> {
   const refreshToken = generateToken('rft')
   const sid = uuidv7()
-  /* As the person, as above. */
-  await withActorEverywhere(actorId, async (tx) => {
+  /* As the person, on the sign-in connection, as above. */
+  await asAuthEverywhere(actorId, async (tx) => {
     await tx`
       insert into refresh_session (id, actor_id, workspace_id, token_hash, user_agent, ip, device, expires_at, family)
       values (${sid}, ${actorId}, ${workspaceId}, ${hashToken(refreshToken)},
@@ -150,8 +151,8 @@ type Registration = {
  * The human, the workspace and the owner membership, with the address
  * confirmed or not.
  *
- * It runs as the table owner: there is no actor yet and RLS requires one — this
- * is exactly the case withoutActor exists for.
+ * Through `register_owner`, a definer: there is no actor yet and RLS
+ * requires one. The sign-in role's alone to call (migration 308).
  */
 async function makeAccount(
   input: Registration,
@@ -164,14 +165,14 @@ async function makeAccount(
   const passwordHash = input.password ? await hashPassword(input.password) : null
   const slug =
     input.workspace_slug ??
-    (await withoutActor((tx) => tx<{ slug: string }[]>`select free_workspace_slug(${input.workspace_name}) as slug`))[0]!.slug
+    (await asAuth((tx) => tx<{ slug: string }[]>`select free_workspace_slug(${input.workspace_name}) as slug`))[0]!.slug
 
   // The bootstrap goes through a security definer function: RLS requires a
   // membership that does not exist at registration time.
   // On your own server it decides too, in the same statement: refused
   // when sign-up is closed and this is somebody asking.
   await orClosed(
-    withoutActor(async (tx) => {
+    asAuth(async (tx) => {
       await tx`select register_owner(
         ${actorId}, ${input.name}, ${input.email}, ${passwordHash},
         ${workspaceId}, ${input.workspace_name}, ${slug}, ${confirmed}, ${asked})`
@@ -222,7 +223,7 @@ export async function newWorkspace(
   chosen: { slug?: string | null; plan?: string | null; icon?: string | null; tint?: number | null } = {},
 ): Promise<Session & { slug: string }> {
   const workspaceId = uuidv7()
-  const slug = await withoutActor(async (tx) => {
+  const slug = await asAuth(async (tx) => {
     const [row] = await tx<{ slug: string }[]>`
       select new_workspace(${actorId}, ${workspaceId}, ${name}, ${chosen.slug ?? null}::text,
                            ${chosen.plan ?? edition.newWorkspacePlan}::text, ${chosen.icon ?? null}::text,
@@ -258,7 +259,7 @@ export async function login(
 
 /** Whether somebody's address has been confirmed. */
 export async function confirmed(actorId: string): Promise<boolean> {
-  const [r] = await withoutActor((tx) => tx<{ ok: boolean | null }[]>`select auth_email_confirmed(${actorId}) as ok`)
+  const [r] = await asAuth((tx) => tx<{ ok: boolean | null }[]>`select auth_email_confirmed(${actorId}) as ok`)
   return r?.ok === true
 }
 
@@ -276,7 +277,7 @@ export async function credentials(input: {
   password: string
   totp?: string | undefined
 }): Promise<string | 'totp_required' | null> {
-  const row = await withoutActor(async (tx) => {
+  const row = await asAuth(async (tx) => {
     const [r] = await tx<
       { actor_id: string; password_hash: string | null; totp_enabled: boolean }[]
     >`select * from auth_lookup_user(${input.email})`
@@ -322,7 +323,7 @@ export async function credentials(input: {
  * password, and by a provider's sign-in before its ticket becomes a session.
  */
 export async function secondFactor(actorId: string, email: string, totp: string): Promise<boolean> {
-  const sealed = await withoutActor(async (tx) => {
+  const sealed = await asAuth(async (tx) => {
     const [r] = await tx<{ secret: string | null }[]>`
       select auth_totp_secret_for(${email}) as secret`
     return r?.secret ?? null
@@ -342,7 +343,7 @@ export async function secondFactor(actorId: string, email: string, totp: string)
   // Trying both in the same field is one thing to explain instead of two.
   const step = secret ? totpStep(secret, given) : null
   if (step !== null) return spendStep(actorId, step)
-  return withoutActor(async (tx) => {
+  return asAuth(async (tx) => {
     const [r] = await tx<{ ok: boolean }[]>`
       select auth_recovery_spend(${actorId}, ${hashToken(given.toLowerCase())}) as ok`
     return r?.ok ?? false
@@ -355,7 +356,7 @@ export async function secondFactor(actorId: string, email: string, totp: string)
  * in the update that reads it: two sign-ins racing one code get one yes.
  */
 async function spendStep(actorId: string, step: number): Promise<boolean> {
-  const [r] = await withoutActor((tx) => tx<{ ok: boolean }[]>`select auth_totp_spend(${actorId}, ${step}) as ok`)
+  const [r] = await asAuth((tx) => tx<{ ok: boolean }[]>`select auth_totp_spend(${actorId}, ${step}) as ok`)
   return r?.ok === true
 }
 
@@ -379,7 +380,7 @@ export type Removed = { removed: { id: string; name: string } }
 
 /* The token a removal ended — only the one live when it happened. */
 async function removedBy(token: string): Promise<Removed | null> {
-  const [r] = await withoutActor(
+  const [r] = await asAuth(
     (tx) => tx<{ workspace_id: string; workspace_name: string }[]>`
     select * from auth_removed_by(${hashToken(token)})`,
   )
@@ -387,7 +388,7 @@ async function removedBy(token: string): Promise<Removed | null> {
 }
 
 async function removedFrom(actorId: string, workspaceId: string): Promise<Removed | null> {
-  const [r] = await withoutActor(
+  const [r] = await asAuth(
     (tx) => tx<{ name: string | null }[]>`
     select auth_removed_from(${actorId}, ${workspaceId}) as name`,
   )
@@ -417,7 +418,7 @@ export async function refresh(
    * returning` hands the row to exactly one of two requests arriving with
    * the same token.
    */
-  const row = await withoutActor(async (tx) => {
+  const row = await asAuth(async (tx) => {
     const [r] = await tx<{ session_id: string; actor_id: string; workspace_id: string | null }[]>`
       select * from auth_spend_refresh(${hashToken(token)})`
     return r ?? null
@@ -472,15 +473,13 @@ export async function refresh(
      Account end together, and a trade that dropped it left the access
      tokens from before it running after the browser was signed out. */
   if (!meta.device) {
-    const [was] = await withoutActor(
-      (tx) => tx<{ device: string | null }[]>`select auth_device_of(${row.actor_id}, ${row.session_id}) as device`,
-    )
+    const [was] = await asAuth((tx) => tx<{ device: string | null }[]>`select auth_device_of(${row.actor_id}, ${row.session_id}) as device`)
     if (was?.device) meta = { ...meta, device: was.device }
   }
   /* A session in no workspace, still in none: renewed as it was. One that
      was in a workspace and now finds none is not turned into one. */
   if (!workspaceId && !row.workspace_id) {
-    const [alive] = await withoutActor((tx) => tx<{ name: string }[]>`select name from auth_nowhere(${row.actor_id})`)
+    const [alive] = await asAuth((tx) => tx<{ name: string }[]>`select name from auth_nowhere(${row.actor_id})`)
     if (!alive) return null
     return startNowhereSession(row.actor_id, { ...meta, from: row.session_id })
   }
@@ -515,7 +514,7 @@ export async function refresh(
  * migration 115.
  */
 export async function logout(token: string): Promise<void> {
-  await withoutActor((tx) => tx`select auth_end_session(${hashToken(token)})`)
+  await asAuth((tx) => tx`select auth_end_session(${hashToken(token)})`)
 }
 
 /**
@@ -563,7 +562,8 @@ async function mint(
   most: number | null,
 ): Promise<string | null> {
   const token = generateToken('tok')
-  const made = await withActor(actorId, workspaceId, async (tx) => {
+  /* On the sign-in connection: a token is inserted by `tracker_auth` alone (migration 308). */
+  const made = await asAuthActor(actorId, workspaceId, async (tx) => {
     /* Counted under a lock on the person, so two presses at once cannot
        both find room for the last one. */
     if (most !== null) {
@@ -582,7 +582,7 @@ async function mint(
     return true
   })
   if (!made) return null
-  await withoutActor(
+  await asAuth(
     (tx) => tx`
       insert into security_event (id, workspace_id, actor_id, kind, meta)
       values (${uuidv7()}, ${workspaceId}, ${actorId}, 'token_issued',
@@ -596,7 +596,8 @@ async function mint(
  * must not be un-revocable. That is also why it is not a mutation.
  */
 export async function revokeApiToken(actorId: string, workspaceId: string, tokenId: string, anyOwner: boolean): Promise<boolean> {
-  return withActor(actorId, workspaceId, async (tx) => {
+  /* `revoked_at` is the sign-in role's to write (migration 308). */
+  return asAuthActor(actorId, workspaceId, async (tx) => {
     // An owner or admin may revoke somebody else's; everyone else only their
     // own, and RLS keeps the row invisible either way.
     const rows = anyOwner
@@ -629,7 +630,7 @@ export async function beginTotp(actorId: string, email: string): Promise<{ secre
   const secret = generateSecret()
   /* Null when the factor is on: the write asks, not only the route before
      it, so an enable landing in between is not undone (migration 243). */
-  const [r] = await withoutActor((tx) => tx<{ ok: boolean }[]>`select auth_totp_begin(${actorId}, ${seal(secret)}) as ok`)
+  const [r] = await asAuth((tx) => tx<{ ok: boolean }[]>`select auth_totp_begin(${actorId}, ${seal(secret)}) as ok`)
   if (!r?.ok) return null
   return { secret, url: otpauthUrl(secret, email) }
 }
@@ -639,7 +640,7 @@ export async function beginTotp(actorId: string, email: string): Promise<{ secre
  * only from off: `on` when it already was, and no new recovery codes then.
  */
 export async function enableTotp(actorId: string, code: string): Promise<string[] | 'on' | 'expired' | null> {
-  const sealed = await withoutActor(async (tx) => {
+  const sealed = await asAuth(async (tx) => {
     const [r] = await tx<{ secret: string | null }[]>`
       select auth_totp_secret(${actorId}) as secret`
     return r?.secret ?? null
@@ -654,7 +655,7 @@ export async function enableTotp(actorId: string, code: string): Promise<string[
   /* `expired` for a secret begun more than a quarter of an hour ago: one
      begun and left, or begun before beginning asked who it was, is not a
      way to turn the factor on with a code alone (migration 243). */
-  const turned = await withoutActor(async (tx) => {
+  const turned = await asAuth(async (tx) => {
     const [r] = await tx<{ how: 'ok' | 'on' | 'expired' }[]>`select auth_totp_enable(${actorId}) as how`
     if (r?.how !== 'ok') return r?.how ?? 'expired'
     await tx`select auth_recovery_replace(${actorId}, ${codes.map((c) => hashToken(c))})`
@@ -679,7 +680,7 @@ export async function disableTotp(
   proof: { password?: string | undefined; emailCode?: string | undefined },
   code: string,
 ): Promise<'ok' | 'wrong_password' | 'wrong_email_code' | 'wrong_code'> {
-  const stored = await withoutActor(async (tx) => {
+  const stored = await asAuth(async (tx) => {
     const [r] = await tx<{ hash: string | null; email: string | null }[]>`
       select auth_password_hash(${actorId}) as hash, auth_email_of(${actorId})::text as email`
     return r ?? null
@@ -695,7 +696,7 @@ export async function disableTotp(
     if (!(await codeFromInbox(actorId, proof.emailCode, 'twofa-off'))) return 'wrong_email_code'
   }
   if (!stored?.email || !code.trim() || !(await secondFactor(actorId, stored.email, code))) return 'wrong_code'
-  await withoutActor((tx) => tx`select auth_totp_disable(${actorId})`)
+  await asAuth((tx) => tx`select auth_totp_disable(${actorId})`)
   return 'ok'
 }
 
@@ -736,11 +737,11 @@ export async function takeInvite(
   tokenHash: string,
   actorId: string,
 ): Promise<{ workspaceId: string } | 'gone' | 'full' | 'elsewhere' | 'unconfirmed'> {
-  const [u] = await withoutActor((tx) => tx<{ email: string | null }[]>`select auth_email_of(${actorId}) as email`)
+  const [u] = await asAuth((tx) => tx<{ email: string | null }[]>`select auth_email_of(${actorId}) as email`)
   if (!u?.email) return 'gone'
   if (!(await confirmed(actorId))) return 'unconfirmed'
   try {
-    const [row] = await withoutActor(
+    const [row] = await asAuth(
       (tx) => tx<{ workspace_id: string; actor_id: string }[]>`
         select * from accept_invite(${tokenHash}::text, ${uuidv7()}::uuid, ''::text, ${u.email}::citext, null::text)`,
     )

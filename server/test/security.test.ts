@@ -2,7 +2,7 @@ import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { app } from '../src/http/routes.js'
 import postgres from 'postgres'
-import { closeDb, makeOwner, addPerson, makeProject, bearerFor, withActor, withoutActor, uuidv7 } from './helpers.js'
+import { asAuth, closeDb, makeOwner, addPerson, makeProject, bearerFor, withActor, uuidv7 } from './helpers.js'
 import { closeRealtime } from '../src/realtime.js'
 import { issueApiToken } from '../src/auth/flows.js'
 import { outbox } from '../src/mail.js'
@@ -234,7 +234,7 @@ test('an address proved by its owner takes back the factor, tokens and phones it
     insert into push_subscription (id, workspace_id, actor_id, endpoint, p256dh, auth)
     values (${uuidv7()}, ${workspaceId}, ${ctx.actorId}, ${`https://fcm.googleapis.com/fcm/send/${uuidv7()}`}, 'p', 'a')`
 
-  await withoutActor((tx) => tx`select auth_claim_email(${ctx.actorId})`)
+  await asAuth((tx) => tx`select auth_claim_email(${ctx.actorId})`)
 
   const [u] = await owner<{ totp_enabled: boolean; totp_secret_enc: string | null; verified: boolean }[]>`
     select totp_enabled, totp_secret_enc, email_verified_at is not null as verified from app_user where actor_id = ${ctx.actorId}`
@@ -258,7 +258,7 @@ test('a device stops hearing the account when its last session ends', async () =
 
   // Ended from Account, every session of that browser.
   const [s] = await owner<{ id: string }[]>`select id from refresh_session where actor_id = ${ctx.actorId} limit 1`
-  await withoutActor((tx) => tx`select auth_revoke_session(${ctx.actorId}, ${s!.id})`)
+  await asAuth((tx) => tx`select auth_revoke_session(${ctx.actorId}, ${s!.id})`)
   const after = await left()
   assert.ok(!after.includes(device))
   assert.equal(after.length, 1, 'another device, still signed in elsewhere or not ours to judge, is left')

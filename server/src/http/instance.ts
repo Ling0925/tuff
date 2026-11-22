@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { withActor } from '../db.js'
+import { asAuthActor, withActor } from '../db.js'
 import { edition } from '../edition.js'
 import { allow, type AuthContext } from '../auth/context.js'
 import { asksOf, byInbox, codeFromInbox, emailOf, itIsThem } from '../auth/address.js'
@@ -90,7 +90,9 @@ instanceApi.post('/instance/owners', async (c) => {
   if (mayNot(ctx)) return c.json(hidden, 404)
   const body = z.object({ email: z.email().max(254) }).safeParse(await c.req.json().catch(() => ({})))
   if (!body.success) return c.json({ error: { code: 'invalid' } }, 400)
-  const [r] = await withActor(
+  /* The server's owners and its mail are a way in — the mail carries every
+     reset link — so they are the sign-in role's (migration 308). */
+  const [r] = await asAuthActor(
     ctx.actorId,
     ctx.workspaceId,
     (tx) => tx<{ said: string }[]>`select instance_add_owner(${body.data.email.toLowerCase()}::citext) as said`,
@@ -111,7 +113,7 @@ instanceApi.delete('/instance/owners/:actorId', async (c) => {
   if (mayNot(ctx)) return c.json(hidden, 404)
   const id = z.uuid().safeParse(c.req.param('actorId'))
   if (!id.success) return c.json(hidden, 404)
-  const [r] = await withActor(
+  const [r] = await asAuthActor(
     ctx.actorId,
     ctx.workspaceId,
     (tx) => tx<{ said: string }[]>`select instance_remove_owner(${id.data}) as said`,
@@ -208,7 +210,7 @@ instanceApi.put('/instance/mail', async (c) => {
   if (!body.success) return c.json({ error: { code: 'invalid', message: 'Fill in every field.' } }, 400)
   const refused = await notThem(ctx, body.data)
   if (refused) return c.json(refused.body, refused.status)
-  const said = await withActor(ctx.actorId, ctx.workspaceId, (tx) => saveMail(tx, body.data.mail, null))
+  const said = await asAuthActor(ctx.actorId, ctx.workspaceId, (tx) => saveMail(tx, body.data.mail, null))
   if (said !== 'saved') {
     if (said.code === 'forbidden') return c.json(hidden, 404)
     return c.json(refusalBody(said), said.status)
@@ -225,7 +227,7 @@ instanceApi.delete('/instance/mail', async (c) => {
   if (!body.success) return c.json({ error: { code: 'invalid', message: 'Fill in every field.' } }, 400)
   const refused = await notThem(ctx, body.data)
   if (refused) return c.json(refused.body, refused.status)
-  const said = await withActor(ctx.actorId, ctx.workspaceId, (tx) => clearMail(tx, null))
+  const said = await asAuthActor(ctx.actorId, ctx.workspaceId, (tx) => clearMail(tx, null))
   if (said === false) return c.json(hidden, 404)
   if (said !== true) return c.json(refusalBody(said), said.status)
   await mailChanged()

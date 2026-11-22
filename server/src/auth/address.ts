@@ -1,4 +1,4 @@
-import { withoutActor } from '../db.js'
+import { asAuth } from '../db.js'
 import { letter, send } from '../mail.js'
 import { edition } from '../edition.js'
 import { spendOn } from '../http/limits.js'
@@ -30,7 +30,7 @@ import { languageFor, say, type Language } from '../words.js'
 export type Asks = { password: boolean; code: boolean }
 
 export async function asksOf(actorId: string): Promise<Asks> {
-  const [r] = await withoutActor(
+  const [r] = await asAuth(
     (tx) => tx<{ password: boolean; code: boolean }[]>`
       select password_hash is not null as password, totp_enabled as code
       from auth_lookup_user(auth_email_of(${actorId}))`,
@@ -47,7 +47,7 @@ export const byInbox = (a: Asks) => !a.password && !a.code
 
 /** Where its mail goes now, and the change waiting on a link, if any. */
 export async function emailOf(actorId: string): Promise<{ email: string; pending: { kind: 'approve' | 'email'; email: string } | null }> {
-  const [r] = await withoutActor(
+  const [r] = await asAuth(
     (tx) => tx<{ email: string; kind: 'approve' | 'email' | null; pending: string | null }[]>`
       select auth_email_of(${actorId}) as email, p.kind, p.email as pending
       from (select 1) one left join auth_email_pending(${actorId}) p on true`,
@@ -66,7 +66,7 @@ export async function itIsThem(
   given: { password?: string | undefined; code?: string | undefined },
 ): Promise<boolean> {
   if (asks.password) {
-    const [r] = await withoutActor((tx) => tx<{ hash: string | null }[]>`select auth_password_hash(${actorId}) as hash`)
+    const [r] = await asAuth((tx) => tx<{ hash: string | null }[]>`select auth_password_hash(${actorId}) as hash`)
     if (!r?.hash || !given.password || !(await verifyPassword(given.password, r.hash))) return false
   }
   if (asks.code) {
@@ -94,10 +94,10 @@ export async function mailCode(
       sign in, `twofa` turning on two-factor authentication. */
   purpose: Purpose = 'leave',
 ): Promise<boolean> {
-  const [n] = await withoutActor((tx) => tx<{ n: number }[]>`select auth_ticket_recent(${actorId}, 'reauth') as n`)
+  const [n] = await asAuth((tx) => tx<{ n: number }[]>`select auth_ticket_recent(${actorId}, 'reauth') as n`)
   if ((n?.n ?? 0) >= 5) return false
   const code = String(randomInt(0, 1_000_000)).padStart(6, '0')
-  await withoutActor(
+  await asAuth(
     (tx) =>
       tx`select auth_ticket_make(${hashToken(`${actorId}:${purpose}:${code}`)}, 'reauth', ${actorId}, ${null}, interval '10 minutes')`,
   )
@@ -224,7 +224,7 @@ export async function tellWayIn(
 export async function codeFromInbox(actorId: string, code: string | undefined, purpose: Purpose = 'leave'): Promise<boolean> {
   const digits = (code ?? '').replace(/\s/g, '')
   if (!/^\d{6}$/.test(digits)) return false
-  const [r] = await withoutActor(
+  const [r] = await asAuth(
     (tx) => tx<{ ok: boolean }[]>`select auth_ticket_spend(${hashToken(`${actorId}:${purpose}:${digits}`)}, 'reauth') as ok`,
   )
   return Boolean(r?.ok)
@@ -247,8 +247,8 @@ const link = (base: string, token: string) => `${base}/verify/${encodeURICompone
  */
 export async function sendToNew(base: string, actorId: string, to: string, screen: Language = 'en'): Promise<void> {
   const token = generateToken('eml')
-  await withoutActor((tx) => tx`select auth_email_ticket(${hashToken(token)}, 'email', ${actorId}, ${to}, interval '1 day')`)
-  const [taken] = await withoutActor((tx) => tx<{ actor_id: string }[]>`select actor_id from auth_lookup_user(${to})`)
+  await asAuth((tx) => tx`select auth_email_ticket(${hashToken(token)}, 'email', ${actorId}, ${to}, interval '1 day')`)
+  const [taken] = await asAuth((tx) => tx<{ actor_id: string }[]>`select actor_id from auth_lookup_user(${to})`)
   if (taken) {
     // Three an hour to one address, so this is not a way to fill an inbox.
     if (!(await spendOn(`mail:taken:${to}`, 3, 3600))) return
@@ -306,7 +306,7 @@ export async function sendToNew(base: string, actorId: string, to: string, scree
 /** For an account with nothing to type: its current address says yes first. */
 export async function sendForApproval(base: string, actorId: string, current: string, to: string, screen: Language = 'en'): Promise<void> {
   const token = generateToken('apv')
-  await withoutActor((tx) => tx`select auth_email_ticket(${hashToken(token)}, 'approve', ${actorId}, ${to}, interval '1 day')`)
+  await asAuth((tx) => tx`select auth_email_ticket(${hashToken(token)}, 'approve', ${actorId}, ${to}, interval '1 day')`)
   const language = await languageFor(actorId, screen)
   const w = say(
     {
@@ -341,25 +341,25 @@ export async function follow(
   screen: Language = 'en',
 ): Promise<{ kind: 'approved' | 'changed' | 'taken'; email: string } | null> {
   const hash = hashToken(token)
-  const [t] = await withoutActor(
+  const [t] = await asAuth(
     (tx) => tx<{ kind: 'approve' | 'email'; actor_id: string; email: string }[]>`
       select * from auth_email_ticket_peek(${hash})`,
   )
   if (!t) return null
-  const [spent] = await withoutActor((tx) => tx<{ ok: boolean }[]>`select auth_ticket_spend(${hash}, ${t.kind}) as ok`)
+  const [spent] = await asAuth((tx) => tx<{ ok: boolean }[]>`select auth_ticket_spend(${hash}, ${t.kind}) as ok`)
   if (!spent?.ok) return null
   if (t.kind === 'approve') {
     await sendToNew(base, t.actor_id, t.email, screen)
     return { kind: 'approved', email: t.email }
   }
   const { email: old } = await emailOf(t.actor_id)
-  const [r] = await withoutActor((tx) => tx<{ said: string }[]>`select auth_email_change(${t.actor_id}, ${t.email}) as said`)
+  const [r] = await asAuth((tx) => tx<{ said: string }[]>`select auth_email_change(${t.actor_id}, ${t.email}) as said`)
   if (r?.said === 'taken') return { kind: 'taken', email: t.email }
   if (r?.said !== 'changed') return null
   /* A Google sign-in made under the old address goes with it: the company
      that owns that inbox owns that Google account too, and hands both to
      whoever comes next — migration 151. */
-  if (old) await withoutActor((tx) => tx`select auth_identity_forget(${t.actor_id}, ${old})`)
+  if (old) await asAuth((tx) => tx`select auth_identity_forget(${t.actor_id}, ${old})`)
   if (old && old.toLowerCase() !== t.email.toLowerCase()) {
     /* Told after, not asked before: the new address proved itself, and the
        old one is where somebody would first notice a change they did not
