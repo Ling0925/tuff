@@ -62,6 +62,9 @@ export const DONE = say<Record<string, string>>({
   /* Saved as a template, and taken back. */
   'file.template': ['saved as a template', 'a enregistré comme modèle'],
   'file.untemplate': ['stopped using as a template', 'a retiré des modèles'],
+  /* The project's instructions for agents. */
+  'file.for_agents': ['marked for agents', 'a marqué pour les agents'],
+  'file.not_for_agents': ['stopped marking for agents', 'a retiré la mention pour les agents'],
   /* Published, and who it is for changed. */
   'file.publish': ['published', 'a publié'],
   'file.access': ['changed who can see', 'a modifié qui peut voir'],

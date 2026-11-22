@@ -376,6 +376,11 @@ export const ERRORS_FR: Record<string, string> = {
   'a list is taken only by an agent of its workspace': 'Seul un agent de cet espace de travail peut prendre une liste.',
   'Only a written document holds pictures and files.': 'Seul un document rédigé peut contenir des images et des fichiers.',
   'Only a written document can be a template.': 'Seul un document rédigé peut servir de modèle.',
+  // A project's instructions for agents.
+  'Only a written document can be the instructions for agents.': 'Seul un document rédigé peut servir d’instructions pour les agents.',
+  'Publish this document to everyone on the project first. Agents read only what the whole project can.':
+    'Publiez d’abord ce document pour toutes les personnes du projet. Les agents ne lisent que ce que tout le projet peut lire.',
+  'Not yours to say what agents read here.': 'Ce n’est pas à vous de choisir ce que les agents lisent ici.',
   'Only a written document has a colour and an icon.': 'Seul un document rédigé a une couleur et une icône.',
   'Say which file is to go for good.': 'Indiquez quel fichier supprimer définitivement.',
   'No such template.': 'Ce modèle n’existe pas.',

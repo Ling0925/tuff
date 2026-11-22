@@ -2465,6 +2465,7 @@
                   "file.delete",
                   "list.agent",
                   "file.share",
+                  "file.for_agents",
                   "channel.create.workspace",
                   "channel.leave",
                   "hook.manage",
@@ -2493,6 +2494,43 @@
               }
             ]
           }
+        },
+        "for_agents": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "number": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "number",
+                "name"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -10669,6 +10707,9 @@
         "audience": {
           "type": "string"
         },
+        "for_agents": {
+          "type": "boolean"
+        },
         "mark_icon": {
           "type": [
             "string",
@@ -11112,6 +11153,12 @@
         "may_share": {
           "type": "boolean"
         },
+        "for_agents": {
+          "type": "boolean"
+        },
+        "may_for_agents": {
+          "type": "boolean"
+        },
         "loose_files": {
           "anyOf": [
             {
@@ -11434,6 +11481,34 @@
         "template_at"
       ]
     },
+    "ForAgentsChanged": {
+      "title": "ForAgentsChanged",
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "for_agents": {
+          "type": "boolean"
+        },
+        "replaced": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "ok",
+        "for_agents"
+      ]
+    },
     "AudienceChanged": {
       "title": "AudienceChanged",
       "type": "object",
@@ -11575,6 +11650,7 @@
     "file.delete",
     "list.agent",
     "file.share",
+    "file.for_agents",
     "channel.create.workspace",
     "channel.leave",
     "hook.manage",
@@ -11621,7 +11697,8 @@
     "feedback.manage",
     "hook.manage",
     "question.answer",
-    "list.agent"
+    "list.agent",
+    "file.for_agents"
   ],
   "x-default-settings": {
     "who_creates_projects": "members",

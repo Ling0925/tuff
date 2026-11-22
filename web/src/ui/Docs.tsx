@@ -43,6 +43,8 @@ export type DocRow = {
   template_at?: string | null
   /** Who it is for. */
   audience?: 'author' | 'chosen' | 'project'
+  /** The project's instructions for agents. */
+  for_agents?: boolean
   created_at?: string
   /** What a written document wears — `docs/specs/docs.md`, "A document's mark". */
   mark_icon?: string | null
@@ -599,6 +601,7 @@ export function DocsRows({
                     {what(f)}
                     {f.author_name && f.kind !== 'folder' ? ` · ${f.author_name}` : ''}
                     {f.template_at ? <span data-file-template>{` · ${DOC_TEMPLATE.template}`}</span> : null}
+                    {f.for_agents ? <span data-file-for-agents>{` · ${FILE_DETAIL.forAgents}`}</span> : null}
                   </span>
                   {/* Where it was sent or put, and the way back there — a
                         screenshot is about the conversation it was in. */}
@@ -1036,6 +1039,12 @@ function PinnedCard({
                 style={{ background: isPdf(f) ? '#e5483f' : 'var(--n-6)', borderRadius: 8, color: '#fff' }}
               >
                 {isPdf(f) ? 'PDF' : <Icon name={where ? 'link' : isImage(f) ? 'image' : 'clip'} size={12} />}
+              </span>
+            )}
+            {/* Beside its mark, as the document's own head says it. */}
+            {f.for_agents && (
+              <span data-file-for-agents className="flex h-6 items-center text-xs text-ink-3">
+                {FILE_DETAIL.forAgents}
               </span>
             )}
             {onPin && (

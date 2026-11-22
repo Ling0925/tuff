@@ -167,6 +167,12 @@ export const ProjectInList = Project.partial({
   mark_icon: z.string().nullable().optional(),
   mark_tint: z.number().int().nullable().optional(),
   can: z.array(Action.or(z.string())).optional(),
+  /** The project's instructions for agents — one written document it marked
+      so, or null; on `GET /api/projects/:id` only. */
+  for_agents: z
+    .object({ id: Uuid, number: z.number().int().nullable(), name: z.string() })
+    .nullable()
+    .optional(),
 })
 
 /** A task as a list answers it: the row, with the names it is read beside. */
@@ -1133,6 +1139,8 @@ export const FileInList = z.object({
   template_at: z.string().nullable().optional(),
   /** Who it is for: `author` (a draft), `chosen` or `project`. Absent from a server before it. */
   audience: z.string().optional(),
+  /** Whether it is the project's instructions for agents. Absent from a server before it. */
+  for_agents: z.boolean().optional(),
   /** What a written document wears, or null for its own look: one of `MarkIcon`, and an index into the ten tints — `docs/specs/docs.md`, "A document's mark" (migration 276). */
   mark_icon: z.string().nullable().optional(),
   mark_tint: z.number().int().nullable().optional(),
@@ -1218,6 +1226,8 @@ export const AudienceChanged = z.object({
 })
 /** What saving a document as a template, or taking it back, answers. */
 export const TemplateChanged = z.object({ ok: z.boolean(), template_at: z.string().nullable() })
+/** What marking a document as the project's instructions for agents, or taking the mark off, answers. `replaced` is the document that held the mark before, when marking this one took it off that one. */
+export const ForAgentsChanged = z.object({ ok: z.boolean(), for_agents: z.boolean(), replaced: Uuid.nullable().optional() })
 
 /** A file read whole — `GET /api/files/:id`: a document's body, or what an
     upload or a link is, and what was said on it. */
@@ -1257,6 +1267,10 @@ export const FileInDetail = z.object({
   may_edit: z.boolean().optional(),
   /** Whether the reader may say who it is for (`file.share`): publish a draft, choose its people. */
   may_share: z.boolean().optional(),
+  /** Whether it is the project's instructions for agents. */
+  for_agents: z.boolean().optional(),
+  /** Whether the reader may mark it so, or take the mark off (`file.for_agents`). */
+  may_for_agents: z.boolean().optional(),
   /** How many pictures and files its body shows that it does not hold — put in before it was private, they stay the project's. A written document only. */
   loose_files: z.number().int().nullable().optional(),
   /** What a written document wears, or null for its own look: one of `MarkIcon`, and an index into the ten tints — `docs/specs/docs.md`, "A document's mark" (migration 276). */

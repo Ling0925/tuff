@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { HEADS, MAKE, MORE } from '../data/words.js'
 import { api, untilAnswered } from '../data/api.js'
 import { recall, remember } from '../data/memory.js'
@@ -51,6 +51,9 @@ type Full = {
   public_token?: string | null
   /** Saved as a template. */
   template_at?: string | null
+  /** The project's instructions for agents, and whether you may say so. */
+  for_agents?: boolean
+  may_for_agents?: boolean
   /** Whether **you** follow it. */
   subscribed?: boolean
   /** Whether the reader may change it, as the server decides — a PATCH's own question. */
@@ -188,6 +191,28 @@ export function FileDetail({
       setCopied((e as Error).message || TEMPLATE.couldNotSave)
     } finally {
       setTimeout(() => setCopied(null), 1800)
+    }
+  }
+  /* The project's instructions for agents, or not.
+     Said beside the menu, as a template is; the list is told so its label
+     moves, and the one it replaced loses its own there. */
+  async function forAgents(on: boolean) {
+    if (!file) return
+    const was = Boolean(file.for_agents)
+    setFile((f) => (f ? { ...f, for_agents: on } : f))
+    try {
+      const r = await api<{ for_agents: boolean; replaced?: string | null }>(`/files/${file.id}/for-agents`, {
+        method: 'PUT',
+        body: JSON.stringify({ for_agents: on }),
+      })
+      setFile((f) => (f ? { ...f, for_agents: r.for_agents } : f))
+      setCopied(on ? (r.replaced ? W.agentsReadThisInstead : W.agentsReadThis) : W.noLongerForAgents)
+      onChanged()
+    } catch (e) {
+      setFile((f) => (f ? { ...f, for_agents: was } : f))
+      setCopied((e as Error).message || W.couldNotForAgents)
+    } finally {
+      setTimeout(() => setCopied(null), 2400)
     }
   }
   /* The document's versions, in a window over it. */
@@ -793,6 +818,24 @@ export function FileDetail({
                           <span className="min-w-px flex-1">{TEMPLATE.saveAsTemplate}</span>
                           <Switch on={Boolean(file.template_at)} />
                         </button>
+                        {/* What every agent on the project reads first —
+                          a document the whole project reads, for whoever
+                          runs it; the server decides. */}
+                        {file.may_for_agents && ((file.audience ?? 'project') === 'project' || file.for_agents) && (
+                          <button
+                            data-row
+                            role="switch"
+                            aria-checked={Boolean(file.for_agents)}
+                            data-testid="for-agents"
+                            onClick={() => void forAgents(!file.for_agents)}
+                            className="flex w-full items-center gap-3 px-3 text-left text-base text-ink"
+                            style={{ height: 'var(--row-h)' }}
+                          >
+                            <Icon name="prompt" size={16} style={{ color: file.for_agents ? 'var(--accent)' : 'var(--ink-2)' }} />
+                            <span className="min-w-px flex-1">{W.forAgents}</span>
+                            <Switch on={Boolean(file.for_agents)} />
+                          </button>
+                        )}
                         {file.public_token && (
                           <button
                             data-row
@@ -947,6 +990,16 @@ export function FileDetail({
                 <DocLook
                   icon={file.mark_icon ?? null}
                   tint={file.mark_tint ?? null}
+                  /* Beside the mark, on its row, so the title does not move
+                     when it is switched. */
+                  aside={
+                    file.for_agents ? (
+                      <span data-testid="for-agents-label" className="flex items-center gap-1 text-sm text-ink-3">
+                        <Icon name="prompt" size={14} />
+                        {W.forAgents}
+                      </span>
+                    ) : null
+                  }
                   mayChange={canWrite && file.may_edit !== false}
                   onChange={(change) => {
                     const was = { mark_icon: file.mark_icon ?? null, mark_tint: file.mark_tint ?? null }
@@ -1260,36 +1313,43 @@ function LinkAddress({ url, canWrite, onSave }: { url: string; canWrite: boolean
 function DocLook({
   icon,
   tint,
+  aside,
   mayChange,
   onChange,
 }: {
   icon: string | null
   tint: number | null
+  /** What is said beside the mark, on its row — "For agents". */
+  aside?: ReactNode
   mayChange: boolean
   onChange: (change: { mark_icon?: string | null; mark_tint?: number | null }) => void
 }) {
   const [open, setOpen] = useState(false)
   if (!mayChange) {
     return (
-      <div className="mb-3">
+      <div className="mb-3 flex items-center gap-3">
         <DocMark icon={icon} tint={tint} size={40} />
+        {aside}
       </div>
     )
   }
   return (
     <div className="mb-3 flex flex-col items-start gap-3">
-      <button
-        type="button"
-        data-testid="doc-mark-toggle"
-        aria-expanded={open}
-        aria-label={W.changeLook}
-        title={W.changeLook}
-        onClick={() => setOpen((v) => !v)}
-        className="flex shrink-0 rounded-[var(--r-row)] transition-transform duration-150 ease-out active:scale-[0.96]"
-        style={{ boxShadow: open ? '0 0 0 2px var(--accent)' : undefined }}
-      >
-        <DocMark icon={icon} tint={tint} size={40} />
-      </button>
+      <span className="flex items-center gap-3">
+        <button
+          type="button"
+          data-testid="doc-mark-toggle"
+          aria-expanded={open}
+          aria-label={W.changeLook}
+          title={W.changeLook}
+          onClick={() => setOpen((v) => !v)}
+          className="flex shrink-0 rounded-[var(--r-row)] transition-transform duration-150 ease-out active:scale-[0.96]"
+          style={{ boxShadow: open ? '0 0 0 2px var(--accent)' : undefined }}
+        >
+          <DocMark icon={icon} tint={tint} size={40} />
+        </button>
+        {aside}
+      </span>
       {open && (
         <div data-testid="doc-mark-rails">
           <MarkRails

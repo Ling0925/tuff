@@ -138,6 +138,22 @@ test('choosing who reads a document is its author’s and its editors’', () =>
   assert.equal(can('file.share', base('member', { isAuthor: true, agent: true })), false)
 })
 
+/* The project's instructions for agents: whoever may change the document
+   and runs the project — never a tool or an agent. */
+test('marking a project’s instructions for agents is for whoever runs it and may change the document', () => {
+  assert.equal(can('file.for_agents', base('owner', { isAuthor: false })), true)
+  assert.equal(can('file.for_agents', base('member', { isAuthor: true, rights: ['manage'] })), true)
+  assert.equal(can('file.for_agents', base('member', { isAuthor: false, rights: ['manage'] })), true)
+  assert.equal(can('file.for_agents', base('member', { isAuthor: true, rights: ['task.create', 'edit.any'] })), false, 'not running it')
+  assert.equal(can('file.for_agents', base('member', { isAuthor: true, rights: ['manage'], inProject: false })), false)
+  assert.equal(can('file.for_agents', base('owner', { viaMcp: true })), false)
+  assert.equal(can('file.for_agents', base('member', { isAuthor: true, rights: ['manage'], agent: true })), false)
+  assert.equal(
+    can('file.for_agents', base('member', { isAuthor: true, rights: ['manage'], tokenLimited: true, outsideToken: true })),
+    false,
+  )
+})
+
 test('a permission held on a project is not held outside one', () => {
   const off = { inProject: false, rights: [] as string[] }
   for (const action of ['task.create', 'task.delete', 'channel.create', 'channel.delete'] as const) {

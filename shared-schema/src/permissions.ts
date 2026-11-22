@@ -112,6 +112,15 @@ export const Action = z.enum([
    */
   'file.share',
   /*
+   * Marking one written document as the project's instructions for agents,
+   * or taking the mark off. Whoever may change
+   * the document and run the project (`project.tools`): it changes what
+   * every agent working there is told. Never an agent's and never through
+   * a token — the document an agent reads first is what an injected
+   * instruction would most want to be.
+   */
+  'file.for_agents',
+  /*
    * A channel outside every project. Its own
    * row because no project's rights can answer it: there is no project.
    * Every member may, unless the owner said otherwise about them.
@@ -461,6 +470,8 @@ export const NEVER_VIA_MCP: readonly Action[] = [
   'question.answer',
   /* Who takes a list's new tasks. */
   'list.agent',
+  /* What every agent on a project is told to read first. */
+  'file.for_agents',
 ]
 
 /**
@@ -485,6 +496,7 @@ const NEVER_AN_AGENT: readonly Action[] = [
   'people.invite', 'people.role', 'members.read', 'agent.connect', 'agent.manage', 'agent.remove', 'agent.work.read', 'token.issue.own',
   'channel.create', 'channel.create.workspace', 'channel.delete', 'task.delete', 'file.delete', 'file.share', 'time.any', 'feedback.manage',
   'instance', 'task.remind', 'hook.manage', 'question.answer', 'workspace.leave', 'channel.leave', 'list.agent',
+  'file.for_agents',
 ]
 
 /*
@@ -662,6 +674,12 @@ export function can(action: Action, input: PermissionInput): boolean {
      else as they may edit somebody else's. */
   if (action === 'file.share') {
     return can(input.isAuthor ? 'content.edit.own' : 'content.edit.any', input)
+  }
+
+  /* The project's instructions for agents: changing the document, and
+     running the project. */
+  if (action === 'file.for_agents') {
+    return can('project.tools', input) && can(input.isAuthor ? 'content.edit.own' : 'content.edit.any', input)
   }
 
   if (action === 'content.edit.any' || action === 'content.edit.said') {

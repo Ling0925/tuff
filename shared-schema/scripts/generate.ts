@@ -260,6 +260,7 @@ const RESPONSES: Record<string, z.ZodType> = {
   SavedTemplate: S.SavedTemplate,
   SavedTemplates: S.SavedTemplates,
   TemplateChanged: S.TemplateChanged,
+  ForAgentsChanged: S.ForAgentsChanged,
   AudienceChanged: S.AudienceChanged,
   LinkBack: S.LinkBack,
   LinksBack: S.LinksBack,

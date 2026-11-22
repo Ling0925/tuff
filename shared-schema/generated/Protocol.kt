@@ -180,6 +180,9 @@ data class Contract (
     @SerialName("FilesInProject")
     val filesInProject: FilesInProject? = null,
 
+    @SerialName("ForAgentsChanged")
+    val forAgentsChanged: ForAgentsChanged? = null,
+
     @SerialName("GifKey")
     val gifKey: GIFKey? = null,
 
@@ -1704,6 +1707,9 @@ data class FileInDetail (
     @SerialName("created_at")
     val createdAt: String? = null,
 
+    @SerialName("for_agents")
+    val forAgents: Boolean? = null,
+
     val id: String,
 
     @SerialName("loose_files")
@@ -1717,6 +1723,9 @@ data class FileInDetail (
 
     @SerialName("may_edit")
     val mayEdit: Boolean? = null,
+
+    @SerialName("may_for_agents")
+    val mayForAgents: Boolean? = null,
 
     @SerialName("may_share")
     val mayShare: Boolean? = null,
@@ -1779,6 +1788,9 @@ data class FileInList (
 
     @SerialName("created_at")
     val createdAt: String? = null,
+
+    @SerialName("for_agents")
+    val forAgents: Boolean? = null,
 
     val id: String,
 
@@ -1895,6 +1907,15 @@ data class FilesInProject (
 
     @SerialName("next_cursor")
     val nextCursor: String? = null
+)
+
+@Serializable
+data class ForAgentsChanged (
+    @SerialName("for_agents")
+    val forAgents: Boolean,
+
+    val ok: Boolean,
+    val replaced: String? = null
 )
 
 @Serializable
@@ -3436,6 +3457,9 @@ data class ProjectInList (
 
     val description: String? = null,
 
+    @SerialName("for_agents")
+    val forAgents: ForAgents? = null,
+
     @SerialName("icon_url")
     val iconURL: String? = null,
 
@@ -3458,6 +3482,13 @@ data class ProjectInList (
 
     @SerialName("workspace_id")
     val workspaceID: String? = null
+)
+
+@Serializable
+data class ForAgents (
+    val id: String,
+    val name: String,
+    val number: Long? = null
 )
 
 @Serializable

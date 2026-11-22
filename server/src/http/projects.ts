@@ -680,7 +680,11 @@ projects.get('/projects/:id', async (c) => {
   const id = c.req.param('id')
   const row = await withActor(ctx.actorId, ctx.workspaceId, async (tx) => {
     const [p] = await tx`
-      select id, slug, key, name, description, tools, archived_at, sample, created_at
+      select id, slug, key, name, description, tools, archived_at, sample, created_at,
+             /* Its instructions for agents, read as the asker reads any
+                document of the project. */
+             (select json_build_object('id', f.id, 'number', f.number, 'name', f.name) from file f
+              where f.project_id = project.id and f.for_agents and f.deleted_at is null) as for_agents
       from project where id = ${id} and deleted_at is null`
     return p
   })

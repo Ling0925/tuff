@@ -204,6 +204,8 @@ files.get('/projects/:projectId/files', async (c) => {
              f.template_at,
              /* Who it is for: author, chosen or project. */
              f.audience,
+             /* The project's instructions for agents. */
+             f.for_agents,
              /* What it wears -- docs/specs/docs.md, "A document's mark". */
              f.mark_icon, f.mark_tint,
              f.head_blocks,
@@ -225,7 +227,7 @@ files.get('/projects/:projectId/files', async (c) => {
       from (
         select f.id, f.number, f.name, f.folder_id, f.content_type, f.size_bytes, f.version,
                f.author_id, f.updated_at, f.url, f.body is not null as has_body,
-               (f.public_token is not null) as is_public, f.template_at, f.audience,
+               (f.public_token is not null) as is_public, f.template_at, f.audience, f.for_agents,
                f.mark_icon, f.mark_tint,
                /* The head of a pinned document, for its card's page: the
                   first eight blocks, cut short below. docs/specs/docs.md,
@@ -492,6 +494,78 @@ files.put('/files/:id/template', async (c) => {
   return c.json({ ok: true, ...result })
 })
 
+/*
+ * The project's instructions for agents: one written document marked so, or
+ * the mark taken off. Whoever may change the
+ * document and run the project, in person (`file.for_agents`); only a
+ * document the whole project reads, since every agent on it must be able
+ * to. Marking a second takes the mark off the first in the same write.
+ */
+files.put('/files/:id/for-agents', async (c) => {
+  const ctx = c.get('ctx')
+  const id = c.req.param('id')
+  const body = z
+    .object({ for_agents: z.boolean() })
+    .strict()
+    .safeParse(await c.req.json().catch(() => ({})))
+  if (!body.success) return c.json({ error: { code: 'invalid' } }, 400)
+  const on = body.data.for_agents
+  const result = await withActor(ctx.actorId, ctx.workspaceId, async (tx) => {
+    const [row] = await tx<
+      { author_id: string; project_id: string | null; audience: string; written: boolean; for_agents: boolean; room: boolean }[]
+    >`
+      select author_id, project_id, audience, for_agents, conversation_id is not null as room,
+             (body is not null and storage_key is null and url is null) as written
+      from file where id = ${id} and workspace_id = ${ctx.workspaceId} and deleted_at is null
+      for update`
+    if (!row?.project_id || row.room) return 'missing' as const
+    if (!allowIn(ctx, 'file.for_agents', row.project_id, { isAuthor: row.author_id === ctx.actorId })) return 'forbidden' as const
+    if (!row.written) return 'not_document' as const
+    if (on && row.audience !== 'project') return 'not_published' as const
+    if (on === row.for_agents) return { for_agents: on, replaced: null }
+    /* Where it stands in Docs is not a change to its words: the clock stays. */
+    await tx`select set_config('tracker.keep_clock', 'on', true)`
+    let replaced: string | null = null
+    if (on) {
+      const [was] = await tx<{ id: string }[]>`
+        update file set for_agents = false
+        where workspace_id = ${ctx.workspaceId} and project_id = ${row.project_id} and for_agents and id <> ${id}
+        returning id`
+      replaced = was?.id ?? null
+      if (replaced)
+        await record(tx, ctx, 'file.not_for_agents', {
+          projectId: row.project_id,
+          objectType: 'file',
+          objectId: replaced,
+          meta: { replaced_by: id },
+        })
+    }
+    await tx`update file set for_agents = ${on} where id = ${id}`
+    await record(tx, ctx, on ? 'file.for_agents' : 'file.not_for_agents', {
+      projectId: row.project_id,
+      objectType: 'file',
+      objectId: id,
+      ...(replaced ? { meta: { replaced } } : {}),
+    })
+    return { for_agents: on, replaced }
+  })
+  if (result === 'missing') return c.json(missing, 404)
+  if (result === 'forbidden') return c.json(forbidden, 403)
+  if (result === 'not_document')
+    return c.json({ error: { code: 'not_document', message: 'Only a written document can be the instructions for agents.' } }, 409)
+  if (result === 'not_published')
+    return c.json(
+      {
+        error: {
+          code: 'not_published',
+          message: 'Publish this document to everyone on the project first. Agents read only what the whole project can.',
+        },
+      },
+      409,
+    )
+  return c.json({ ok: true, ...result })
+})
+
 /**
  * Kept at the head of the project's Docs, or let go — `docs/specs/docs.md`.
  * Anybody who may add to the project may pin: it is about the list everyone
@@ -574,8 +648,17 @@ files.get('/files/:id', async (c) => {
   /* And whether they may say who it is for.
      Only a written document is ever anybody's but the project's. */
   const may_share = file.body != null && !storage_key && !file.url && mayShare(ctx, String(file.author_id), String(file.project_id ?? ''))
+  /* And whether they may make it the project's instructions for agents.
+     A written document of a project only. */
+  const may_for_agents =
+    file.body != null &&
+    !storage_key &&
+    !file.url &&
+    !file.conversation_id &&
+    Boolean(file.project_id) &&
+    allowIn(ctx, 'file.for_agents', String(file.project_id), { isAuthor: file.author_id === ctx.actorId })
   return c.json({
-    file: { ...file, upload: Boolean(storage_key), may_edit, may_share },
+    file: { ...file, upload: Boolean(storage_key), may_edit, may_share, may_for_agents },
     comments,
     /* Where the comments not carried here start. */
     comments_earlier: said.earlier,

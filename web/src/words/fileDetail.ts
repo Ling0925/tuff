@@ -71,4 +71,15 @@ export const FILE_DETAIL = say({
   published: ['Published', 'Publié'],
   accessSaved: ['Saved', 'Enregistré'],
   couldNotPublish: ['Couldn’t publish. Try again.', 'Impossible de publier. Réessayez.'],
+  /* The project's instructions for agents.
+     The switch on the ⋯ menu, the label by the title and in Docs, and
+     what is said beside the menu after a press. */
+  forAgents: ['For agents', 'Pour les agents'],
+  agentsReadThis: ['Agents on this project read this first', 'Les agents du projet lisent ceci en premier'],
+  agentsReadThisInstead: [
+    'Agents on this project read this first now, instead of the last one',
+    'Les agents du projet lisent désormais ceci en premier, à la place du précédent',
+  ],
+  noLongerForAgents: ['No longer for agents', 'Ne sert plus aux agents'],
+  couldNotForAgents: ['Couldn’t change it. Try again.', 'Impossible de le modifier. Réessayez.'],
 })
