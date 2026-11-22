@@ -851,3 +851,33 @@ test('a provider’s ticket for an account put out since it was found is refused
   const now = await checkedNow()
   await asAuth((tx) => tx`select auth_not_put_out_since(${h.actor_id}, ${now})`)
 })
+
+test('a reset that cannot take the account’s hold in time leaves its link good, and the hold leaves the transaction’s lock timeout as it was', async () => {
+  const m = await byHandOwner()
+  const link = `rst_${uuidv7()}`
+  await asAuth((tx) => tx`select auth_ticket_make(${hashToken(link)}, 'reset', ${m.ctx.actorId}, ${null}, interval '1 hour')`)
+  const holder = await held.reserve()
+  try {
+    await holder`begin`
+    // Somebody else's put-out of the same account, holding it past three seconds.
+    await holder`select pg_advisory_xact_lock(31800, hashtext(${m.ctx.actorId}::text))`
+    const r = await call('POST', '/auth/password/reset', { token: link, password: 'chosen-from-the-letter' })
+    assert.equal(r.status, 500)
+    await holder`rollback`
+  } finally {
+    holder.release()
+  }
+  assert.equal((await call('POST', '/auth/password/reset', { token: link, password: 'chosen-from-the-letter' })).status, 200)
+
+  const c = await held.reserve()
+  try {
+    await c`begin`
+    await c`set local lock_timeout = '17s'`
+    await c`select account_hold(${m.ctx.actorId}::uuid, true)`
+    const [t] = await c<{ t: string }[]>`select current_setting('lock_timeout') as t`
+    assert.equal(t!.t, '17s')
+    await c`rollback`
+  } finally {
+    c.release()
+  }
+})

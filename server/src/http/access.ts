@@ -1299,8 +1299,6 @@ access.post('/password/reset', async (c) => {
   const hash = hashToken(body.data.token)
   const [t] = await asAuth((tx) => tx<{ actor_id: string }[]>`select * from auth_ticket_peek(${hash}, 'reset')`)
   if (!t) return c.json({ error: { code: 'gone', message: 'This link has already been used or has expired.' } }, 410)
-  const [spent] = await asAuth((tx) => tx<{ ok: boolean }[]>`select auth_ticket_spend(${hash}, 'reset') as ok`)
-  if (!spent?.ok) return c.json({ error: { code: 'gone' } }, 410)
   const passwordHash = await hashPassword(body.data.password)
   const [was] = await asAuth(
     (tx) => tx<{ email: string; had: boolean; proved: boolean }[]>`
@@ -1310,7 +1308,16 @@ access.post('/password/reset', async (c) => {
   /* Asked before the password is set: setting it for an address nobody
      proved spends every open ticket, the browser's among them. */
   const here = !was?.proved && (await boundTo(c)) === t.actor_id
-  await asAuth((tx) => tx`select auth_set_password(${t.actor_id}, ${passwordHash})`)
+  /* Spent in the transaction that sets the password: a reset that fails —
+     a put-out waiting longer than its hold allows — leaves the link good
+     (migration 317). */
+  const spent = await asAuth(async (tx) => {
+    const [s] = await tx<{ ok: boolean }[]>`select auth_ticket_spend(${hash}, 'reset') as ok`
+    if (!s?.ok) return false
+    await tx`select auth_set_password(${t.actor_id}, ${passwordHash})`
+    return true
+  })
+  if (!spent) return c.json({ error: { code: 'gone' } }, 410)
   /* And every Google or Apple sign-in: a reset shuts the doors somebody
      thinks are open, and those were open beside the password. A provider
      that vouches for the address links again on the next sign-in. */

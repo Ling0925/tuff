@@ -111,13 +111,20 @@ comment on column agent.stopped_at is
  */
 create function account_hold(p_person uuid, p_exclusive boolean) returns void
 language plpgsql volatile set search_path = public, pg_temp as $$
+declare
+  v_was text;
 begin
   if p_person is null then
     return;
   end if;
   if p_exclusive then
+    /* Three seconds for this wait alone: the transaction's own setting
+       comes back once the hold is granted, so the row locks after it are
+       waited for as they always were. */
+    v_was := current_setting('lock_timeout');
     perform set_config('lock_timeout', '3s', true);
     perform pg_advisory_xact_lock(31800, hashtext(p_person::text));
+    perform set_config('lock_timeout', v_was, true);
   else
     perform pg_advisory_xact_lock_shared(31800, hashtext(p_person::text));
   end if;
@@ -481,17 +488,25 @@ declare
   v_theirs boolean;
   v_said text;
 begin
+  /* Whose ticket, read without a lock; an unproved account is about to be
+     put out, so its hold comes first — before the ticket's row and the
+     account's, as every put-out takes it. Locking the ticket first waited
+     for the hold while holding a row a request under the hold might want. */
+  select * into t from auth_ticket k
+  where k.token_hash = p_hash and k.kind = 'email' and k.used_at is null and k.expires_at > now();
+  if not found then
+    return query select 'gone'::text, null::uuid, null::citext, null::citext, false;
+    return;
+  end if;
+  if exists (select 1 from app_user u where u.actor_id = t.actor_id and u.email_verified_at is null) then
+    perform account_hold(t.actor_id, true);
+  end if;
   select * into t from auth_ticket k
   where k.token_hash = p_hash and k.kind = 'email' and k.used_at is null and k.expires_at > now()
   for update;
   if not found then
     return query select 'gone'::text, null::uuid, null::citext, null::citext, false;
     return;
-  end if;
-  /* An unproved account is about to be put out: its hold first, before
-     the row, as every put-out takes it. */
-  if exists (select 1 from app_user u where u.actor_id = t.actor_id and u.email_verified_at is null) then
-    perform account_hold(t.actor_id, true);
   end if;
   select u.email, u.email_verified_at is null into v_old, v_unproved
   from app_user u where u.actor_id = t.actor_id
