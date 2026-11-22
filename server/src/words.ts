@@ -379,6 +379,13 @@ export const ERRORS_FR: Record<string, string> = {
   // A list an agent takes.
   'Choose an agent on this project.': 'Choisissez un agent de ce projet.',
   'A list that finishes tasks can’t have an agent.': 'Une liste qui termine les tâches ne peut pas avoir d’agent.',
+  'This link is for another account. Sign in to the account that asked for the change, then confirm.':
+    'Ce lien est destiné à un autre compte. Connectez-vous au compte qui a demandé le changement, puis confirmez.',
+  'Open this link in a browser and confirm the change there.': 'Ouvrez ce lien dans un navigateur et confirmez le changement.',
+  'Open this link in a browser signed in to the account that asked for the change, and confirm it there.':
+    'Ouvrez ce lien dans un navigateur connecté au compte qui a demandé le changement, et confirmez-le.',
+  'Open this link in a browser and approve the change there.': 'Ouvrez ce lien dans un navigateur et approuvez le changement.',
+  'Open the link from the email and press Confirm.': 'Ouvrez le lien de l’e-mail et appuyez sur Confirmer.',
   'a list is taken only by an agent of its workspace': 'Seul un agent de cet espace de travail peut prendre une liste.',
   'Only a written document holds pictures and files.': 'Seul un document rédigé peut contenir des images et des fichiers.',
   'Only a written document can be a template.': 'Seul un document rédigé peut servir de modèle.',
