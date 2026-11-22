@@ -1099,8 +1099,8 @@ access.post('/verify/peek', async (c) => {
 /**
  * The new address confirmed by a press, and the answer — for both doors:
  * `POST /api/me/email/confirm` with the account's session, and
- * `POST /auth/verify` with none for an account nobody proved or proved by
- * hand (`session` null). The database decides which may: `auth_email_confirm`,
+ * `POST /auth/verify` with none for an account nobody proved (`session`
+ * null). The database decides which may: `auth_email_confirm`,
  * migration 316. When the previous holder was put out with it, the
  * password went too, so the new address is sent the letter that chooses
  * one, or the person is left with no way in.
@@ -1144,9 +1144,10 @@ access.post('/verify', async (c) => {
    * is taken from opening it. The old address's yes (`approve`) only
    * from a press, said in the body. The new address's confirmation is
    * pressed from the account's own session, at `POST /api/me/email/confirm`
-   * — except for an account nobody proved or proved by hand, which has no
-   * way to sign in elsewhere: its press comes here with no session, and the
-   * database puts the previous holder out with it. The apps from before
+   * — except for an account nobody proved, which has no way to sign in
+   * elsewhere: its press comes here with no session, and the database puts
+   * the previous holder out with it. One proved only by hand signs in
+   * anywhere and is asked for its session like any other. The apps from before
    * open the link and post it at once, without `pressed`; they are told no,
    * and nothing changes.
    */

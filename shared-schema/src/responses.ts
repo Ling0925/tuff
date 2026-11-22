@@ -2029,8 +2029,8 @@ export const AddressLink = z.object({
   email: z.string(),
   account: AddressLinkAccount,
   /** Whether confirming takes a session of `account`. False for an account
-      whose address was never proved, or proved only by a link handed over:
-      it has no way to sign in on another device, and confirming puts out
+      whose address was never proved: it has no way to sign in on another
+      device, and confirming puts out
       whoever held it, so the press alone confirms. False for
       `approve` too, whose press asks for no session. */
   needs_session: z.boolean(),

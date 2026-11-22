@@ -345,9 +345,10 @@ export async function sendForApproval(base: string, actorId: string, current: st
  * these, or is spent or out of time.
  *
  * `needsSession`: whether confirming takes a session of the account. Not
- * for an address nobody proved or proved only by hand — such an account
- * cannot sign in on another device, and confirming puts its previous
- * holder out (`auth_email_confirm`, migration 316) — nor for an approval.
+ * for an address nobody proved — such an account cannot sign in on another
+ * device, and confirming puts its previous holder out (`auth_email_confirm`,
+ * migration 316) — nor for an approval. An address proved only by hand
+ * signs in anywhere, so it is asked for its session like any other.
  */
 export async function peekLink(token: string): Promise<{
   kind: 'approve' | 'email'
@@ -363,8 +364,8 @@ export async function peekLink(token: string): Promise<{
   )
   if (!t) return null
   const [who] = await asAuth(
-    (tx) => tx<{ name: string; email: string; unproved: boolean; by_hand: boolean | null }[]>`
-      select name, email, unproved, auth_email_by_hand(${t.actor_id}) as by_hand from auth_nowhere(${t.actor_id})`,
+    (tx) => tx<{ name: string; email: string; unproved: boolean }[]>`
+      select name, email, unproved from auth_nowhere(${t.actor_id})`,
   )
   if (!who) return null
   return {
@@ -373,7 +374,7 @@ export async function peekLink(token: string): Promise<{
     email: t.email,
     name: who.name,
     current: who.email,
-    needsSession: t.kind === 'email' && !who.unproved && !who.by_hand,
+    needsSession: t.kind === 'email' && !who.unproved,
   }
 }
 

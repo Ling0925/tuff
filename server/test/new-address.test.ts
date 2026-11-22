@@ -294,37 +294,100 @@ test('an unproved account’s new address is confirmed by the press alone, from 
   )
 })
 
-test('a by-hand account’s new address is confirmed by the press alone, and its holder goes', async () => {
+/* Proved only by a link handed over, an address still signs in on any
+   device: it is asked for its own session like a proved one, and nothing
+   is taken from it. */
+test('a by-hand account’s new address needs its own session, and confirmed from it keeps everything', async () => {
   const boss = await makeOwner()
   const stamp = fresh()
-  const mallory = await someone(stamp, 'byhand', 'Mallory')
-  await asTableOwner()`update app_user set email_by_hand = true where actor_id = ${mallory.actor_id}`
+  const holder = await someone(stamp, 'byhand', 'Hal')
+  await asTableOwner()`update app_user set email_by_hand = true where actor_id = ${holder.actor_id}`
   await asTableOwner()`
     insert into membership (id, workspace_id, actor_id, role, joined_at)
-    values (${uuidv7()}, ${boss.workspaceId}, ${mallory.actor_id}, 'member', now())`
-  await issueApiToken(mallory.actor_id, mallory.workspace_id, 'agent')
-  await asAuth((tx) => tx`select auth_identity_link(${mallory.actor_id}, 'google', ${`mal-${stamp}`}, ${mallory.email})`)
+    values (${uuidv7()}, ${boss.workspaceId}, ${holder.actor_id}, 'member', now())`
+  await issueApiToken(holder.actor_id, holder.workspace_id, 'agent')
+  // It signs in elsewhere like any account.
+  assert.equal((await post('/auth/login', { email: holder.email, password: PASSWORD })).status, 200)
 
-  const bob = `bob-hand${stamp}@gmail.com`
-  assert.equal((await post('/api/me/email', { email: bob, password: PASSWORD }, mallory.access_token)).status, 202)
-  const token = linkIn(bob)!
+  const to = `hal-shared${stamp}@example.com`
+  assert.equal((await post('/api/me/email', { email: to, password: PASSWORD }, holder.access_token)).status, 202)
+  const token = linkIn(to)!
   const peeked = (await (await post('/auth/verify/peek', { token })).json()) as { needs_session: boolean }
-  assert.equal(peeked.needs_session, false)
-  // Bob presses, signed in to nobody.
-  const pressed = await post('/auth/verify', { token, pressed: true })
-  assert.equal(pressed.status, 200, await pressed.clone().text())
-  assert.equal(await emailOf(mallory.actor_id), bob)
-  // Mallory kept nothing: no password, no session, no token, no Google sign-in.
-  assert.deepEqual(await wayIn(mallory.actor_id), { password: false, sessions: 0, tokens: 0, ids: 0 })
-  assert.equal((await get('/api/me', mallory.access_token)).status, 401)
-  assert.equal((await post('/auth/login', { email: bob, password: PASSWORD })).status, 401)
-  // Proved for real now, and every workspace with somebody else in it waits for Bob's word.
+  assert.equal(peeked.needs_session, true)
+
+  // Whoever reads that inbox, signed in to nobody or to another account: refused, nothing moves.
+  const bare = await post('/auth/verify', { token, pressed: true })
+  assert.equal(bare.status, 403)
+  assert.equal(await code(bare), 'confirm_from_account')
+  const other = await someone(stamp, 'byhandother', 'Ola')
+  const elsewhere = await confirm(token, other.access_token)
+  assert.equal(elsewhere.status, 403)
+  assert.equal(await code(elsewhere), 'not_this_account')
+  const [db] = await asAuth((tx) => tx<{ said: string }[]>`select said from auth_email_confirm(${hashToken(token)}, ${null}::uuid)`)
+  assert.equal(db?.said, 'not_this_account')
+  assert.equal(await emailOf(holder.actor_id), holder.email)
+  assert.ok(await stillGood(token))
+  const before = await wayIn(holder.actor_id)
+
+  // From its own session: confirmed, and the holder keeps the password, the sessions, the tokens, the workspace.
+  const pressed = await confirm(token, holder.access_token)
+  assert.equal(pressed.status, 200)
+  assert.equal(await emailOf(holder.actor_id), to)
+  const after = await wayIn(holder.actor_id)
+  assert.deepEqual([after.password, after.sessions, after.tokens], [true, before.sessions, before.tokens])
+  assert.equal((await get('/api/me', holder.access_token)).status, 200)
+  assert.equal((await post('/auth/login', { email: to, password: PASSWORD })).status, 200)
+  assert.ok((await held(holder.actor_id, boss.workspaceId))?.joined)
+  // The inbox now proved it for real.
   const [u] = await asTableOwner()<
     { by_hand: boolean }[]
-  >`select email_by_hand as by_hand from app_user where actor_id = ${mallory.actor_id}`
+  >`select email_by_hand as by_hand from app_user where actor_id = ${holder.actor_id}`
   assert.equal(u?.by_hand, false)
-  assert.equal((await held(mallory.actor_id, boss.workspaceId))?.joined, null)
-  assert.ok(chooseLinkTo(bob))
+  assert.equal(chooseLinkTo(to), false)
+})
+
+/*
+ * A refresh in flight while an unproved account's previous holder is put
+ * out: the trigger's statement waits behind the refresh's lock on the old
+ * session and does not see the session the refresh then writes. The ends
+ * repeated at the end of `auth_email_confirm` do.
+ */
+test('a refresh in flight while an unproved account is confirmed does not leave a session behind', async () => {
+  const boss = await makeOwner()
+  const stamp = fresh()
+  const typed = `race${stamp}@example.com`
+  const link = (await (await post('/api/invites', { role: 'member', rights: [] }, boss.token)).json()) as { token: string }
+  const joined = await post(`/auth/invite/${link.token}/accept`, { name: 'Rae', email: typed, password: PASSWORD })
+  const acc = (await joined.json()) as { actor_id: string; access_token: string }
+  const to = `race-real${stamp}@example.com`
+  assert.equal((await post('/api/me/email', { email: to, password: PASSWORD }, acc.access_token)).status, 202)
+  const token = linkIn(to)!
+
+  // The refresh: holds its lock on the session it trades, and writes the next one.
+  const refresh = await asTableOwner().reserve()
+  try {
+    await refresh`begin`
+    await refresh`select id from refresh_session where id = ${sessionOf(acc.access_token)} for update`
+    await refresh`
+      insert into refresh_session (id, actor_id, workspace_id, token_hash, expires_at, family)
+      values (${uuidv7()}, ${acc.actor_id}, ${boss.workspaceId}, ${`race-${uuidv7()}`}, now() + interval '1 day', ${uuidv7()})`
+    // The press, which waits behind it.
+    const pressed = post('/auth/verify', { token, pressed: true })
+    let waiting = false
+    for (let i = 0; i < 2000 && !waiting; i++) {
+      const [w] = await asTableOwner()<{ n: number }[]>`
+        select count(*)::int as n from pg_stat_activity
+        where wait_event_type = 'Lock' and query like '%auth_email_confirm%'`
+      waiting = (w?.n ?? 0) > 0
+      if (!waiting) await new Promise((r) => setImmediate(r))
+    }
+    assert.ok(waiting, 'the press waits behind the refresh')
+    await refresh`commit`
+    assert.equal((await pressed).status, 200)
+  } finally {
+    refresh.release()
+  }
+  assert.equal((await wayIn(acc.actor_id)).sessions, 0)
 })
 
 test('a forwarded letter is seen: the new address is told whose account it now signs in to', async () => {
