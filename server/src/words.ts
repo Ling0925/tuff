@@ -370,6 +370,10 @@ export const ERRORS_FR: Record<string, string> = {
     'Publiez ce document pour toutes les personnes du projet avant de le partager sur le Web.',
   'Only a written document can be kept to some people.': 'Seul un document rédigé peut être réservé à certaines personnes.',
   'Choose people who are on this project.': 'Choisissez des personnes qui font partie de ce projet.',
+  // A list an agent takes.
+  'Choose an agent on this project.': 'Choisissez un agent de ce projet.',
+  'A list that finishes tasks can’t have an agent.': 'Une liste qui termine les tâches ne peut pas avoir d’agent.',
+  'a list is taken only by an agent of its workspace': 'Seul un agent de cet espace de travail peut prendre une liste.',
   'Only a written document holds pictures and files.': 'Seul un document rédigé peut contenir des images et des fichiers.',
   'Only a written document can be a template.': 'Seul un document rédigé peut servir de modèle.',
   'Only a written document has a colour and an icon.': 'Seul un document rédigé a une couleur et une icône.',

@@ -252,7 +252,8 @@ function Chip({ node, editor }: NodeViewProps) {
           >
             {/* The handle and the title's first word kept on one line: a
                 non-breaking space, so "" never ends a line alone. */}
-            <span className="task-chip-handle">{a.making ? W.makingTask : handle}</span>{'\u00a0'}
+            <span className="task-chip-handle">{a.making ? W.makingTask : handle}</span>
+            {'\u00a0'}
             <span className="task-chip-title" data-comment={threads || undefined}>
               {words}
             </span>
