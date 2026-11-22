@@ -11833,6 +11833,9 @@ test('a channel stands outside any project, and is renamed and given people from
 })
 
 test('a room is put away with a right press, and found under More chats', async ({ page }) => {
+  /* Tall, as the drag test below is: in a full run the other tests' rooms
+     in this studio push onboarding-main behind "n more". */
+  await page.setViewportSize({ width: 1280, height: 2400 })
   await login(page)
   // `docs/specs/sidebar-hide.md`.
   const row = page.locator('aside [data-room]').filter({ hasText: 'onboarding-main' }).first()
@@ -12647,6 +12650,9 @@ test('changing the password asks for the one there is now, and a wrong one is on
 
 test('the projects index puts away, bins, and opens what was archived', async ({ page }) => {
   // `docs/specs/projects-index.md`.
+  /* Tall: a project put back goes back to its place in the order, which in
+     a studio the other tests have filled can be behind "n more". */
+  await page.setViewportSize({ width: 1280, height: 2400 })
   await login(page)
   const stamp = Date.now()
   const shelved = `Shelved index ${stamp}`
