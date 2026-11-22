@@ -20,7 +20,7 @@ import {
   startSession,
 } from '../auth/flows.js'
 import { NO_WORKSPACE_YET } from './nowhere.js'
-import { follow, tellWayIn } from '../auth/address.js'
+import { approveLink, masked, peekLink, tellWayIn } from '../auth/address.js'
 import { tellInviter } from '../notify.js'
 import { letter, mailOn, send } from '../mail.js'
 import { heard, languageFor, say } from '../words.js'
@@ -1077,6 +1077,25 @@ async function chooseTicket(actorId: string): Promise<string> {
 }
 
 /**
+ * What a link from a change of address is about, before anything is
+ * pressed — the page it opens says it. Reads and changes nothing. The account is
+ * named by its name and its address masked, enough for its owner to know
+ * it and for anybody else to know it is not theirs; its id, so the page can
+ * tell whether the browser is signed in to it.
+ */
+access.post('/verify/peek', async (c) => {
+  const body = z.object({ token: z.string().min(10).max(512) }).safeParse(await c.req.json().catch(() => ({})))
+  if (!body.success) return c.json({ error: { code: 'invalid' } }, 400)
+  const about = await peekLink(body.data.token)
+  if (!about) return c.json({ error: { code: 'gone', message: 'This link has already been used or has expired.' } }, 410)
+  return c.json({
+    kind: about.kind,
+    email: about.email,
+    account: { id: about.actorId, name: about.name, email: masked(about.current) },
+  })
+})
+
+/**
  * A confirmation link from before the password came after the proof, followed — a letter still in
  * somebody's inbox. It confirms the address, and the password the account
  * held goes with it, in the database (`app_user_proved`, migration 212):
@@ -1085,28 +1104,37 @@ async function chooseTicket(actorId: string): Promise<string> {
  * the answer carries, and gets no session until they have.
  */
 access.post('/verify', async (c) => {
-  const body = z.object({ token: z.string().min(10) }).safeParse(await c.req.json().catch(() => ({})))
+  const body = z
+    .object({ token: z.string().min(10).max(512), pressed: z.literal(true).optional() })
+    .safeParse(await c.req.json().catch(() => ({})))
   if (!body.success) return c.json({ error: { code: 'invalid' } }, 400)
-  /* A link from a change of address comes back here too: following one
-     confirms something by its address, and the ticket says which. No
-     session either way. */
-  /* Whether the account was unproved before: a change of address proves
-     the new one, and that confirmation takes a password set before it
-     (migration 212) — so the new address is sent the letter that chooses
-     one, or the person is left with no way in. */
-  const [before] = await asAuth(
-    (tx) => tx<{ actor_id: string; proved: boolean | null }[]>`
-      select actor_id, auth_email_confirmed(actor_id) as proved from auth_email_ticket_peek(${hashToken(body.data.token)})`,
-  )
-  const moved = await follow(origin(c), body.data.token, heard(c))
-  if (moved?.kind === 'taken') {
-    return c.json({ error: { code: 'conflict', message: 'That email address already has an account.' } }, 409)
+  /*
+   * A link from a change of address comes here too, and nothing it says
+   * is taken from opening it. The old address's yes (`approve`) only
+   * from a press, said in the body. The new address's confirmation never
+   * here: it is pressed from the account's own session, at
+   * `POST /api/me/email/confirm`. The apps from before open the link and
+   * post it at once; they are told no, and nothing changes.
+   */
+  const about = await peekLink(body.data.token)
+  if (about?.kind === 'email') {
+    return c.json(
+      {
+        error: {
+          code: 'confirm_from_account',
+          message: 'Open this link in a browser signed in to the account that asked for the change, and confirm it there.',
+        },
+      },
+      403,
+    )
   }
-  if (moved?.kind === 'changed' && before && before.proved === false) {
-    await sendChoosePassword(c, before.actor_id, moved.email)
-  }
-  if (moved) {
-    return c.json(moved.kind === 'approved' ? { approved: true, email: moved.email } : { changed: true, email: moved.email })
+  if (about?.kind === 'approve') {
+    if (!body.data.pressed) {
+      return c.json({ error: { code: 'press_required', message: 'Open this link in a browser and approve the change there.' } }, 403)
+    }
+    const approved = await approveLink(origin(c), body.data.token, heard(c))
+    if (!approved) return c.json({ error: { code: 'gone', message: 'This link has already been used or has expired.' } }, 410)
+    return c.json({ approved: true, email: approved.email })
   }
   const hash = hashToken(body.data.token)
   const [t] = await asAuth((tx) => tx<{ actor_id: string }[]>`select * from auth_ticket_peek(${hash}, 'verify')`)

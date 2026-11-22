@@ -27,6 +27,9 @@ data class Contract (
     @SerialName("Actor")
     val actor: Actor? = null,
 
+    @SerialName("AddressLink")
+    val addressLink: AddressLink? = null,
+
     @SerialName("AgentFacePick")
     val agentFacePick: AgentFacePick? = null,
 
@@ -796,6 +799,26 @@ data class Actor (
     @SerialName("updated_at")
     val updatedAt: String
 )
+
+@Serializable
+data class AddressLink (
+    val account: Account,
+    val email: String,
+    val kind: Kind
+)
+
+@Serializable
+data class Account (
+    val email: String,
+    val id: String,
+    val name: String
+)
+
+@Serializable
+enum class Kind(val value: String) {
+    @SerialName("approve") Approve("approve"),
+    @SerialName("email") Email("email");
+}
 
 @Serializable
 data class AgentFacePick (

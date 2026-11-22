@@ -13,8 +13,11 @@ import { languageFor, say, type Language } from '../words.js'
  * Three things have to be true before an account answers to another
  * address: it is the person asking, not whoever has their unlocked laptop;
  * the new address is theirs; and the old one is told when it is done. The
- * routes that ask are `http/address.ts`; the links come back through
- * `/auth/verify`, which is the one place a link confirms anything.
+ * routes that ask are `http/address.ts`. The links open `/verify/<token>`,
+ * which reads what a link is about and changes nothing; a press changes it
+ * — the old address's yes through `/auth/verify`, the new address's
+ * confirmation through `/api/me/email/confirm`, from the account's own
+ * session.
  *
  * Nothing here says whether an address already has an account. The window
  * says the same thing for every address, and an address that is taken is
@@ -331,31 +334,76 @@ export async function sendForApproval(base: string, actorId: string, current: st
 }
 
 /**
- * A link from either mail, followed. An approval sends the link to the new
- * address; a confirmation makes the change and tells the old address.
- * Null when the token is not one of these, or is spent or out of time.
+ * What a link from either mail is about, read and nothing more: which
+ * kind, the address it moves to, and the account it moves — its name and
+ * its address now — so the page can say what a press would do before
+ * anybody presses.
+ * Opening the link changes nothing. Null when the token is not one of
+ * these, or is spent or out of time.
  */
-export async function follow(
-  base: string,
+export async function peekLink(
   token: string,
-  screen: Language = 'en',
-): Promise<{ kind: 'approved' | 'changed' | 'taken'; email: string } | null> {
+): Promise<{ kind: 'approve' | 'email'; actorId: string; email: string; name: string; current: string } | null> {
+  const [t] = await asAuth(
+    (tx) => tx<{ kind: 'approve' | 'email'; actor_id: string; email: string }[]>`
+      select * from auth_email_ticket_peek(${hashToken(token)})`,
+  )
+  if (!t) return null
+  const [who] = await asAuth((tx) => tx<{ name: string; email: string }[]>`select name, email from auth_nowhere(${t.actor_id})`)
+  if (!who) return null
+  return { kind: t.kind, actorId: t.actor_id, email: t.email, name: who.name, current: who.email }
+}
+
+/**
+ * The old address's yes, pressed: the link goes to the new one. The inbox
+ * it was mailed to is the account — it is how an account with nothing to
+ * type proves it is the person — so no session is asked; and it changes
+ * nothing yet, since the new address is still confirmed from the account.
+ * Null when the token is not an approval still good.
+ */
+export async function approveLink(base: string, token: string, screen: Language = 'en'): Promise<{ email: string } | null> {
   const hash = hashToken(token)
   const [t] = await asAuth(
     (tx) => tx<{ kind: 'approve' | 'email'; actor_id: string; email: string }[]>`
       select * from auth_email_ticket_peek(${hash})`,
   )
-  if (!t) return null
-  const [spent] = await asAuth((tx) => tx<{ ok: boolean }[]>`select auth_ticket_spend(${hash}, ${t.kind}) as ok`)
+  if (t?.kind !== 'approve') return null
+  const [spent] = await asAuth((tx) => tx<{ ok: boolean }[]>`select auth_ticket_spend(${hash}, 'approve') as ok`)
   if (!spent?.ok) return null
-  if (t.kind === 'approve') {
-    await sendToNew(base, t.actor_id, t.email, screen)
-    return { kind: 'approved', email: t.email }
-  }
-  const { email: old } = await emailOf(t.actor_id)
-  const [r] = await asAuth((tx) => tx<{ said: string }[]>`select auth_email_change(${t.actor_id}, ${t.email}) as said`)
-  if (r?.said === 'taken') return { kind: 'taken', email: t.email }
-  if (r?.said !== 'changed') return null
+  await sendToNew(base, t.actor_id, t.email, screen)
+  return { email: t.email }
+}
+
+/**
+ * The new address confirmed, pressed in a browser signed in to the account
+ * the change belongs to. `session` is the id of the session that
+ * pressed; the database makes the change only when it is that account's
+ * and has not ended (`auth_email_confirm`, migration 316), and otherwise
+ * answers `not_this_account` and leaves the link unspent, so the person
+ * can sign in to the right account and press again.
+ *
+ * Opening the link proved the inbox and nothing about who asked: Mallory
+ * asked to move her own account to Bob's address, Bob's page confirmed it
+ * as it loaded, and his Google sign-in later landed in the account she
+ * still held.
+ *
+ * A confirmation makes the change and tells the old address.
+ */
+export async function confirmLink(
+  base: string,
+  token: string,
+  session: string,
+  screen: Language = 'en',
+): Promise<{ kind: 'changed' | 'taken' | 'gone' | 'not_this_account'; email: string }> {
+  const [r] = await asAuth(
+    (tx) => tx<{ said: string; actor_id: string | null; email: string | null; old: string | null }[]>`
+      select * from auth_email_confirm(${hashToken(token)}, ${session}::uuid)`,
+  )
+  if (r?.said === 'not_this_account') return { kind: 'not_this_account', email: '' }
+  if (r?.said === 'taken') return { kind: 'taken', email: r.email ?? '' }
+  if (r?.said !== 'changed' || !r.actor_id || !r.email) return { kind: 'gone', email: '' }
+  const t = { actor_id: r.actor_id, email: r.email }
+  const old = r.old ?? ''
   /* A Google sign-in made under the old address goes with it: the company
      that owns that inbox owns that Google account too, and hands both to
      whoever comes next — migration 151. */

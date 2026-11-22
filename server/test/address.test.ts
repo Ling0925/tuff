@@ -27,6 +27,11 @@ const linkIn = (to: string) => {
   return found ? decodeURIComponent(found[1]!) : null
 }
 const mailTo = (to: string) => outbox.filter((m) => m.to === to)
+/* The new address's link, confirmed by the press on its page from the
+   account's own session. */
+const confirm = (token: string | null, session: string) => post('/api/me/email/confirm', { token, pressed: true }, session)
+/* The old address's yes, pressed. */
+const approve = (token: string | null) => post('/auth/verify', { token, pressed: true })
 
 /** The same maths the verifier uses, written out — `totp.test.ts`. */
 function code(secret: string, when: number): string {
@@ -81,11 +86,20 @@ test('the address changes when the new one confirms it, the password having been
   const token = linkIn(to)
   assert.ok(token, 'a link went to the new address')
 
-  const followed = await post('/auth/verify', { token })
+  // What the link is about, read before the press: the account, masked.
+  const peeked = await post('/auth/verify/peek', { token })
+  assert.equal(peeked.status, 200)
+  assert.deepEqual(await peeked.json(), {
+    kind: 'email',
+    email: to,
+    account: { id: me.actor_id, name: 'Eve', email: `m…@example.com` },
+  })
+  const followed = await confirm(token, me.access_token)
   assert.equal(followed.status, 200)
   assert.deepEqual(await followed.json(), { changed: true, email: to })
   // Once.
-  assert.equal((await post('/auth/verify', { token })).status, 410)
+  assert.equal((await confirm(token, me.access_token)).status, 410)
+  assert.equal((await post('/auth/verify/peek', { token })).status, 410)
 
   // The new address signs in; the old one does not.
   assert.equal((await post('/auth/login', { email: to, password: PASSWORD })).status, 200)
@@ -112,7 +126,7 @@ test('a password link sent to the old address stops working when the address cha
   assert.equal((await post('/auth/password/forgot', { email: me.email })).status, 200)
   const reset = /\/reset\/([^\s"<]+)/.exec(mailTo(me.email).at(-1)!.text)![1]!
   await post('/api/me/email', { email: to, password: PASSWORD }, me.access_token)
-  assert.equal((await post('/auth/verify', { token: linkIn(to) })).status, 200)
+  assert.equal((await confirm(linkIn(to), me.access_token)).status, 200)
   const used = await post('/auth/password/reset', { token: decodeURIComponent(reset), password: 'a-new-one-entirely' })
   assert.equal(used.status, 410)
 })
@@ -172,14 +186,17 @@ test('an account with no password is asked through its current address first', a
   assert.equal(asked.status, 202)
   // Nothing to the new address yet: the current one says yes first.
   assert.equal(linkIn(to), null)
-  const approve = linkIn(email)
-  assert.ok(approve)
-  const approved = await post('/auth/verify', { token: approve })
+  const yes = linkIn(email)
+  assert.ok(yes)
+  // Opening it is not the yes: only the press, which says so.
+  assert.equal((await post('/auth/verify', { token: yes })).status, 403)
+  assert.equal(linkIn(to), null)
+  const approved = await approve(yes)
   assert.deepEqual(await approved.json(), { approved: true, email: to })
   // Then the new address confirms it, as any change does.
-  const confirm = linkIn(to)
-  assert.ok(confirm)
-  assert.deepEqual(await (await post('/auth/verify', { token: confirm })).json(), { changed: true, email: to })
+  const link = linkIn(to)
+  assert.ok(link)
+  assert.deepEqual(await (await confirm(link, session.access_token)).json(), { changed: true, email: to })
   // Google still knows the account by its own id: a gmail.com address is
   // Google's, and nobody else is ever handed it.
   const again = await whoIs('google', `ch-${stamp}`, email, true, 'Gus')
@@ -199,8 +216,8 @@ test('a Google sign-in under a company address goes when the address changes', a
   const session = await startSession(made.actorId, made.workspaceId!, {}, null)
   const to = `mine${stamp}@example.com`
   assert.equal((await post('/api/me/email', { email: to }, session.access_token)).status, 202)
-  await post('/auth/verify', { token: linkIn(email)! })
-  assert.deepEqual(await (await post('/auth/verify', { token: linkIn(to)! })).json(), { changed: true, email: to })
+  await approve(linkIn(email))
+  assert.deepEqual(await (await confirm(linkIn(to), session.access_token)).json(), { changed: true, email: to })
   const next = await whoIs('google', `co-${stamp}`, email, true, 'Somebody else')
   assert.ok(next && next !== 'conflict')
   assert.notEqual(next.actorId, made.actorId)
@@ -216,9 +233,9 @@ test('a waiting change can be sent again and called off', async () => {
   const second = linkIn(to)!
   assert.notEqual(first, second)
   // Sending again calls off the link before it.
-  assert.equal((await post('/auth/verify', { token: first })).status, 410)
+  assert.equal((await confirm(first, me.access_token)).status, 410)
   assert.equal((await as(me.access_token, '/api/me/email', { method: 'DELETE' })).status, 200)
-  assert.equal((await post('/auth/verify', { token: second })).status, 410)
+  assert.equal((await confirm(second, me.access_token)).status, 410)
   const shown = (await (await as(me.access_token, '/api/me/email')).json()) as { pending: unknown }
   assert.equal(shown.pending, null)
   assert.equal((await post('/api/me/email/again', {}, me.access_token)).status, 404)

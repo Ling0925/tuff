@@ -10,7 +10,7 @@ import { PER_PERSON, metaOf, spend } from './limits.js'
 import { fullRefusal } from '../ceilings.js'
 import { makeWorkspace, workspaceAddress } from './workspaces.js'
 import { deleteAccount } from './yourdata.js'
-import { inboxCode } from './address.js'
+import { confirmAddress, inboxCode } from './address.js'
 import { joinAsMe } from './invites.js'
 import { hashToken } from '../auth/crypto.js'
 import { sessionFor, unconfirmedAnswer, unconfirmedList } from './confirming.js'
@@ -243,6 +243,16 @@ nowhere.post(
   only((c, who) => {
     c.set('ctx', who.ctx)
     return inboxCode(c as unknown as Context<{ Variables: { ctx: AuthContext } }>, 'leave')
+  }),
+)
+
+/* A new address confirmed from the account's own session,
+   Somebody in no workspace is still the account. */
+nowhere.post(
+  '/me/email/confirm',
+  only((c, who) => {
+    c.set('ctx', who.ctx)
+    return confirmAddress(c as unknown as Context<{ Variables: { ctx: AuthContext } }>)
   }),
 )
 

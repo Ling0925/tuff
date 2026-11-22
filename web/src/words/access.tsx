@@ -61,6 +61,43 @@ export const ACCESS = say({
   openTuff: ['Open Tuff', 'Ouvrir Tuff'],
   signIn: ['Sign in', 'Se connecter'],
 
+  /* A change of address's link, before and after the press, */
+  askConfirm: ['Confirm your new email.', 'Confirmez votre nouvelle adresse e-mail.'],
+  saidAskConfirm: [
+    (email: string, name: string, now: string) =>
+      `${email} will be the email for your Tuff account, ${name} (${now}). You’ll sign in with it from now on.`,
+    (email: string, name: string, now: string) =>
+      `${email} deviendra l’adresse e-mail de votre compte Tuff, ${name} (${now}). Vous vous connecterez désormais avec elle.`,
+  ],
+  confirm: ['Confirm', 'Confirmer'],
+  askApprove: ['Approve the new email.', 'Approuvez la nouvelle adresse e-mail.'],
+  saidAskApprove: [
+    (email: string, name: string, now: string) =>
+      `Someone signed in to the Tuff account ${name} (${now}) asked to change its email to ${email}. If you approve, we’ll send a link to that address to finish.`,
+    (email: string, name: string, now: string) =>
+      `Une personne connectée au compte Tuff ${name} (${now}) a demandé à remplacer son adresse e-mail par ${email}. Si vous approuvez, nous enverrons un lien à cette adresse pour terminer.`,
+  ],
+  approve: ['Approve', 'Approuver'],
+  approving: ['Approving…', 'Approbation…'],
+  signInToConfirm: ['Sign in to confirm.', 'Connectez-vous pour confirmer.'],
+  saidSignInToConfirm: [
+    (email: string, name: string, now: string) =>
+      `This link changes the email of the Tuff account ${name} (${now}) to ${email}. To confirm, sign in to that account.`,
+    (email: string, name: string, now: string) =>
+      `Ce lien remplace l’adresse e-mail du compte Tuff ${name} (${now}) par ${email}. Pour confirmer, connectez-vous à ce compte.`,
+  ],
+  saidOtherAccount: [
+    (email: string, name: string, now: string) =>
+      `You’re signed in to a different account. This link changes the email of the Tuff account ${name} (${now}) to ${email}. To confirm, sign in to that account.`,
+    (email: string, name: string, now: string) =>
+      `Vous êtes connecté à un autre compte. Ce lien remplace l’adresse e-mail du compte Tuff ${name} (${now}) par ${email}. Pour confirmer, connectez-vous à ce compte.`,
+  ],
+  signInToAnother: ['Sign in to another account', 'Se connecter à un autre compte'],
+  ignoreIfNotYou: [
+    'If you didn’t ask for this change, ignore the email. Nothing will change.',
+    'Si vous n’avez pas demandé ce changement, ignorez l’e-mail. Rien ne changera.',
+  ],
+
   withGoogle: ['Continue with Google', 'Continuer avec Google'],
   withApple: ['Continue with Apple', 'Continuer avec Apple'],
   withGithub: ['Continue with GitHub', 'Continuer avec GitHub'],

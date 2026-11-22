@@ -2,8 +2,8 @@ import { Hono, type Context } from 'hono'
 import { z } from 'zod'
 import { asAuth } from '../db.js'
 import type { AuthContext } from '../auth/context.js'
-import { asksOf, byInbox, emailOf, itIsThem, mailCode, masked, sendForApproval, sendToNew } from '../auth/address.js'
-import { origin } from './access.js'
+import { asksOf, byInbox, confirmLink, emailOf, itIsThem, mailCode, masked, peekLink, sendForApproval, sendToNew } from '../auth/address.js'
+import { origin, sendChoosePassword } from './access.js'
 import { reask } from './limits.js'
 import { heard } from '../words.js'
 
@@ -112,6 +112,60 @@ address.post('/me/email/again', async (c) => {
   else await sendToNew(origin(c), ctx.actorId, pending.email, heard(c))
   return c.json({ pending: pending.email }, 202)
 })
+
+const Confirm = z.object({ token: z.string().min(10).max(512), pressed: z.literal(true) })
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const notThisAccount = (c: Context) =>
+  c.json(
+    {
+      error: {
+        code: 'not_this_account',
+        message: 'This link is for another account. Sign in to the account that asked for the change, then confirm.',
+      },
+    },
+    403,
+  )
+
+/**
+ * The new address confirmed. Only by a press on the page the link
+ * opened (`pressed: true`, which nothing but that press sends), and only
+ * from a session of the account the change belongs to: the link proves
+ * the new inbox, the session proves it is the person who asked. Opening
+ * the link changes nothing (`/auth/verify/peek`).
+ *
+ * A session, not a token of any kind — an agent does not move its owner's
+ * account, as it does not ask to — and the database asks again that the
+ * session is the account's and live (`auth_email_confirm`, migration 316).
+ * Refused, the link is not spent: signing in to the right account and
+ * pressing again works. Named, for a session in no workspace too —
+ * `nowhere.ts`.
+ */
+export async function confirmAddress(c: Context<{ Variables: Vars }>) {
+  const ctx = c.get('ctx')
+  if (ctx.viaMcp || ctx.viaGithub || ctx.viaImport || ctx.feedbackPage || ctx.board) return refused(c)
+  const body = Confirm.safeParse(await c.req.json().catch(() => ({})))
+  if (!body.success) {
+    return c.json({ error: { code: 'invalid', message: 'Open the link from the email and press Confirm.' } }, 400)
+  }
+  const gone = () => c.json({ error: { code: 'gone', message: 'This link has already been used or has expired.' } }, 410)
+  const about = await peekLink(body.data.token)
+  if (about?.kind !== 'email') return gone()
+  if (about.actorId !== ctx.actorId || !ctx.sessionId || !UUID.test(ctx.sessionId)) return notThisAccount(c)
+  /* Whether the account was unproved before: confirming proves the new
+     address, and that takes a password set before the proof (migration
+     212) — so the new address is sent the letter that chooses one, or the
+     person is left with no way in. */
+  const [before] = await asAuth((tx) => tx<{ proved: boolean | null }[]>`select auth_email_confirmed(${ctx.actorId}) as proved`)
+  const done = await confirmLink(origin(c), body.data.token, ctx.sessionId, heard(c))
+  if (done.kind === 'not_this_account') return notThisAccount(c)
+  if (done.kind === 'gone') return gone()
+  if (done.kind === 'taken') {
+    return c.json({ error: { code: 'conflict', message: 'That email address already has an account.' } }, 409)
+  }
+  if (before?.proved === false) await sendChoosePassword(c, ctx.actorId, done.email)
+  return c.json({ changed: true, email: done.email })
+}
+address.post('/me/email/confirm', (c) => confirmAddress(c))
 
 /**
  * Six digits to the inbox, for an account with nothing to type, before it

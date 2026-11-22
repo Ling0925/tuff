@@ -17,7 +17,8 @@ export const AUTH_DEFINERS = [
   'auth_confirm_email',
   'auth_confirm_if_invited',
   'auth_email_cancel',
-  'auth_email_change',
+  /* 316: a new address confirmed from the account's own session. */
+  'auth_email_confirm',
   'auth_email_ticket',
   'auth_email_ticket_peek',
   'auth_end_session',

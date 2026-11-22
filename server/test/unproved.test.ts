@@ -195,7 +195,8 @@ test('changing the address while unproved sends the new address the letter that 
   const moved = `moved-${stamp()}@example.com`
   const t = generateToken('eml')
   await asAuth((tx) => tx`select auth_email_ticket(${hashToken(t)}, 'email', ${id}, ${moved}, interval '1 day')`)
-  const r = await send('/auth/verify', null, { token: t })
+  /* Pressed from the account's own session. */
+  const r = await send('/api/me/email/confirm', acc.body.access_token as string, { token: t, pressed: true })
   assert.equal(r.status, 200, JSON.stringify(r.body))
   assert.equal(r.body.changed, true)
   // The confirmation took the password typed before; the new address chooses one.

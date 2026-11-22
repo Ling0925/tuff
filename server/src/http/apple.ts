@@ -55,6 +55,12 @@ export const site = [
   '/signin',
   '/signup',
   '/forgot',
+  /* A change of address's links are pressed in a browser, the new
+     address's from the account's own session,
+     The apps' screen posts a link as it opens,
+     which the server no longer takes for either. */
+  '/verify/eml_*',
+  '/verify/apv_*',
   '/d/*',
   '/b/*',
   '/f/*',

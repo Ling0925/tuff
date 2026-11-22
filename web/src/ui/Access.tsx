@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { edition } from '../edition.jsx'
-import { authHeaders, setSession, stored, type Session } from '../data/api.js'
+import { AFTER_SIGN_IN, api, authHeaders, Refused, setSession, signOut, stored, type Session } from '../data/api.js'
 import { Icon } from './glyphs.jsx'
 import { now } from '../data/words.js'
 import { ACCESS as W } from '../words/access.jsx'
@@ -258,22 +258,175 @@ export function CheckEmail({
 }
 
 /**
- * A confirmation link from before the password came after the proof, still in somebody's inbox, and
- * the links of a change of address. The first confirms the address and
- * asks for a password, since the one the account held goes with the
- * confirmation; the others say what they changed.
+ * `/verify/<token>`: a confirmation link from before the password came after the proof, still in
+ * somebody's inbox, or a link of a change of address — told apart by the
+ * token's own first letters, which say which mail it came in.
  */
 export function Verify({ token }: { token: string }) {
-  const [state, setState] = useState<'checking' | 'confirmed' | 'changed' | 'approved' | 'taken' | 'gone' | 'closed' | 'failed'>('checking')
-  /* The address a change of address is about. */
-  const [email, setEmail] = useState('')
+  return /^(eml|apv)_/.test(token) ? <ChangeOfAddress token={token} /> : <Confirmation token={token} />
+}
+
+type AddressLink = { kind: 'approve' | 'email'; email: string; account: { id: string; name: string; email: string } }
+
+/* Whose a link to confirm is, against who this browser is signed in as: a
+   press from anybody else is refused by the server anyway, so it is not
+   offered. */
+function placed(l: AddressLink): 'ask' | 'sign-in' | 'other' {
+  if (l.kind === 'approve') return 'ask'
+  const s = stored()
+  return !s ? 'sign-in' : s.actor_id === l.account.id ? 'ask' : 'other'
+}
+
+/**
+ * A link of a change of address. Opening it changes nothing: the page says
+ * what it would do, naming the account, and the press does it. The old
+ * address's yes is anybody's press who has its letter, since that inbox is
+ * the account; the new address is confirmed only from the account's own
+ * session, so a browser signed in to nobody, or to somebody else, is told
+ * to sign in to that account and comes back here after it.
+ */
+function ChangeOfAddress({ token }: { token: string }) {
+  const [link, setLink] = useState<AddressLink | null>(null)
+  const [state, setState] = useState<'reading' | 'ask' | 'sign-in' | 'other' | 'changed' | 'approved' | 'taken' | 'gone' | 'failed'>(
+    'reading',
+  )
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', 'dark')
+    document.title = W.confirmingTitle
+    void (async () => {
+      const r = await fetch('/auth/verify/peek', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ token }),
+      }).catch(() => null)
+      if (r?.ok) {
+        const l = (await r.json()) as AddressLink
+        setLink(l)
+        setState(placed(l))
+        return
+      }
+      setState(r?.status === 410 ? 'gone' : 'failed')
+    })()
+  }, [token])
+
+  async function press() {
+    if (!link || busy) return
+    setBusy(true)
+    try {
+      if (link.kind === 'approve') {
+        const r = await fetch('/auth/verify', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ token, pressed: true }),
+        }).catch(() => null)
+        setState(r?.ok ? 'approved' : r?.status === 410 ? 'gone' : 'failed')
+        return
+      }
+      await api('/me/email/confirm', { method: 'POST', body: JSON.stringify({ token, pressed: true }) })
+      setState('changed')
+    } catch (e) {
+      if (e instanceof Refused) {
+        const code = (e.said as { error?: { code?: string } } | undefined)?.error?.code
+        setState(code === 'not_this_account' ? 'other' : e.status === 410 ? 'gone' : e.status === 409 ? 'taken' : 'failed')
+      } else {
+        /* The session ended while the page was open: signed out here, so
+           signing in is what is left. */
+        setState(e instanceof Error && e.message === 'unauthorized' ? 'sign-in' : 'failed')
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /* To signing in, and back here once it is done (`App.tsx`). Signed in as
+     somebody else, that session ends first: the sign-in screen is only
+     shown to a browser signed in to nobody. */
+  async function signInThere(asAnother: boolean) {
+    try {
+      sessionStorage.setItem(AFTER_SIGN_IN, location.pathname)
+    } catch {
+      /* No storage: they sign in, and open the link again. */
+    }
+    if (asAnother) await signOut()
+    location.assign('/signin')
+  }
+
+  if (state === 'reading') return null
+  const name = link?.account.name ?? ''
+  const now = link?.account.email ?? ''
+  const email = link?.email ?? ''
+  const title = {
+    ask: link?.kind === 'approve' ? W.askApprove : W.askConfirm,
+    'sign-in': W.signInToConfirm,
+    other: W.signInToConfirm,
+    changed: W.changed,
+    approved: W.approved,
+    taken: W.taken,
+    gone: W.gone,
+    failed: W.failed,
+  }[state]
+  const said = {
+    ask: link?.kind === 'approve' ? W.saidAskApprove(email, name, now) : W.saidAskConfirm(email, name, now),
+    'sign-in': W.saidSignInToConfirm(email, name, now),
+    other: W.saidOtherAccount(email, name, now),
+    changed: W.saidChanged(email),
+    approved: W.saidApproved(email),
+    taken: W.saidTaken,
+    gone: W.saidGoneMoving,
+    failed: W.saidFailed,
+  }[state]
+  const button = 'flex h-11 w-full items-center justify-center rounded-full text-md font-medium'
+  const signedIn = Boolean(stored())
+  return (
+    <AuthShell title={title}>
+      <div data-testid="verify" data-state={state} data-kind={link?.kind} className="flex flex-col items-center gap-4 text-center">
+        <p className="text-md leading-[1.5] text-ink-2">{said}</p>
+        {state === 'ask' ? (
+          <button
+            type="button"
+            data-testid="verify-press"
+            onClick={() => void press()}
+            disabled={busy}
+            className={button}
+            style={primaryLook}
+          >
+            {busy ? (link?.kind === 'approve' ? W.approving : W.confirming) : link?.kind === 'approve' ? W.approve : W.confirm}
+          </button>
+        ) : state === 'sign-in' || state === 'other' ? (
+          <button
+            type="button"
+            data-testid="verify-sign-in"
+            onClick={() => void signInThere(state === 'other')}
+            className={button}
+            style={primaryLook}
+          >
+            {state === 'other' ? W.signInToAnother : W.signIn}
+          </button>
+        ) : (
+          <a href={signedIn ? '/' : '/signin'} className={button} style={primaryLook}>
+            {signedIn ? W.openTuff : W.signIn}
+          </a>
+        )}
+        {(state === 'ask' || state === 'sign-in' || state === 'other') && (
+          <p className="text-sm leading-[1.5] text-ink-3">{W.ignoreIfNotYou}</p>
+        )}
+      </div>
+    </AuthShell>
+  )
+}
+
+/**
+ * A confirmation link from before the password came after the proof, still in somebody's inbox. It
+ * confirms the address and asks for a password, since the one the account
+ * held goes with the confirmation.
+ */
+function Confirmation({ token }: { token: string }) {
+  const [state, setState] = useState<'checking' | 'confirmed' | 'gone' | 'closed' | 'failed'>('checking')
   /* Confirming took the password the account held, chosen before the
      address was proved (migration 212): the link proved the inbox, so the
      password is chosen here, with the ticket the answer carried. */
   const [choosing, setChoosing] = useState<string | null>(null)
-  /* Which mail the link came in, from its own first letters: a lapsed link
-     to change an address is asked for again under Account, not by signing in. */
-  const moving = /^(eml|apv)_/.test(token)
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', 'dark')
     document.title = W.confirmingTitle
@@ -284,13 +437,7 @@ export function Verify({ token }: { token: string }) {
         body: JSON.stringify({ token }),
       }).catch(() => null)
       if (r?.ok) {
-        const body = (await r.json()) as Partial<Session> & {
-          confirmed?: boolean
-          changed?: boolean
-          approved?: boolean
-          email?: string
-          choose_password?: string
-        }
+        const body = (await r.json()) as Partial<Session> & { confirmed?: boolean; choose_password?: string }
         if (body.choose_password) {
           setChoosing(body.choose_password)
           return
@@ -302,23 +449,19 @@ export function Verify({ token }: { token: string }) {
           location.replace(edition.returnTo() ?? '/')
           return
         }
-        setEmail(body.email ?? '')
-        setState(body.changed ? 'changed' : body.approved ? 'approved' : 'confirmed')
+        setState('confirmed')
         return
       }
       /* Signed up before a server of one's own was claimed, and confirmed
          after it while sign-up is closed. */
       const closed =
         r?.status === 403 && ((await r.json().catch(() => ({}))) as { error?: { code?: string } }).error?.code === 'sign_up_closed'
-      setState(closed ? 'closed' : r?.status === 410 ? 'gone' : r?.status === 409 ? 'taken' : 'failed')
+      setState(closed ? 'closed' : r?.status === 410 ? 'gone' : 'failed')
     })()
   }, [token])
   const title = {
     checking: W.confirming,
     confirmed: W.confirmed,
-    changed: W.changed,
-    approved: W.approved,
-    taken: W.taken,
     gone: W.gone,
     closed: W.closedTitle,
     failed: W.failed,
@@ -326,27 +469,18 @@ export function Verify({ token }: { token: string }) {
   const said = {
     checking: null,
     confirmed: W.saidConfirmed,
-    changed: W.saidChanged(email),
-    approved: W.saidApproved(email),
-    taken: W.saidTaken,
-    gone: moving ? W.saidGoneMoving : W.saidGone,
+    gone: W.saidGone,
     closed: W.troubleClosed,
     failed: W.saidFailed,
   }[state]
-  /* Somebody already signed in here goes back to the product; anybody else to signing in. */
-  const signedIn = Boolean(stored())
   if (choosing) return <Reset token={choosing} choosing />
   return (
     <AuthShell title={title}>
       <div data-testid="verify" data-state={state} className="flex flex-col items-center gap-4 text-center">
         {said && <p className="text-md leading-[1.5] text-ink-2">{said}</p>}
         {state !== 'checking' && (
-          <a
-            href={moving && signedIn ? '/' : '/signin'}
-            className="flex h-11 w-full items-center justify-center rounded-full text-md font-medium"
-            style={primaryLook}
-          >
-            {moving && signedIn ? W.openTuff : W.signIn}
+          <a href="/signin" className="flex h-11 w-full items-center justify-center rounded-full text-md font-medium" style={primaryLook}>
+            {W.signIn}
           </a>
         )}
       </div>

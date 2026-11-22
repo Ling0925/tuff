@@ -2016,6 +2016,18 @@ export const Verified = Session.partial().extend({
 })
 
 /**
+ * What a change of address's link is about, read before anything is
+ * pressed — `POST /auth/verify/peek`. `approve` is the old address's yes; `email` the new
+ * address's link, confirmed only from a session of `account`
+ * (`POST /api/me/email/confirm`). The account's address is masked.
+ */
+export const AddressLink = z.object({
+  kind: z.enum(['approve', 'email']),
+  email: z.string(),
+  account: z.object({ id: Uuid, name: z.string(), email: z.string() }),
+})
+
+/**
  * An account asked for, waiting on its email — `POST /auth/register`.
  *
  * `email` and `approve` are there for the iPhone and Android builds from
