@@ -133,6 +133,40 @@ test.describe('wide', () => {
     expect(new URL(page.url()).searchParams.get('beside')).toBeNull()
   })
 
+  test('a person on the task is one press from a conversation beside it, the button on a ground of its own', async ({ page }) => {
+    await login(page)
+    const ws = new URL(page.url()).pathname.split('/')[1]!
+    const made = await page.evaluate(async (n) => {
+      const s = JSON.parse(localStorage.getItem('session') ?? '{}') as { access_token?: string }
+      const h = { authorization: `Bearer ${s.access_token}`, 'x-api-version': '1', 'content-type': 'application/json' }
+      const get = async (path: string) => (await fetch(`/api${path}`, { headers: h })).json()
+      const me = (await get('/me')) as { actor: { id: string } }
+      const { projects } = (await get('/projects')) as { projects: { id: string; slug: string; name: string }[] }
+      const site = projects.find((p) => p.name === 'Website')!
+      const { members } = (await get(`/projects/${site.id}/members`)) as {
+        members: { actor_id: string; name: string; agent?: boolean }[]
+      }
+      const other = members.find((m) => !m.agent && m.actor_id !== me.actor.id)!
+      const r = await fetch(`/api/projects/${site.id}/tasks`, {
+        method: 'POST',
+        headers: h,
+        body: JSON.stringify({ title: `Ask a person ${n}`, assignee_ids: [other.actor_id] }),
+      })
+      const t = (await r.json()) as { id?: string; task?: { id: string } }
+      const read = (await get(`/tasks/${t.id ?? t.task!.id}`)) as { task: { number: number } }
+      return { slug: site.slug, number: read.task.number, name: other.name }
+    }, Date.now())
+    await page.goto(`/${ws}/${made.slug}/tasks/${made.number}`)
+    await expect(page.getByTestId('task-assignees')).toContainText(made.name, { timeout: 15_000 })
+    const talk = page.getByTestId('talk-beside')
+    await expect(talk).toBeVisible()
+    /* Outside the assignees' own pressable ground, not inside it. */
+    expect(await page.getByTestId('task-assignees').locator('[data-testid="talk-beside"]').count()).toBe(0)
+    await talk.click()
+    const panel = page.locator('[data-beside-panel]')
+    await expect(panel.locator('[data-dm-head]')).toContainText(made.name, { timeout: 15_000 })
+  })
+
   test('any room opens beside from the Chat column: a channel by ⌥, a person from the menu', async ({ page }) => {
     await login(page)
     const s = await stage(page, Date.now())
