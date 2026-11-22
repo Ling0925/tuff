@@ -148,6 +148,25 @@ test('Members on a slow network opens with its agents and its people together', 
   await expect(page.locator('[data-members-column] [data-agent]').filter({ hasText: name })).toBeVisible()
 })
 
+/* And at full speed, the way it is opened most: the agents were read ahead
+   and known, but the list the column draws them from was taken when the
+   shell first drew, so they arrived a render after the people. */
+test('Members opened for the first time draws its agents with its people, at full speed', async ({ page }) => {
+  await login(page)
+  const { projects } = await call<{ projects: { id: string; name: string }[] }>(page, 'GET', '/projects')
+  const site = projects.find((p) => p.name === 'Website')!
+  const name = `Whole agent fast ${Date.now()}`
+  const agent = await call<{ agent_id?: string }>(page, 'POST', '/agents', { name, project_ids: [site.id], reach: 'mcp' })
+  expect(agent.agent_id, 'the agent was made').toBeTruthy()
+  await page.reload()
+  await expect(page.getByTestId('nav-members')).toBeVisible({ timeout: 30_000 })
+  const counts = await rowsSeen(page, '[data-members-column] [data-row]', async () => {
+    await page.getByTestId('nav-members').click()
+  })
+  expect(counts.length, `the column grew a group under the people: ${counts.join(' → ')}`).toBe(1)
+  await expect(page.locator('[data-members-column] [data-agent]').filter({ hasText: name })).toBeVisible()
+})
+
 test('a thread on a slow network opens with its replies in it', async ({ page }) => {
   await login(page)
   const { conversations } = await call<{ conversations: { id: string; name: string | null; kind?: string; project_id?: string | null }[] }>(

@@ -91,7 +91,12 @@ export function useAgents(on: boolean): [Agent[] | null, () => Promise<void>] {
   useEffect(() => {
     if (on) void load().catch(() => {})
   }, [on, load])
-  return [listed?.agents ?? null, load]
+  /* What was read ahead counts from the render it is known in, not from
+     the effect after it: the state was taken once, when the shell first
+     drew and nothing was known, so the column the read was waited for
+     drew its people with the agents still null and the agents a render
+     later — a group arriving under the others on the first opening. */
+  return [(listed ?? known<Listed>('/agents'))?.agents ?? null, load]
 }
 
 /** A block to copy: a command, a config, the prompt. */

@@ -231,7 +231,7 @@ export function membersScreen({
                               invite={i}
                               projects={projects}
                               onRevoke={async () => {
-                                setInvites((had) => had.filter((x) => x.id !== i.id))
+                                setInvites((had) => (had ?? open_).filter((x) => x.id !== i.id))
                                 await api(`/invites/${i.id}/revoke`, { method: 'POST' }).catch(() => null)
                                 await loadInvites()
                               }}

@@ -232,7 +232,12 @@ export function useAppState() {
    * it to expire.
    */
   /* From the last answer, so the column opens with them — `data/ahead.ts`. */
-  const [invites, setInvites] = useState<Invitation[]>(() => known<{ invites: Invitation[] }>('/invites')?.invites ?? [])
+  /* Null until this screen has its own answer: until then what was read
+     ahead counts from the render it is known in, as the agents' list does
+     (`useAgents`) — taken once when the shell first drew, the state was
+     empty and the invitations grew in a render after the people. */
+  const [held, setInvites] = useState<Invitation[] | null>(() => known<{ invites: Invitation[] }>('/invites')?.invites ?? null)
+  const invites = held ?? known<{ invites: Invitation[] }>('/invites')?.invites ?? []
   const loadInvites = useCallback(async () => {
     if (!me?.can.includes('people.invite')) return
     try {
