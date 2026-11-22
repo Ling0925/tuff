@@ -74,6 +74,8 @@ const RESPONSES: Record<string, z.ZodType> = {
   NowhereSession: S.NowhereSession,
   NowhereMe: S.NowhereMe,
   WaitingInvitations: S.WaitingInvitations,
+  UnconfirmedWorkspaces: S.UnconfirmedWorkspaces,
+  UnconfirmedAnswered: S.UnconfirmedAnswered,
   Providers: S.Providers,
   Instance: S.Instance,
   InstanceOwner: S.InstanceOwner,

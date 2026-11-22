@@ -211,6 +211,9 @@ test('leaving the last workspace lands on No workspaces, where an invitation is 
   await them.getByPlaceholder('Email').fill(email)
   await them.getByPlaceholder('Password').fill('drifters-own-password')
   await them.getByRole('button', { name: 'Sign in' }).click()
+  /* Joined before the address was confirmed: asked about first, and joined. */
+  await expect(them.getByTestId('unconfirmed')).toBeVisible({ timeout: 20_000 })
+  await them.getByTestId('unconfirmed-join').click()
   await expect(them.getByTestId('nav-my')).toBeVisible({ timeout: 20_000 })
 
   /* Their only workspace, left: the screen for no workspace. */

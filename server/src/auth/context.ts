@@ -72,6 +72,9 @@ export type AuthContext = {
   /** Whether this person's address is unproved — `can` gives them a
       member's rights and no more. */
   unproved?: boolean
+  /** Whether that proof is only a link handed over — `can` hands no
+      workspace over from it. */
+  byHand?: boolean
   /** The plan the workspace is on — `can` reads it for `agent.use`. */
   plan: string
   /** Empty means every project the person is on. Otherwise the database
@@ -120,6 +123,7 @@ type Row = {
   plan: string
   live: boolean
   unproved: boolean
+  by_hand: boolean | null
 }
 
 async function load(
@@ -141,6 +145,7 @@ async function load(
   const [row] = await db<Row[]>`
     select c.*, (${sessionId}::uuid is null or auth_session_alive(${sessionId}::uuid)) as live,
            auth_email_confirmed(${actorId}) is false as unproved,
+           auth_email_by_hand(${actorId}) as by_hand,
            /* Only where there are instance owners: the service never asks. */
            ${edition.instance ? db`instance_sign_up_open() is false` : db`false`} as sign_up_closed
     from auth_context(${actorId}, ${workspaceId}) c`
@@ -167,6 +172,7 @@ async function load(
     /* An agent has no address and is never unproved: `auth_email_confirmed`
        answers null for it. */
     unproved: row.unproved === true,
+    byHand: row.by_hand === true,
     plan: row.plan,
     viaMcp,
     tokenProjectIds,
@@ -371,6 +377,7 @@ export function allow(ctx: AuthContext, action: z.infer<typeof Action>, about: P
     feedbackPage: ctx.feedbackPage === true,
     /* And nothing a handler says makes an unproved address a proved one. */
     unproved: ctx.unproved === true,
+    byHand: ctx.byHand === true,
   })
 }
 

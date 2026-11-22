@@ -429,6 +429,31 @@ test('leaving the workspace is a member’s, in person, and leaving a channel is
 })
 
 /*
+ * Join or Leave a workspace joined before the proof.
+ * The person's own, in person: never
+ * a token, an agent, a board's link or a feedback page, never an address
+ * still unproved.
+ */
+test('answering for a workspace joined before the proof is the person’s, in person', () => {
+  for (const who of WHO) assert.equal(can('workspace.confirm', base(who)), true, `${who} may answer`)
+  assert.equal(NEVER_VIA_MCP.includes('workspace.confirm'), true)
+  assert.equal(can('workspace.confirm', base('member', { viaMcp: true, plan: 'team' })), false)
+  assert.equal(can('workspace.confirm', base('member', { agent: true, plan: 'team' })), false)
+  assert.equal(can('workspace.confirm', base('member', { tokenLimited: true })), false)
+  assert.equal(can('workspace.confirm', base('member', { unproved: true })), false)
+  assert.equal(can('workspace.confirm', base('owner', { board: true })), false)
+  assert.equal(can('workspace.confirm', base('member', { feedbackPage: true, onItsPage: true })), false)
+})
+
+/* An address proved only by a link handed over hands no workspace over, and is an owner for the rest. */
+test('a by-hand owner may not hand the workspace over', () => {
+  assert.equal(can('workspace.transfer', base('owner')), true)
+  assert.equal(can('workspace.transfer', base('owner', { byHand: true })), false)
+  assert.equal(can('workspace.delete', base('owner', { byHand: true })), true)
+  assert.equal(can('workspace.billing', base('owner', { byHand: true })), true)
+})
+
+/*
  * A board's link. Its tasks, its comments
  * and its name, and nothing else whatever the role, the plan or the rights
  * say: the list is closed, so an action added next year is refused to it.

@@ -415,6 +415,29 @@ export const NowhereMe = z.object({
 export const WaitingInvitations = z.object({ invitations: z.array(z.object({ id: Uuid, workspace_name: z.string() })) })
 
 /**
+ * `GET /api/me/unconfirmed` — the workspaces the account was in before its
+ * address was proved, waiting for the person's Join or Leave.
+ */
+export const UnconfirmedWorkspaces = z.object({
+  waiting: z.array(
+    z.object({
+      id: Uuid,
+      name: z.string(),
+      /** `owner` is offered Join alone: a workspace keeps its owner. */
+      role: Role,
+    }),
+  ),
+})
+/**
+ * `POST /api/me/unconfirmed/:workspaceId` — the answer taken, and, to a
+ * session in no workspace that joined, a session for the workspace joined
+ * beside it, as `PasswordSet` carries one.
+ */
+export const UnconfirmedAnswered = z
+  .object({ ok: z.literal(true), answer: z.enum(['joined', 'left']) })
+  .extend(Session.partial().shape)
+
+/**
  * Which ways in this deployment has keys for — `GET /auth/providers`. A
  * screen draws a button only for these: one that answers "not set up" is
  * worse than none.

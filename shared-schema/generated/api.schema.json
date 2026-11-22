@@ -2444,6 +2444,7 @@
                   "workspace.transfer",
                   "workspace.delete",
                   "workspace.leave",
+                  "workspace.confirm",
                   "people.invite",
                   "people.role",
                   "people.read",
@@ -3628,6 +3629,85 @@
       },
       "required": [
         "invitations"
+      ]
+    },
+    "UnconfirmedWorkspaces": {
+      "title": "UnconfirmedWorkspaces",
+      "type": "object",
+      "properties": {
+        "waiting": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "name": {
+                "type": "string"
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "owner",
+                  "member"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "role"
+            ]
+          }
+        }
+      },
+      "required": [
+        "waiting"
+      ]
+    },
+    "UnconfirmedAnswered": {
+      "title": "UnconfirmedAnswered",
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean",
+          "const": true
+        },
+        "answer": {
+          "type": "string",
+          "enum": [
+            "joined",
+            "left"
+          ]
+        },
+        "access_token": {
+          "type": "string"
+        },
+        "refresh_token": {
+          "type": "string"
+        },
+        "expires_in": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "actor_id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "workspace_id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        }
+      },
+      "required": [
+        "ok",
+        "answer"
       ]
     },
     "Providers": {
@@ -11629,6 +11709,7 @@
     "workspace.transfer",
     "workspace.delete",
     "workspace.leave",
+    "workspace.confirm",
     "people.invite",
     "people.role",
     "people.read",
@@ -11676,6 +11757,7 @@
   "x-never-via-mcp": [
     "workspace.create",
     "workspace.enter",
+    "workspace.confirm",
     "workspace.billing",
     "workspace.transfer",
     "workspace.delete",

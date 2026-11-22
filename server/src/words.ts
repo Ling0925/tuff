@@ -223,6 +223,10 @@ export const ERRORS_FR: Record<string, string> = {
   'You’re the only one in this channel. Delete it instead.': 'Vous êtes la seule personne de ce canal. Supprimez-le plutôt.',
   'You own this workspace. Hand it over to someone else before you leave.':
     'Vous êtes propriétaire de cet espace de travail. Transférez-le à quelqu’un d’autre avant de partir.',
+  'This workspace isn’t waiting for an answer.': 'Cet espace de travail n’attend pas de réponse.',
+  'Say join or leave.': 'Indiquez rejoindre ou quitter.',
+  'You own this workspace, so you can’t leave it. Join it to hand it over.':
+    'Vous êtes propriétaire de cet espace de travail, vous ne pouvez donc pas le quitter. Rejoignez-le pour le transférer.',
   'Connected tools can’t turn on notifications.': 'Les outils connectés ne peuvent pas activer les notifications.',
   'Connected tools can’t send notifications.': 'Les outils connectés ne peuvent pas envoyer de notifications.',
   'Sign in again to turn on notifications on this device.': 'Reconnectez-vous pour activer les notifications sur cet appareil.',

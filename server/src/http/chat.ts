@@ -179,7 +179,10 @@ chat.get('/conversations', async (c) => {
                                 and bool_and(exists (select 1 from membership mp
                                                      where mp.workspace_id = c.workspace_id
                                                        and mp.actor_id = cm5.actor_id
-                                                       and mp.deleted_at is null))
+                                                       and mp.deleted_at is null
+                                                       /* Nor waiting for their own Join:
+                                                          password-after-proof.md. */
+                                                       and mp.joined_at is not null))
                       then presence_of(max(a5.seen_at), max(a5.presence)) end
                from conversation_member cm5
                join actor a5 on a5.id = cm5.actor_id
@@ -829,7 +832,11 @@ chat.get('/conversations/:id/members', async (c) => {
     /* With what the list of them shows when opened — what each does and
        whether they are here — `docs/specs/room-people.md`. */
     const rows = await tx`
-      select cm.*, a.title, case when m.actor_id is not null then presence_of(a.seen_at, a.presence) end as presence, m.role
+      select cm.*,
+             /* Nothing a member waiting for their own Join keeps for the
+                workspaces they are in — password-after-proof.md. */
+             case when m.joined_at is not null or m.actor_id is null then a.title end as title,
+             case when m.joined_at is not null then presence_of(a.seen_at, a.presence) end as presence, m.role
       from channel_members(${id}) cm
       join actor a on a.id = cm.actor_id
       left join membership m on m.actor_id = cm.actor_id

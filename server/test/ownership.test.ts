@@ -90,12 +90,15 @@ test('somebody new joins through Google by the invitation alone, with no workspa
   )
   assert.equal(n!.n, 1, 'the invited workspace and nothing else')
 
-  // Known by that provider: joins again by another link, as themselves.
+  // Known by that provider: signed in as themselves by another link, and
+  // sent to press Join on its page — a provider's sign-in joins nobody who
+  // already has an account.
   const { token: elsewhere } = await makeOwner()
   const again = ((await call('POST', '/api/invites', elsewhere, { rights: [] })).body as { token: string }).token
   const back = await joinByProvider('google', again, subject, email, true, 'Nia')
   assert.ok(back && typeof back === 'object')
   assert.equal(back.actorId, made.actorId)
+  assert.deepEqual([back.workspaceId, back.press], [workspaceId, true])
 
   // An address the provider does not vouch for is not handed the account;
   // a spent link joins nobody.

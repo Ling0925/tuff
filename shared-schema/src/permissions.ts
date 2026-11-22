@@ -28,6 +28,14 @@ export const Action = z.enum([
    * first, never an agent, never through a token.
    */
   'workspace.leave',
+  /*
+   * Saying Join or Leave about a workspace the account was in before its
+   * address was proved.
+   * The person's own, in person: never through a
+   * token, never an agent, and never an unproved address, which has
+   * nothing waiting for it.
+   */
+  'workspace.confirm',
   'people.invite',
   'people.role',
   'people.read',
@@ -256,6 +264,7 @@ type Grant = readonly Role[]
 const FIXED: Partial<Record<Action, Grant>> = {
   'workspace.create': ['owner', 'member'],
   'workspace.enter': ['owner', 'member'],
+  'workspace.confirm': ['owner', 'member'],
   'workspace.billing': ['owner'],
   'workspace.transfer': ['owner'],
   'workspace.delete': ['owner'],
@@ -384,6 +393,14 @@ export type PermissionInput = {
    */
   unproved?: boolean
   /**
+   * Whether the address is proved only by a link handed over where there is
+   * no mail ('s weak proof). Proved enough to sign in and work, not
+   * to hand a workspace over: a by-hand account handed one, its maker gone,
+   * was a workspace the real owner's proof would land them in unasked
+   * (M2).
+   */
+  byHand?: boolean
+  /**
    * Whether the call came with a token made for some projects only.
    * Such a token does nothing about the workspace
    * as a whole, and nothing on a project outside its list
@@ -419,6 +436,8 @@ export const NEVER_VIA_MCP: readonly Action[] = [
   /* A session's to open, never a token's: a narrow key turned wide. */
   'workspace.create',
   'workspace.enter',
+  /* Which workspaces the account is in is a person's to answer, in person. */
+  'workspace.confirm',
   'workspace.billing',
   'workspace.transfer',
   'workspace.delete',
@@ -491,7 +510,7 @@ const has = (input: PermissionInput, right: Right): boolean =>
  * project").
  */
 const NEVER_AN_AGENT: readonly Action[] = [
-  'workspace.create', 'workspace.enter',
+  'workspace.create', 'workspace.enter', 'workspace.confirm',
   'project.create', 'project.member.add', 'project.member.remove', 'project.leave', 'project.archive', 'project.tools',
   'people.invite', 'people.role', 'members.read', 'agent.connect', 'agent.manage', 'agent.remove', 'agent.work.read', 'token.issue.own',
   'channel.create', 'channel.create.workspace', 'channel.delete', 'task.delete', 'file.delete', 'file.share', 'time.any', 'feedback.manage',
@@ -506,7 +525,7 @@ const NEVER_AN_AGENT: readonly Action[] = [
  * Members screen and the audit are no project's.
  */
 const NEVER_A_LIMITED_TOKEN: readonly Action[] = [
-  'workspace.create', 'workspace.enter',
+  'workspace.create', 'workspace.enter', 'workspace.confirm',
   'workspace.billing', 'workspace.transfer', 'workspace.delete',
   'people.invite', 'people.role', 'members.read',
   'project.create', 'channel.create.workspace',
@@ -541,7 +560,7 @@ export const ON_A_FEEDBACK_PAGE: readonly Action[] = ['task.create', 'content.cr
  * built it still inside.
  */
 export const NEVER_UNPROVED: readonly Action[] = [
-  'workspace.create', 'workspace.enter', 'workspace.billing', 'workspace.transfer', 'workspace.delete',
+  'workspace.create', 'workspace.enter', 'workspace.confirm', 'workspace.billing', 'workspace.transfer', 'workspace.delete',
   'people.invite', 'people.role', 'token.issue.own', 'token.revoke.any', 'audit.read',
   'agent.connect', 'agent.manage', 'agent.remove', 'feedback.manage', 'operator', 'instance', 'hook.manage',
 ]
@@ -559,6 +578,7 @@ export function can(action: Action, input: PermissionInput): boolean {
     if (NEVER_UNPROVED.includes(action)) return false
     if (role === 'owner') role = 'member'
   }
+  if (input.byHand && action === 'workspace.transfer') return false
 
   if (input.viaMcp && NEVER_VIA_MCP.includes(action)) return false
   if (input.agent && NEVER_AN_AGENT.includes(action)) return false

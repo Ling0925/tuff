@@ -7,7 +7,8 @@ import { PLACES } from '../data/words.js'
 import { APP as W } from '../words/app.js'
 import { api, AFTER_SIGN_IN, signOut, stored } from '../data/api.js'
 import { Nowhere } from './Nowhere.jsx'
-import { useEffect } from 'react'
+import { Unconfirmed, type Waiting as Unanswered } from './Unconfirmed.jsx'
+import { useEffect, useState } from 'react'
 import { forget, setBeside, useBeside, type Route } from '../data/route.js'
 import { Beside } from './app/beside.jsx'
 import { Palette } from './Palette.jsx'
@@ -188,6 +189,21 @@ export function App() {
     if (besideId && loaded && rooms.length > 0 && !rooms.some((r) => r.id === besideId)) setBeside(null)
   }, [besideId, loaded, rooms])
 
+  /*
+   * Workspaces joined before the address was confirmed — `ui/Unconfirmed.tsx`,
+   * Asked beside the rest rather than
+   * before it, so a load that has none waits for nothing; when there are
+   * some, their screen comes first. A session in no workspace asks on its
+   * own screen (`Nowhere.tsx`).
+   */
+  const [unanswered, setUnanswered] = useState<Unanswered[]>([])
+  useEffect(() => {
+    if (!signedIn || stored()?.workspace_id == null) return
+    void api<{ waiting: Unanswered[] }>('/me/unconfirmed')
+      .then((r) => setUnanswered(r.waiting))
+      .catch(() => {})
+  }, [signedIn])
+
   if (!signedIn)
     return (
       <SignIn
@@ -211,6 +227,17 @@ export function App() {
     )
   /* In no workspace: the one screen such a session has. */
   if (stored()?.workspace_id === null) return <Nowhere />
+  /* Every one answered: on into the workspace, read again when one was joined. */
+  if (unanswered.length > 0)
+    return (
+      <Unconfirmed
+        waiting={unanswered}
+        onDone={(joined) => {
+          if (joined) location.reload()
+          else setUnanswered([])
+        }}
+      />
+    )
   /* Nothing of its own until `/me` answers: the frame under the app is
      what is on the screen, and it is the right thing to be looking at. */
   if (!me && stranded)

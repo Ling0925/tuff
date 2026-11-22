@@ -13,6 +13,7 @@ import { deleteAccount } from './yourdata.js'
 import { inboxCode } from './address.js'
 import { joinAsMe } from './invites.js'
 import { hashToken } from '../auth/crypto.js'
+import { sessionFor, unconfirmedAnswer, unconfirmedList } from './confirming.js'
 
 /**
  * A session in no workspace.
@@ -166,13 +167,32 @@ nowhere.post(
     )
     const row = rows[0]
     if (!row) return c.json({ error: { code: 'not_found', message: 'This invitation is no longer valid.' } }, 404)
-    const took = await takeInvite(row.token_hash, who.actorId)
+    /* Join, pressed on No workspaces. */
+    const took = await takeInvite(row.token_hash, who.actorId, true)
     if (took === 'full') return c.json(fullRefusal('invited'), 413)
     if (typeof took === 'string') return c.json({ error: { code: 'not_found', message: 'This invitation is no longer valid.' } }, 404)
     const session = await startSession(who.actorId, took.workspaceId, metaOf(c), 'invite')
     await endNowhere(who)
     return c.json(session)
   }),
+)
+
+/* The workspaces joined before the proof, waiting for Join or Leave.
+   A Join answers a session for the
+   workspace joined, and this one ends, as an invitation taken does. */
+nowhere.get(
+  '/me/unconfirmed',
+  only((c, who) => unconfirmedList(c as unknown as Context<{ Variables: { ctx: AuthContext } }>, who.ctx)),
+)
+nowhere.post(
+  '/me/unconfirmed/:id',
+  only((c, who) =>
+    unconfirmedAnswer(c as unknown as Context<{ Variables: { ctx: AuthContext } }>, who.ctx, async (workspaceId) => {
+      const session = await sessionFor(c, who.actorId)(workspaceId)
+      await endNowhere(who)
+      return session
+    }),
+  ),
 )
 
 /* An invitation link followed while in no workspace: what it is to, and

@@ -8,8 +8,7 @@ import { env } from '../env.js'
 import { secureAttr } from '../tryLocalhost.js'
 import { edition } from '../edition.js'
 import { origin } from '../publicUrl.js'
-import { fullRefusal } from '../ceilings.js'
-import { asAuth } from '../db.js'
+import { asAuth, withActorEverywhere } from '../db.js'
 import { generateToken, hashPassword, hashToken } from '../auth/crypto.js'
 import {
   confirmed,
@@ -19,7 +18,6 @@ import {
   secondFactor,
   startNowhereSession,
   startSession,
-  takeInvite,
 } from '../auth/flows.js'
 import { NO_WORKSPACE_YET } from './nowhere.js'
 import { follow, tellWayIn } from '../auth/address.js'
@@ -411,9 +409,9 @@ async function callback(c: Context, p: Provider, params: { code?: string; state?
       tx`select auth_ticket_make_bound(${hashToken(ticket)}, 'handoff', ${who.actorId}, ${who.workspaceId}, interval '2 minutes', ${binding})`,
   )
   c.header('set-cookie', `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=None`, { append: true })
-  /* An invitation waiting for the second factor goes back with the ticket,
-     as it came: the link the person followed. */
-  const waiting = invite && !who.workspaceId ? `&invite=${encodeURIComponent(invite)}` : ''
+  /* Somebody known, signed in and not joined: the invitation goes back with
+     the ticket, and the page opens it once signed in, to be pressed. */
+  const waiting = invite && 'press' in who && who.press ? `&invite=${encodeURIComponent(invite)}` : ''
   return c.redirect(`/signin?handoff=${encodeURIComponent(ticket)}${waiting}`)
 }
 
@@ -796,10 +794,19 @@ async function knownActor(p: Provider, subject: string, email: string, verified:
 /**
  * Who a provider's account is, on the way back to an invitation.
  *
- * Somebody known joins the invited workspace as themselves. Somebody new is
- * made by the invitation itself, confirmed, as a member of that workspace
- * and nothing else: the workspace of their own that signing up through a
- * provider makes would be an empty second place they never asked for.
+ * Somebody new is made by the invitation itself, confirmed, as a member of
+ * that workspace and nothing else: the workspace of their own that signing
+ * up through a provider makes would be an empty second place they never
+ * asked for. That is signing up by an invitation, and the person chose it
+ * on the invitation's page.
+ *
+ * Somebody known is signed in and not joined (`press`): the callback is a
+ * GET anybody can send a link to — `/auth/oauth/google/start?invite=…` —
+ * and picking one's Google account is not pressing Join. It joined an
+ * existing account into whoever's workspace the link was for, and a
+ * workspace waiting for its person's word since the address was proved
+ * along with it (H1). The page goes to the invitation
+ * next, where Join is a press of its own.
  */
 export async function joinByProvider(
   p: Provider,
@@ -809,24 +816,16 @@ export async function joinByProvider(
   verified: boolean,
   name: string,
   owns = verified,
-): Promise<{ actorId: string; workspaceId: string | null } | 'conflict' | 'gone' | 'full' | 'elsewhere' | null> {
+): Promise<{ actorId: string; workspaceId: string | null; press?: true } | 'conflict' | 'gone' | 'full' | 'elsewhere' | null> {
   const tokenHash = hashToken(invite)
   const found = await knownActor(p, subject, email, owns)
   if (found === 'conflict') return 'conflict'
   let joined: { actorId: string; workspaceId: string | null }
-  if (found && (await hasSecondFactor(found))) {
-    /* Not yet: whoever holds the provider's account without the second
-       factor would otherwise put the account in the workspace and spend
-       the invitation. The ticket carries no workspace, and the exchange
-       takes the invitation once the code has been given. */
-    joined = { actorId: found, workspaceId: null }
-  } else if (found) {
-    const took = await takeInvite(tokenHash, found)
-    if (took === 'gone' || took === 'full' || took === 'elsewhere') return took
-    /* Not reached: a provider that vouched has just confirmed the address
-       (`knownActor`). Said as a spent link if it ever is. */
-    if (took === 'unconfirmed') return 'gone'
-    joined = { actorId: found, workspaceId: took.workspaceId }
+  if (found) {
+    /* Signed in where signing in lands — a workspace of theirs, or none —
+       and sent on to the invitation's page to press Join there. */
+    await asAuth((tx) => tx`select auth_identity_link(${found}, ${p}, ${subject}, ${email || null})`)
+    return { actorId: found, workspaceId: await firstWorkspace(found), press: true }
   } else {
     if (!email || !verified) return null
     try {
@@ -854,11 +853,6 @@ export async function joinByProvider(
   }
   await asAuth((tx) => tx`select auth_identity_link(${joined.actorId}, ${p}, ${subject}, ${email || null})`)
   return joined
-}
-
-async function hasSecondFactor(actorId: string): Promise<boolean> {
-  const [u] = await asAuth((tx) => tx<{ on: boolean }[]>`select l.totp_enabled as on from auth_lookup_user(auth_email_of(${actorId})) l`)
-  return Boolean(u?.on)
 }
 
 access.get('/oauth/google/callback', (c) => callback(c, 'google', { code: c.req.query('code') ?? '', state: c.req.query('state') ?? '' }))
@@ -920,18 +914,10 @@ access.post('/oauth/exchange', async (c) => {
   }
   const [spent] = await asAuth((tx) => tx<{ ok: boolean }[]>`select auth_ticket_spend(${hash}, 'handoff') as ok`)
   if (!spent?.ok) return c.json({ error: { code: 'unauthorized' } }, 401)
-  /* The invitation that waited for the code, taken now. */
-  let workspaceId = t.workspace_id
-  if (!workspaceId && body.data.invite) {
-    const took = await takeInvite(hashToken(body.data.invite), t.actor_id)
-    if (took === 'full') return c.json(fullRefusal('invited'), 413)
-    if (took === 'elsewhere')
-      return c.json({ error: { code: 'wrong_email', message: 'This invitation is for a different email address.' } }, 403)
-    if (took === 'gone' || took === 'unconfirmed') {
-      return c.json({ error: { code: 'not_found', message: 'This invitation is no longer valid.' } }, 404)
-    }
-    workspaceId = took.workspaceId
-  }
+  /* An invitation is never taken here: `invite` is accepted and ignored.
+     Somebody known signed in through a provider presses Join on the
+     invitation's own page afterwards — the page goes there (H1). */
+  const workspaceId = t.workspace_id
   if (!workspaceId) {
     /* Signed in, past the second factor, and in no workspace. */
     c.header('set-cookie', `${HANDOFF}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`, { append: true })
@@ -1178,6 +1164,12 @@ access.post('/password/forgot', async (c) => {
   return c.json({ ok: true })
 })
 
+/** Whether a workspace the account was in waits for its Join or Leave — `confirming.ts`. */
+async function waitingAnswer(actorId: string): Promise<boolean> {
+  const rows = await withActorEverywhere(actorId, (tx) => tx`select 1 from memberships_unconfirmed() limit 1`)
+  return rows.length > 0
+}
+
 /**
  * The link's token and the new password; every session is signed out.
  *
@@ -1215,6 +1207,13 @@ access.post('/password/reset', async (c) => {
   if (was && !was.proved) {
     const workspaceId = here ? await firstWorkspace(t.actor_id) : null
     if (workspaceId) return c.json({ ok: true, ...(await startSession(t.actor_id, workspaceId, metaOf(c), 'email_link')) })
+    /* Every workspace it was in waits for the person's word now — joined
+       before the proof (`password-after-proof.md`). In the same browser, the
+       question is the next screen, in a session in no workspace, rather
+       than "sign in". */
+    if (here && (await waitingAnswer(t.actor_id))) {
+      return c.json({ ok: true, ...(await startNowhereSession(t.actor_id, metaOf(c))) })
+    }
     return c.json({ ok: true })
   }
   /* Said to the address, as a change from Account is: a reset is the way

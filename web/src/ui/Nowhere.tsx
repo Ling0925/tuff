@@ -5,6 +5,7 @@ import { watchSystem } from '../data/theme.js'
 import { AuthShell, primaryLook } from './Access.jsx'
 import { NewWorkspace } from './NewWorkspace.jsx'
 import { YourData } from './account/yourData.jsx'
+import { Unconfirmed, type Waiting as Unanswered } from './Unconfirmed.jsx'
 
 /**
  * No workspaces — the one screen a session in no workspace has,
@@ -22,6 +23,9 @@ export function Nowhere() {
   const [joining, setJoining] = useState<string | null>(null)
   const [said, setSaid] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  /* Workspaces joined before the address was confirmed, asked about first —
+     `ui/Unconfirmed.tsx`. */
+  const [unanswered, setUnanswered] = useState<Unanswered[]>([])
 
   /* The machine's light or dark, followed as the bar follows it in a
      workspace — there is no bar here. */
@@ -31,9 +35,11 @@ export function Nowhere() {
     void Promise.all([
       api<NowhereMe>('/me'),
       api<{ invitations: Waiting[] }>('/me/invitations').catch(() => ({ invitations: [] as Waiting[] })),
+      api<{ waiting: Unanswered[] }>('/me/unconfirmed').catch(() => ({ waiting: [] as Unanswered[] })),
     ])
-      .then(([m, i]) => {
+      .then(([m, i, u]) => {
         setWaiting(i.invitations)
+        setUnanswered(u.waiting)
         setMe(m)
       })
       .catch(() => {})
@@ -53,6 +59,8 @@ export function Nowhere() {
   }
 
   if (!me) return null
+  /* A Join answers a session and goes; every one left, this screen is next. */
+  if (unanswered.length > 0) return <Unconfirmed waiting={unanswered} onDone={() => setUnanswered([])} />
   const mayCreate = me.can.includes('workspace.create')
   return (
     <div data-testid="nowhere" data-whole="nowhere">

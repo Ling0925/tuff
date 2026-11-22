@@ -822,6 +822,9 @@ export async function totpState(actorId: string): Promise<{ enabled: boolean; re
 export async function takeInvite(
   tokenHash: string,
   actorId: string,
+  /** The person pressed Join on the invitation's own page — only that
+      confirms a workspace waiting for their word (migration 315). Anything else finds it `gone`. */
+  pressed = false,
 ): Promise<{ workspaceId: string } | 'gone' | 'full' | 'elsewhere' | 'unconfirmed'> {
   const [u] = await asAuth((tx) => tx<{ email: string | null }[]>`select auth_email_of(${actorId}) as email`)
   if (!u?.email) return 'gone'
@@ -829,7 +832,8 @@ export async function takeInvite(
   try {
     const [row] = await asAuth(
       (tx) => tx<{ workspace_id: string; actor_id: string }[]>`
-        select * from accept_invite(${tokenHash}::text, ${uuidv7()}::uuid, ''::text, ${u.email}::citext, null::text)`,
+        select * from accept_invite(${tokenHash}::text, ${uuidv7()}::uuid, ''::text, ${u.email}::citext, null::text,
+                                    false, ${pressed}::boolean)`,
     )
     if (!row || row.actor_id !== actorId) return 'gone'
     await tellInviter(row.workspace_id, actorId)
@@ -839,6 +843,9 @@ export async function takeInvite(
     /* A link handed over by hand is for its own address, and this account's
        is another (migration 210). Left unspent. */
     if ((e as { message?: string }).message?.includes('invite_for_another_address')) return 'elsewhere'
+    /* The workspace waits for the person's own Join, and this was not it.
+       Left unspent. */
+    if ((e as { message?: string }).message?.includes('membership_waiting')) return 'gone'
     throw e
   }
 }

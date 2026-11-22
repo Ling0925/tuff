@@ -397,11 +397,13 @@ test('a link with no address, followed with somebody else’s, leaves the owner 
     body: JSON.stringify({ token, password: 'the-real-owners-password' }),
   })
   assert.equal(chose.status, 200)
+  /* In no workspace: the stranger's workspace waits for the owner's Join
+     (`password-after-proof.md`, "Workspaces joined before the proof"). */
   const login = (password: string) =>
     app.request('/auth/login', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: victim, password }),
+      body: JSON.stringify({ email: victim, password, nowhere: true }),
     })
   assert.equal((await login('the-strangers-password')).status, 401)
   assert.equal((await login('the-real-owners-password')).status, 200)

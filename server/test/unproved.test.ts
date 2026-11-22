@@ -202,7 +202,9 @@ test('changing the address while unproved sends the new address the letter that 
   const chs = chooseLink(moved)
   assert.ok(chs, 'a letter to the new address')
   assert.equal((await send('/auth/password/reset', null, { token: chs, password: 'chosen-at-the-new-one' })).status, 200)
-  assert.equal((await send('/auth/login', null, { email: moved, password: 'chosen-at-the-new-one' })).status, 200)
+  /* Into no workspace: the one the link put the account in waits for its
+     Join (`password-after-proof.md`, "Workspaces joined before the proof"). */
+  assert.equal((await send('/auth/login', null, { email: moved, password: 'chosen-at-the-new-one', nowhere: true })).status, 200)
 })
 
 test('a GitHub account linked while the address was unproved is not linked after its proof', async () => {

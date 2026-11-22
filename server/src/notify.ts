@@ -476,10 +476,12 @@ export async function notify(
    */
   /* Only people still in the workspace: `notify_many` wrote no note for
      somebody removed, but the notice below still reached their socket —
-     `docs/specs/removing-someone.md`. */
+     `docs/specs/removing-someone.md`. And joined: a workspace waiting for
+     its person's Join sends them nothing (`password-after-proof.md`). */
   const here = await tx<{ actor_id: string }[]>`
     select actor_id from membership
     where workspace_id = ${ctx.workspaceId} and actor_id = any(${[...targets.keys()]}::uuid[]) and deleted_at is null
+      and joined_at is not null
       /* Nor an agent, for what came from GitHub: anybody who can comment on
          a public issue could otherwise set it going — giving an agent work
          is a person's decision here. */

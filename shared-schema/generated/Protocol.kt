@@ -621,6 +621,12 @@ data class Contract (
     @SerialName("TwoFactorBegun")
     val twoFactorBegun: TwoFactorBegun? = null,
 
+    @SerialName("UnconfirmedAnswered")
+    val unconfirmedAnswered: UnconfirmedAnswered? = null,
+
+    @SerialName("UnconfirmedWorkspaces")
+    val unconfirmedWorkspaces: UnconfirmedWorkspaces? = null,
+
     @SerialName("User")
     val user: User? = null,
 
@@ -4700,6 +4706,46 @@ enum class Proof(val value: String) {
 data class TwoFactorBegun (
     val secret: String,
     val url: String
+)
+
+@Serializable
+data class UnconfirmedAnswered (
+    @SerialName("access_token")
+    val accessToken: String? = null,
+
+    @SerialName("actor_id")
+    val actorID: String? = null,
+
+    val answer: Answer,
+
+    @SerialName("expires_in")
+    val expiresIn: Long? = null,
+
+    val ok: Boolean,
+
+    @SerialName("refresh_token")
+    val refreshToken: String? = null,
+
+    @SerialName("workspace_id")
+    val workspaceID: String? = null
+)
+
+@Serializable
+enum class Answer(val value: String) {
+    @SerialName("joined") Joined("joined"),
+    @SerialName("left") Left("left");
+}
+
+@Serializable
+data class UnconfirmedWorkspaces (
+    val waiting: List<Waiting>
+)
+
+@Serializable
+data class Waiting (
+    val id: String,
+    val name: String,
+    val role: Role
 )
 
 @Serializable

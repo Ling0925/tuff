@@ -48,7 +48,14 @@ ownership.post('/workspace/transfer', async (c) => {
   /* Not to an address nobody has proved, as a server is not handed to one
      (`/api/instance/owners`): an owner's role held by an unproved account
      counts for nothing, and its owner may not be whoever holds its session. */
-  const [them] = await withoutActor((tx) => tx<{ unproved: boolean }[]>`select auth_email_confirmed(${body.data.to}) is false as unproved`)
+  /* Nor to one proved only by a link handed over: proved enough to work,
+     not to be handed a workspace — a review, M2. `transfer_workspace`
+     refuses both whatever called it. */
+  const [them] = await withoutActor(
+    (tx) => tx<{ unproved: boolean }[]>`
+      select auth_email_confirmed(${body.data.to}) is false
+             or coalesce(auth_email_by_hand(${body.data.to}), false) as unproved`,
+  )
   if (them?.unproved) {
     return c.json({ error: { code: 'unconfirmed', message: 'They haven’t confirmed their email yet.' } }, 409)
   }

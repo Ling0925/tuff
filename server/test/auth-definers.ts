@@ -26,6 +26,8 @@ export const AUTH_DEFINERS = [
   'auth_identity_remove',
   'auth_invite_delivered',
   'auth_lookup_user',
+  /* 315: Join or Leave a workspace joined before the proof. */
+  'auth_membership_answer',
   'auth_password_hash',
   'auth_recovery_replace',
   'auth_recovery_spend',

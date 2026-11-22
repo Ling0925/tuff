@@ -543,7 +543,9 @@ export async function joinAsMe(c: Context<{ Variables: Vars }>) {
   if (ctx.viaMcp || !ctx.sessionId) {
     return c.json({ error: { code: 'forbidden', message: 'Connected tools can’t join workspaces.' } }, 403)
   }
-  const took = await takeInvite(hashToken(c.req.param('token') ?? ''), ctx.actorId)
+  /* A press on the invitation's own page: a workspace waiting for this
+     person's word (`password-after-proof.md`) is joined by it. */
+  const took = await takeInvite(hashToken(c.req.param('token') ?? ''), ctx.actorId, true)
   if (took === 'elsewhere') return c.json(FOR_ANOTHER_ADDRESS, 403)
   /* A session for an address nobody proved — a link with no address,
      followed with somebody's — takes no invitation as that address: */
@@ -650,7 +652,10 @@ publicInvites.post('/invite/:token/accept', async (c) => {
         select * from accept_invite(
           ${hashToken(c.req.param('token'))}::text, ${uuidv7()}::uuid,
           ${body.data.name}::text, ${body.data.email}::citext, ${passwordHash}::text,
-          ${!existing}::boolean)`
+          ${!existing}::boolean,
+          -- Join pressed beside the account's own password and code: the
+          -- person's word about a workspace that waits for it (315).
+          ${Boolean(existing)}::boolean)`
     })
   } catch (e) {
     /*

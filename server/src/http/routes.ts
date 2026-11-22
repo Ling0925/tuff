@@ -44,6 +44,7 @@ import { projects } from './projects.js'
 import { places } from './places.js'
 import { labels } from './labels.js'
 import { people } from './people.js'
+import { confirming } from './confirming.js'
 import { tokens } from './tokens.js'
 import { posts } from './posts.js'
 import { tasks } from './tasks.js'
@@ -1163,6 +1164,8 @@ app.patch('/api/workspace', async (c) => {
 })
 
 app.route('/api', invites)
+/* Workspaces joined before the proof. */
+app.route('/api', confirming)
 app.route('/api', workspaces)
 app.route('/api', projects)
 app.route('/api', people)

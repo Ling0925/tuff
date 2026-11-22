@@ -145,6 +145,10 @@ test('somebody signed in joins a second workspace with one press, and the owner 
   await them.getByPlaceholder('Email').fill(`kit${stamp}@example.com`)
   await them.getByPlaceholder('Password').fill('kits-own-password-now')
   await them.getByRole('button', { name: 'Sign in' }).click()
+  /* The studio was joined before the address was confirmed, so it is asked
+     about first. Kit joins it. */
+  await expect(them.getByTestId('unconfirmed')).toBeVisible({ timeout: 20_000 })
+  await them.getByTestId('unconfirmed-join').click()
   await expect(them.locator('aside [data-project]').first()).toBeVisible({ timeout: 20_000 })
 
   // The second link, signed in: one press, no password.
