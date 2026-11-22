@@ -3532,11 +3532,13 @@ aside[data-moving] > [data-fluid] {
  */
 .task-chip {
   display: inline;
-  /* Room round the tick, the same above, below and before it — four
-     pixels at a body's size, in its own em so a heading's chip keeps the
+  /* Room round the tick, in its own em so a heading's chip keeps the
      proportion. With none above and below, the tint was the words' box
-     and the tick stood past it. */
-  padding: 0.1875em 0.25em;
+     and the tick stood past it. Kept so the tint — the letters' own box,
+     about 1.21em in Inter, plus this — stays shorter than the line it is
+     on: at 0.1875em a body line (1.6) had a hair between two wrapped
+     tints and a heading's (1.3–1.5) had them lying over each other. */
+  padding: 0.125em 0.25em;
   margin: 0 2px;
   border-radius: var(--r-row);
   background: var(--track);
@@ -3568,10 +3570,14 @@ aside[data-moving] > [data-fluid] {
   color: var(--on-accent);
 }
 /* A heading's letters stand low in their box: the tint starts nearer
-   them, so they are as far from its top as from its foot. */
+   them, so they are as far from its top as from its foot — within the
+   heading's tighter line (1.33 and 1.4), so two wrapped lines' tints
+   keep a gap between them. */
 .ProseMirror h1 .task-chip,
-.ProseMirror h2 .task-chip {
-  padding: 0.11em 0.25em 0.27em;
+.ProseMirror h2 .task-chip,
+.ProseMirror h1 .doc-chip,
+.ProseMirror h2 .doc-chip {
+  padding: 0.02em 0.25em 0.07em;
 }
 /* The check grows with the words, and is set a hair right and up: drawn
    in the middle of its box, a check's weight is its foot on the left, and
@@ -3608,7 +3614,7 @@ aside[data-moving] > [data-fluid] {
    the document's own mark before its title. */
 .doc-chip {
   display: inline;
-  padding: 0.1875em 0.25em;
+  padding: 0.125em 0.25em;
   margin: 0 2px;
   border-radius: var(--r-row);
   background: var(--track);
