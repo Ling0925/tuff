@@ -2443,6 +2443,62 @@ definers that make temporary tables (`purge_orphan_actors`,
 everywhere, and the tables they reach through `format` as `public.%I`. A
 definer function that needs a temporary table names it so.
 
+**Getting in is written by definers** (migration 306). The
+application role updates six columns of `app_user` and inserts no row:
+`notify_chat`, `email_digest`, `quiet_from`, `quiet_to` and `timezone`
+(`PATCH /api/inbox/settings`) and `language` (`PATCH /api/me`), each a
+person's own, as themselves (`u_update`). The password, the second factor
+(`totp_*`), the address and its confirmation (`email`,
+`email_verified_at`, `email_by_hand`) and every other column are written
+only by definer functions. Before 306 the application held INSERT and
+UPDATE on the whole table and `u_write` let an insert through with no
+actor, so one plain `update` set anybody's password hash. `u_write` is
+gone; the worker's role and PUBLIC hold nothing on the table; provider
+identities (`auth_identity`), tickets and recovery codes were never the
+application's to write directly. A setting added to `app_user` is
+granted by name, as its read is; anything about getting in gets a
+definer function. A zone the database does not know is refused by a
+trigger on insert and on change (`22023`), whoever writes it.
+
+**This is not yet a boundary against SQL run as the application.** It
+removes direct writes and makes the definers the one list to audit, and
+that list is the problem: each trusts the actor id it is handed, and
+`current_actor()` is `current_setting('app.actor_id')`, which the
+application role sets for itself. So SQL run as `tracker_app` can still
+call, on anybody, the sign-in definers it may execute. Those that write
+`app_user`, `auth_identity`, `auth_ticket` or `recovery_code` directly are
+held by `app-user-rights.test.ts`: `accept_invite`, `auth_change_password`,
+`auth_claim_email`, `auth_confirm_email`, `auth_confirm_if_invited`,
+`auth_email_cancel`, `auth_email_change`, `auth_email_ticket`,
+`auth_identity_forget`, `auth_identity_link`, `auth_identity_remove`,
+`auth_recovery_replace`, `auth_recovery_spend`, `auth_set_password`,
+`auth_ticket_make`, `auth_ticket_make_bound`, `auth_ticket_spend`,
+`auth_ticket_start`, `auth_totp_begin`, `auth_totp_disable`,
+`auth_totp_enable`, `auth_totp_spend`, `digest_off`,
+`instance_setup_owner`, `register_owner`. (The worker's `digest_claim`
+and `new_accounts_claim`, and the owner's `instance_name_owner`, are not
+the application's.) That list is not all of it: definers that reach those
+tables or a session indirectly trust the actor too — `delete_my_account`
+and `operator_delete_account`, both through the owner's `account_deletion`
+(the second behind `is_operator()`, which a forged actor passes), and the
+session and token definers `auth_revoke_others`, `auth_revoke_session`,
+`nowhere_session_end`, `oauth_token_bind`, `oauth_refresh_take`,
+`auth_spend_refresh`, `agent_end_tokens` and `agent_oauth_end`. The boundary is a
+follow-up: a role of its own for the credential and session definers
+(`tracker_auth`, its own pool), EXECUTE taken from `tracker_app`, and
+definers that consume a proof themselves rather than trust a caller's id.
+
+Beside it, 306 narrows what was cheapest to narrow. `api_token` is
+updated by the application only to revoke it: UPDATE is `revoked_at`
+alone (it was every column, `actor_id` and `token_hash` among them), and
+a trigger keeps a revoked token revoked. `refresh_session`'s insert
+policy `sess_write` asks `actor_id = current_actor()` (it was
+`with check (true)`), and sessions are inserted as the person signing in
+— weak while the actor setting is the application's, and no longer open
+to a session written for anybody with no actor at all. Still open, for
+the same follow-up: INSERT on `api_token`, `github_person` written under
+a forgeable `gpe_self`, and INSERT and UPDATE on `push_subscription`.
+
 **And the webhook table's policies keep to the workspace's own webhooks**
 (`agent_id is null` in `wh_read`, `wh_write` and `wh_update`, migration
 296): an agent's webhook is read and written only through the definer

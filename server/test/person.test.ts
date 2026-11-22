@@ -1,7 +1,7 @@
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { app } from '../src/http/routes.js'
-import { addPerson, bearerFor, closeDb, withActor, withoutActor, uuidv7, makeOwner, makeProject } from './helpers.js'
+import { addPerson, asTableOwner, bearerFor, closeDb, withActor, withoutActor, uuidv7, makeOwner, makeProject } from './helpers.js'
 
 after(async () => {
   await closeDb()
@@ -117,7 +117,7 @@ test('a colleague shows their email, zone and title, and the work you share', as
   const theirs = await makeProject(ctx, workspaceId, 'Theirs only')
   const sam = await addPerson(ctx, workspaceId, 'member', [shared, theirs])
   const samToken = await bearerFor(sam.actorId, workspaceId)
-  await withoutActor(async (tx) => {
+  await asTableOwner().begin(async (tx) => {
     await tx`
       insert into app_user (actor_id, email, password_hash, timezone)
       values (${sam.actorId}, ${`sam-${sam.actorId}@example.com`}, 'x', 'Europe/Lisbon')`
@@ -245,7 +245,7 @@ test('overdue is decided on the reader’s calendar', async () => {
   /* Asked by somebody on the project whose account holds that zone. */
   const lateIn = async (zone: string) => {
     const reader = await addPerson(ctx, workspaceId, 'member', [one])
-    await withoutActor(
+    await asTableOwner().begin(
       (tx) => tx`
       insert into app_user (actor_id, email, password_hash, timezone)
       values (${reader.actorId}, ${`r-${reader.actorId}@example.com`}, 'x', ${zone})`,

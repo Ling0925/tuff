@@ -4,7 +4,7 @@ import postgres from 'postgres'
 import { app } from '../src/http/routes.js'
 import { issueApiToken } from '../src/auth/flows.js'
 import { outbox } from '../src/mail.js'
-import { addPerson, bearerFor, closeDb, makeOwner, makeProject, withoutActor } from './helpers.js'
+import { addPerson, bearerFor, closeDb, makeOwner, makeProject } from './helpers.js'
 
 /* As the tables' owner, for what only a fixture reads or sets. */
 const owner = postgres(process.env.DATABASE_URL!, { max: 1, onnotice: () => {} })
@@ -36,7 +36,7 @@ test('the owner deletes the workspace with its name and their password, and ever
   const { ctx, workspaceId, token } = await makeOwner()
   const project = await makeProject(ctx, workspaceId, 'Going')
   const sam = await addPerson(ctx, workspaceId, 'member')
-  await withoutActor(
+  await owner.begin(
     (tx) => tx`
     insert into app_user (actor_id, email, password_hash, timezone)
     values (${sam.actorId}, ${`sam-${sam.actorId}@example.com`}, 'x', 'UTC')`,

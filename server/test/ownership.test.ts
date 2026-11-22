@@ -4,7 +4,7 @@ import { app } from '../src/http/routes.js'
 import { joinByProvider } from '../src/http/access.js'
 import { issueApiToken } from '../src/auth/flows.js'
 import { outbox } from '../src/mail.js'
-import { addPerson, bearerFor, closeDb, makeOwner, makeProject, stamp, withActor, withoutActor } from './helpers.js'
+import { addPerson, asTableOwner, bearerFor, closeDb, makeOwner, makeProject, stamp, withActor } from './helpers.js'
 
 after(closeDb)
 
@@ -28,7 +28,7 @@ test('the owner hands the workspace over with their password, and stays on every
   const { ctx, workspaceId, token } = await makeOwner()
   const kept = await makeProject(ctx, workspaceId, 'Not theirs')
   const sam = await addPerson(ctx, workspaceId, 'member')
-  await withoutActor(
+  await asTableOwner().begin(
     (tx) => tx`
     insert into app_user (actor_id, email, password_hash, timezone, email_verified_at)
     values (${sam.actorId}, ${`sam-${sam.actorId}@example.com`}, 'x', 'UTC', now())`,

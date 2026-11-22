@@ -27,7 +27,10 @@ export type NowhereSession = Omit<Session, 'workspace_id'> & { workspace_id: nul
 export async function startNowhereSession(actorId: string, meta: Meta): Promise<NowhereSession> {
   const refreshToken = generateToken('rft')
   const sid = uuidv7()
-  await withoutActor(
+  /* As the person: `sess_write` takes a session only for the actor of its
+     transaction (migration 306). */
+  await withActorEverywhere(
+    actorId,
     (tx) => tx`
       insert into refresh_session (id, actor_id, workspace_id, token_hash, user_agent, ip, device, expires_at, family)
       values (${sid}, ${actorId}, null, ${hashToken(refreshToken)},
@@ -74,7 +77,8 @@ export type Meta = {
 export async function startSession(actorId: string, workspaceId: string, meta: Meta, signIn: string | null): Promise<Session> {
   const refreshToken = generateToken('rft')
   const sid = uuidv7()
-  await withoutActor(async (tx) => {
+  /* As the person, as above. */
+  await withActorEverywhere(actorId, async (tx) => {
     await tx`
       insert into refresh_session (id, actor_id, workspace_id, token_hash, user_agent, ip, device, expires_at, family)
       values (${sid}, ${actorId}, ${workspaceId}, ${hashToken(refreshToken)},

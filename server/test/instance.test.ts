@@ -270,11 +270,15 @@ test('the application role cannot make itself an owner', async () => {
       f,
     )
   }
-  /* Un-confirming an old account and confirming it again — which the app
-     role may write, as the account itself — claims nothing: it never asked
-     to sign up. */
-  const undone = await withActor(old.actor_id, (tx) => tx`update app_user set email_verified_at = null where actor_id = ${old.actor_id}`)
-  assert.equal(undone.count, 1, 'the account’s own row, written as the account')
+  /* Un-confirming an old account and confirming it again claims nothing:
+     it never asked to sign up. The app role cannot un-confirm it even as
+     the account itself (migration 306), so the owner does. */
+  await assert.rejects(
+    withActor(old.actor_id, (tx) => tx`update app_user set email_verified_at = null where actor_id = ${old.actor_id}`),
+    /permission denied/,
+  )
+  const undone = await owner`update app_user set email_verified_at = null where actor_id = ${old.actor_id}`
+  assert.equal(undone.count, 1)
   await withoutActor((tx) => tx`select auth_confirm_email(${old.actor_id})`)
   assert.equal(await confirmed(old.actor_id), true)
   /* Nor does somebody who is not an owner name one, or open sign-up. */

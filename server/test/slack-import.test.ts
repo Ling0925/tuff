@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { app } from '../src/http/routes.js'
 import { closeRealtime } from '../src/realtime.js'
 import { issueApiToken } from '../src/auth/flows.js'
-import { addPerson, bearerFor, closeDb, makeOwner, makeProject, stamp, uuidv7, withActor, withoutActor } from './helpers.js'
+import { addPerson, asTableOwner, bearerFor, closeDb, makeOwner, makeProject, stamp, uuidv7, withActor } from './helpers.js'
 
 after(async () => {
   await closeRealtime()
@@ -86,7 +86,7 @@ test('a line carries a colleague’s face only for whoever may speak for them, a
   const mallory = await addPerson(ctx, workspaceId, 'member', [project])
   const sam = await addPerson(ctx, workspaceId, 'member', [project])
   const email = (id: string) => `p-${id}@example.com`
-  await withoutActor(async (tx) => {
+  await asTableOwner().begin(async (tx) => {
     for (const p of [mallory, sam]) {
       await tx`insert into app_user (actor_id, email, password_hash, timezone) values (${p.actorId}, ${email(p.actorId)}, 'x', 'UTC')`
     }
