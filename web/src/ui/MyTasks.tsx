@@ -1,11 +1,11 @@
 import type { Repeat } from '@tracker/shared-schema'
 import { repeatSaid } from '../words/repeat.js'
 import { Stats, readPerson, type PersonRead } from './Stats.jsx'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../data/api.js'
 import { Dot, EmptyState, Hairline, PageTitle, Panel, ProjectChip, Segments, useListKeys } from './kit.jsx'
 import { Icon } from './glyphs.jsx'
-import { near, seen } from './TaskDetail.jsx'
+import { near, seen, taskReady } from './TaskDetail.jsx'
 import { recall, remember } from '../data/memory.js'
 import { onHeard } from '../data/live.js'
 import { numbered } from '../data/route.js'
@@ -228,7 +228,32 @@ export function MyTasks({
   const open = (mine ?? []).filter((t) => everything || !t.completed_at)
   const tabs = TABS
   const today = todayHere()
-  const { at, setAt } = useListKeys(open, (t) => onOpen(t.project_id, t.id))
+  /*
+   * Opened when it can be drawn: the press waits for the task's read — up
+   * to 400 ms, and usually not at all, since the pointer resting on the row
+   * asked for it — with this list still on the screen. Navigated at once,
+   * the task's screen drew nothing until that read landed, and on a slow
+   * machine that was the whole window blank for four to seven frames.
+   * The last press is the one that opens, and none once the
+   * list has gone.
+   */
+  const going = useRef<string | null>(null)
+  useEffect(
+    () => () => {
+      going.current = null
+    },
+    [],
+  )
+  const openTask = (t: Mine) => {
+    if (going.current === t.id) return
+    going.current = t.id
+    void taskReady(t.id).then(() => {
+      if (going.current !== t.id) return
+      going.current = null
+      onOpen(t.project_id, t.id)
+    })
+  }
+  const { at, setAt } = useListKeys(open, openTask)
   /* Read ahead on the row the keys are on, as on the one under the pointer. */
   useEffect(() => {
     const t = at >= 0 ? open[at] : undefined
@@ -315,7 +340,7 @@ export function MyTasks({
                    it is a target inside a target. */
                   onClick={(e) => {
                     if ((e.target as Element).closest('button,a,input,select')) return
-                    onOpen(t.project_id, t.id)
+                    openTask(t)
                   }}
                   /* The row a project's list draws, to the pixel: its gap,
                    its padding and its height, so the two screens are the
@@ -330,7 +355,7 @@ export function MyTasks({
                   </span>
                   <button
                     data-open-mine
-                    onClick={() => onOpen(t.project_id, t.id)}
+                    onClick={() => openTask(t)}
                     className="flex min-w-px flex-1 flex-col text-left text-base text-ink"
                     style={{ letterSpacing: 'var(--track-body)' }}
                   >

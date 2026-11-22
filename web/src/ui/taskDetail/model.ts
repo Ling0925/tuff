@@ -221,6 +221,47 @@ export function readHistory(taskId: string): Promise<Event[]> {
 }
 
 /**
+ * Whether what is kept about a task is enough to draw its screen whole: its
+ * read, and its history when that is the panel this device keeps open.
+ */
+export const drawable = (taskId: string): boolean =>
+  wholeRead(recall<Read>(`task:${taskId}`)) && (readAside() !== 'history' || recall(`history:${taskId}`) !== null)
+
+/*
+ * When a press last stopped waiting for a task — see `taskReady`. A screen
+ * opened inside that moment has had its four hundred milliseconds already.
+ */
+const waitedAt = new Map<string, number>()
+export const waitedFor = (taskId: string): boolean => Date.now() - (waitedAt.get(taskId) ?? 0) < 1_000
+
+/**
+ * Resolved when a task can be drawn whole, or after 400 ms — whichever is
+ * first.
+ *
+ * For a press that leaves a whole screen to open the task: the screen
+ * waited for its read by drawing nothing, which from a project's list is
+ * the list's half of the window empty for a moment, and from My tasks was
+ * the whole window — four to seven blank frames on a slow machine, where
+ * the hover's read had not landed when the press did. The press
+ * waits here instead, with the list still on the screen, and the task
+ * opens drawn. A thread's "N replies" waits the same way
+ * (`chat/threadRead.ts`).
+ */
+export function taskReady(taskId: string): Promise<void> {
+  if (drawable(taskId)) return Promise.resolve()
+  const history = readAside() === 'history' && recall(`history:${taskId}`) === null ? readHistory(taskId) : null
+  const read = wholeRead(recall<Read>(`task:${taskId}`)) ? null : (readingTask(taskId) ?? readTask(taskId))
+  const settled = (p: Promise<unknown> | null) =>
+    p?.then(
+      () => undefined,
+      () => undefined,
+    )
+  return Promise.race([Promise.all([settled(read), settled(history)]), new Promise<void>((r) => setTimeout(r, 400))]).then(() => {
+    waitedAt.set(taskId, Date.now())
+  })
+}
+
+/**
  * Everything one read of a task says.
  *
  * `/tasks/:id` answers with the task, its parts, its comments and its hours

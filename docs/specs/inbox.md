@@ -9,7 +9,10 @@
   reading `read_at`, which the server set the moment it opened: the next
   answer — a note arriving, another device reading — took every tint away
   while the person was still looking. Shut and opened again, they are read
-  and plain. *Mark all as read* is asked for, so it clears them at once.
+  and plain. The panel reads the inbox before it marks it read: a note
+  the socket had announced and the page had not yet read — opened on the
+  chime, or with the bell lit by an older note — was marked read on the
+  server first and came into the open panel plain. *Mark all as read* is asked for, so it clears them at once.
 - **Every word is shown.** A task's title wraps rather than being cut at one
   line — the title is the whole of what the note says.
 - **Who, and what they did.** A row is read the way Linear's and GitHub's

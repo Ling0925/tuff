@@ -14068,6 +14068,27 @@ test('a room opened from its project is the room lit in the column, and only tha
       headers,
       body: JSON.stringify({ name: `review-${stamp}` }),
     }).then((x) => x.json())) as { id: string }
+    /*
+     * Both rooms at the head of this person's column, and shown.
+     *
+     * The column draws as many rooms as it has room for and puts the rest
+     * behind "n more", and a new room stands after the project's others —
+     * so whatever the tests before this one made in this studio decided
+     * whether it was drawn at all. In the full run it was not, and nothing
+     * was lit because the lit row was behind "n more". The room
+     * the tab settles on is the project's first, so that one first and
+     * the new one under it.
+     */
+    const { conversations } = (await fetch('/api/conversations', { headers }).then((x) => x.json())) as {
+      conversations: { id: string; project_id: string | null; hidden?: boolean }[]
+    }
+    const first = conversations.find((c) => c.project_id === site.id && c.id !== r.id)!
+    for (const c of conversations.filter((c) => c.id === first.id || c.id === r.id)) {
+      if (c.hidden) await fetch(`/api/conversations/${c.id}/hidden`, { method: 'PUT', headers, body: JSON.stringify({ hidden: false }) })
+    }
+    for (const id of [r.id, first.id]) {
+      await fetch(`/api/conversations/${id}/place`, { method: 'POST', headers, body: JSON.stringify({ after: null }) })
+    }
     return r.id
   }, stamp)
   await page.reload()

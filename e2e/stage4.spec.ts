@@ -113,12 +113,30 @@ test('a note shows who did it and stays new while the panel is open', async ({ p
       },
       { task: made.task, me: made.me, words },
     )
+  /*
+   * Heard before the panel is opened, so what is measured is the panel
+   * opening and not a note arriving into it.
+   *
+   * Heard as this note, not as the bell lit: Kit's joining lights it too,
+   * and so does anything an earlier test left unread in this studio. The
+   * full run opened the panel on that while this note was still a second
+   * from being read. Waited for as the shell's answer that holds
+   * it, and the bell drawn from that answer.
+   */
+  const heard = page.waitForResponse(
+    async (r) => r.url().endsWith('/api/inbox') && (await r.text().catch(() => '')).includes(`Hero crop ${stamp}`),
+    { timeout: 15_000 },
+  )
   expect(await say('the crop is too tight on the left')).toBeLessThan(300)
-
-  /* Heard before the panel is opened, so what is measured is the panel
-     opening and not a note arriving into it. */
-  await expect(page.getByTestId('nav-notifications').getByTestId('inbox-count')).toBeVisible({ timeout: 15_000 })
-  const first = page.locator('[data-note]').filter({ hasText: 'the crop is too tight' })
+  const { unread } = (await (await heard).json()) as { unread: Record<string, string> }
+  const waiting = Object.values(unread).reduce((n, v) => n + Number(v), 0)
+  await expect(page.getByTestId('nav-notifications').getByTestId('inbox-count')).toHaveText(String(waiting))
+  /* This attempt's task by name: a retry runs in the same studio, and its
+     first attempt's note says the same words. */
+  const first = page
+    .locator('[data-note]')
+    .filter({ hasText: `Hero crop ${stamp}` })
+    .filter({ hasText: 'the crop is too tight' })
   /* Drawn whole: the list arrives with the panel, not after it. */
   const heights = await drawnWhole(page, '[data-notes-panel] [data-fluid]', () => page.getByTestId('nav-notifications').click())
   expect(heights).toHaveLength(1)
@@ -133,7 +151,12 @@ test('a note shows who did it and stays new while the panel is open', async ({ p
   /* A second note arrives while it is open, and the inbox is read again
      behind it: the first is read on the server by now, and still new here. */
   expect(await say('and the logo wants more room')).toBeLessThan(300)
-  await expect(page.locator('[data-note]').filter({ hasText: 'the logo wants more room' })).toBeVisible({ timeout: 15_000 })
+  await expect(
+    page
+      .locator('[data-note]')
+      .filter({ hasText: `Hero crop ${stamp}` })
+      .filter({ hasText: 'the logo wants more room' }),
+  ).toBeVisible({ timeout: 15_000 })
   await expect(first).toHaveAttribute('data-unread', 'true')
 
   // Shut and opened again, it is read and plain.

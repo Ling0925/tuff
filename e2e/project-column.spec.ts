@@ -122,29 +122,30 @@ test('with the sidebar shut too, the tools are glyphs under the project and the 
   const handle = page.locator('[data-resizer]').first()
   const h = (await handle.boundingBox())!
 
-  /* The sidebar's own shut travels now: it used to jump from the threshold
-     to 56 in one frame, because a drag is a held hand and a held hand had
-     the travel off. Every width it had, one per frame. */
+  /*
+   * The sidebar's own shut travels now: it used to jump from the threshold
+   * to 56 in one frame, because a drag is a held hand and a held hand had
+   * the travel off.
+   *
+   * Asked of the browser as a travel of the width towards 56, not counted
+   * in frames: two frames inside two hundred milliseconds is what a laptop
+   * draws, and a machine running the whole suite drew one or none — a
+   * starved browser, not a jump. A width with the travel off
+   * starts no transition at all.
+   */
   await page.evaluate(() => {
-    const w = window as unknown as { widths: number[] }
-    w.widths = []
-    const start = performance.now()
-    const look = (t: number) => {
-      const x = Math.round(document.querySelector('aside')!.getBoundingClientRect().width)
-      if (w.widths[w.widths.length - 1] !== x) w.widths.push(x)
-      if (t - start < 1500) requestAnimationFrame(look)
-    }
-    requestAnimationFrame(look)
+    const w = window as unknown as { travelled: string[] }
+    w.travelled = []
+    document.querySelector('aside')!.addEventListener('transitionrun', (e) => {
+      if (e.target === e.currentTarget && e.propertyName === 'width') w.travelled.push((e.currentTarget as HTMLElement).style.width)
+    })
   })
   await page.mouse.move(h.x + h.width / 2, h.y + 200)
   await page.mouse.down()
   await page.mouse.move(h.x - 240, h.y + 200, { steps: 8 })
   await page.mouse.up()
-  await page.waitForTimeout(1600)
-  const widths = await page.evaluate(() => (window as unknown as { widths: number[] }).widths)
   await expect(column).toHaveAttribute('data-shut', '')
-  const under = widths.filter((x) => x > 56 && x < 150)
-  expect(under.length).toBeGreaterThan(1)
+  await expect.poll(() => page.evaluate(() => (window as unknown as { travelled: string[] }).travelled)).toContain('56px')
 
   // Glyphs under the project's tile, smaller than the places above them.
   const tile = page.locator('aside [data-fold-tools] [data-side-tool]').first()

@@ -176,8 +176,28 @@ export function useAppState() {
   useEffect(() => {
     if (notesOpen) {
       setUnread({ mentioned: '0', assigned: '0', subscribed: '0' })
-      void api('/inbox/read', { method: 'POST', body: '{}' }).catch(() => null)
-      return
+      /*
+       * Read, then marked read — in that order.
+       *
+       * The read-all marks everything on the server, including a note this
+       * window has not been given yet: the socket says a note was made, and
+       * the inbox is read a second or three later (`useAppEvents`, `soon`).
+       * Opened in between — on the chime, or with the bell already lit by an
+       * older note — the new one came into the open panel already read, and
+       * so plain: the one thing that had just arrived was the one thing not
+       * shown as new. Asked first, it arrives unread and `newHere` keeps it.
+       */
+      let open = true
+      void api<{ notifications: Note[] }>('/inbox')
+        .then((r) => {
+          if (open) setNotes(r.notifications)
+        })
+        .catch(() => null)
+        .then(() => api('/inbox/read', { method: 'POST', body: '{}' }))
+        .catch(() => null)
+      return () => {
+        open = false
+      }
     }
     setNotes((had) => had && had.map((n) => (n.read_at ? n : { ...n, read_at: new Date().toISOString() })))
   }, [notesOpen])

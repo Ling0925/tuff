@@ -65,6 +65,7 @@ import {
   wholeRead,
   readHistory,
   readingTask,
+  waitedFor,
 } from './taskDetail/model.js'
 import { readAside, keepAside, QUICK, branchName, Triage } from './taskDetail/triage.jsx'
 import { Round, RoundFace, Fact, Aside } from './taskDetail/aside.jsx'
@@ -72,7 +73,7 @@ import { HistoryPanel } from './taskDetail/history.jsx'
 import { Time } from './taskDetail/time.jsx'
 import { NewSubtask } from './taskDetail/newSubtask.jsx'
 import { Blockers } from './taskDetail/blockers.jsx'
-export { seen, near } from './taskDetail/model.js'
+export { seen, near, taskReady } from './taskDetail/model.js'
 export { RoundFace, Round, Fact } from './taskDetail/aside.jsx'
 
 /** The list behind the task's screen, as the screen writes through it. */
@@ -591,7 +592,9 @@ export function TaskDetail({
    */
   const landed = useRef<{ id: string; done: () => void } | null>(null)
   const historyOpen = aside === 'history'
-  const wholeNow = (id: string) => wholeRead(recall<Read>(`task:${id}`)) && (!historyOpen || recall(`history:${id}`) !== null)
+  /* Or the press that opened it has already waited — `taskReady`. */
+  const wholeNow = (id: string) =>
+    (wholeRead(recall<Read>(`task:${id}`)) && (!historyOpen || recall(`history:${id}`) !== null)) || waitedFor(id)
   const [whole, setWhole] = useState(() => wholeNow(taskId))
   // biome-ignore lint/correctness/useExhaustiveDependencies: a different task is a different wait; the panel is read as it is when the task opens
   useLayoutEffect(() => {
