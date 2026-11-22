@@ -29,7 +29,7 @@ webhooks.get('/webhooks', async (c) => {
     (tx) =>
       // The secret is not in this list and could not be: the column grant was
       // revoked, so the database refuses it.
-      tx`select id, url, events, enabled, authorization_set, last_status, last_at, created_at
+      tx`select id, url, events, enabled, authorization_set, last_status, last_at, created_at, stopped_at
        from webhook where deleted_at is null and agent_id is null order by created_at desc`,
   )
   return c.json({ webhooks: rows })
@@ -120,20 +120,29 @@ webhooks.patch('/webhooks/:id', async (c) => {
   const body = z.object({ enabled: z.boolean().optional(), events: Events.optional() }).safeParse(raw)
   if (!body.success) return c.json({ error: { code: 'invalid', message: 'Choose events from the list.' } }, 400)
   const { enabled, events } = body.data
+  /* Made whether or not it is needed: kept only when this turns on a
+     webhook that was turned off because its maker's account changed hands
+     (`stopped_at`, migration 317) — its secret was in the previous holder's
+     hands, so on again it signs with a new one, said once. */
+  const fresh = generateToken('whs')
   const done = await withActor(ctx.actorId, ctx.workspaceId, async (tx) => {
-    const [was] = await tx<{ authorization_set: boolean }[]>`
-      select authorization_set from webhook where id = ${id} and deleted_at is null and agent_id is null for update`
-    if (!was) return false
+    const [was] = await tx<{ authorization_set: boolean; stopped: boolean }[]>`
+      select authorization_set, stopped_at is not null as stopped
+      from webhook where id = ${id} and deleted_at is null and agent_id is null for update`
+    if (!was) return null
+    const rekey = was.stopped && enabled === true
     const rows = await tx<{ id: string; url: string; enabled: boolean; events: string[] }[]>`
       update webhook set
         enabled = ${enabled === undefined ? tx`enabled` : enabled},
         events = ${events === undefined ? tx`events` : tx`${[...new Set(events)]}::text[]`}
         ${keyed === undefined ? tx`` : tx`, authorization_enc = ${keyed === null ? null : seal('webhook', keyed)}`}
+        ${rekey ? tx`, secret_enc = ${fresh}, stopped_at = null` : tx``}
       where id = ${id} and deleted_at is null and agent_id is null returning id, url, enabled, events`
     if (rows[0]) await said(tx, ctx, rows[0], keyChange(was.authorization_set, keyed))
-    return rows.length > 0
+    return rows.length > 0 ? { rekey } : null
   })
-  return done ? c.json({ ok: true }) : c.json(missing, 404)
+  if (!done) return c.json(missing, 404)
+  return c.json(done.rekey ? { ok: true, secret: fresh } : { ok: true })
 })
 
 /* In the audit log, by its host alone, as making and deleting one are:

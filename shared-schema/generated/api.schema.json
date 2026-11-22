@@ -8335,6 +8335,12 @@
         },
         "created_at": {
           "type": "string"
+        },
+        "stopped_at": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -8376,6 +8382,22 @@
       "required": [
         "id",
         "secret"
+      ]
+    },
+    "WebhookChanged": {
+      "title": "WebhookChanged",
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean",
+          "const": true
+        },
+        "secret": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ok"
       ]
     },
     "GithubHello": {
@@ -9135,6 +9157,9 @@
         },
         "webhook_url": {
           "type": "string"
+        },
+        "webhook_stopped": {
+          "type": "boolean"
         },
         "connections": {
           "type": "array",

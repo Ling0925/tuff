@@ -9,6 +9,15 @@ export const ADMIN = say({
   lastResponse: [(status: number) => `Last response ${status}`, (status: number) => `Dernière réponse ${status}`],
   noDeliveries: ['No deliveries yet', 'Aucun envoi pour l’instant'],
   off: ['Off', 'Désactivé'],
+  /* Turned off when the account that made it changed hands. */
+  offFromBefore: ['Off · Made before its account changed hands', 'Désactivé · Créé avant que son compte change de main'],
+  reviveAsk: ['Turn on this webhook?', 'Activer ce webhook ?'],
+  reviveSays: [
+    (host: string) =>
+      `It was made before the account that made it changed hands. Once it’s on, changes in this workspace are sent to ${host}. It gets a new secret, shown once.`,
+    (host: string) =>
+      `Il a été créé avant que le compte qui l’a créé change de main. Une fois activé, les modifications de cet espace de travail sont envoyées à ${host}. Il reçoit un nouveau secret, affiché une seule fois.`,
+  ],
   turnOff: ['Turn off', 'Désactiver'],
   /* Off and on again, its events, a test and deleting it. */
   turnOn: ['Turn on', 'Activer'],

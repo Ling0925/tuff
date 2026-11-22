@@ -189,6 +189,7 @@ const RESPONSES: Record<string, z.ZodType> = {
   WebhookRow: S.WebhookRow,
   Webhooks: S.Webhooks,
   WebhookMade: S.WebhookMade,
+  WebhookChanged: S.WebhookChanged,
   GithubHello: S.GithubHello,
   GithubRepo: S.GithubRepo,
   GithubRepos: S.GithubRepos,

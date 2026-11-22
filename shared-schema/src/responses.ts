@@ -1578,9 +1578,15 @@ export const WebhookRow = z.object({
   last_status: z.number().int().nullable().optional(),
   last_at: z.string().nullable().optional(),
   created_at: z.string(),
+  /** Turned off because the account that made it changed hands — its maker
+      was the account's previous holder. Turning it on gives it a new secret. */
+  stopped_at: z.string().nullable().optional(),
 })
 export const Webhooks = z.object({ webhooks: z.array(WebhookRow) })
 export const WebhookMade = z.object({ id: Uuid, secret: z.string() })
+/** A webhook changed — `PATCH /api/webhooks/:id`; `secret`, said once, when
+    turning on one its maker's previous holder made gave it a new one. */
+export const WebhookChanged = z.object({ ok: z.literal(true), secret: z.string().optional() })
 
 /**
  * GitHub, as the server holds it for this workspace — `GET /api/github`,
@@ -1703,6 +1709,10 @@ export const AgentRow = z.object({
   /** To whoever manages it: where its webhook is sent, so its page can
       change it, migration 268. */
   webhook_url: z.string().optional(),
+  /** To whoever manages it: its webhook was turned off when whoever
+      connected it was put out of the account. Its address is not said, and
+      nothing is sent until its reach is set again, with a new secret. */
+  webhook_stopped: z.boolean().optional(),
   /** To whoever manages it: the connections Tuff's remote MCP connector
       signed in as it, still alive — which client, when, by whom. */
   connections: z

@@ -122,6 +122,11 @@ export const AGENTS = say({
   newToken: ['New token', 'Nouveau jeton'],
   /** Its tokens ended and its webhook off: a new token starts it again. */
   stopped: ['Stopped', 'Arrêté'],
+  /** Its webhook, turned off when its account changed hands. */
+  reachStopped: [
+    'Nothing is sent to this agent. Its address was set before your account changed hands. Enter the address again to start sending, with a new secret.',
+    'Rien n’est envoyé à cet agent. Son adresse a été définie avant que votre compte change de main. Saisissez de nouveau l’adresse pour reprendre les envois, avec un nouveau secret.',
+  ],
   newTokenAsk: [(name: string) => `Make a new token for ${name}?`, (name: string) => `Créer un nouveau jeton pour ${name} ?`],
   newTokenFor: [(name: string) => `New token for ${name}`, (name: string) => `Nouveau jeton pour ${name}`],
   newTokenSays: [

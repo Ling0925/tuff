@@ -5,8 +5,8 @@ import { decodeJwt } from 'jose'
 import postgres from 'postgres'
 import { app } from '../src/http/routes.js'
 import { outbox } from '../src/mail.js'
-import { asAuthActor } from '../src/db.js'
-import { checkedNow, startSession } from '../src/auth/flows.js'
+import { asAuthActor, bounded, withActor as inWorkspaceOf } from '../src/db.js'
+import { checkedNow, issueApiToken, startSession } from '../src/auth/flows.js'
 import { hashToken } from '../src/auth/crypto.js'
 import { asAuth, asTableOwner, closeDb, makeOwner, makeProject, stamp as fresh, uuidv7, withActor } from './helpers.js'
 
@@ -226,7 +226,7 @@ type World = {
   h: Awaited<ReturnType<typeof holderIn>>
   room: string
   mine: { webhook: string; hook: string; agent: string; agentHook: string; token: string }
-  theirs: { webhook: string; hook: string; agent: string; token: string }
+  theirs: { webhook: string; hook: string; agent: string; agentHook: string; token: string }
 }
 
 /** The holder's webhook, room hook and agent (with a token and a webhook of its own), and the same of the owner's. */
@@ -332,7 +332,7 @@ test('instance_name_owner: what the holder made is turned off or stopped, and no
     .catch((e: Error) => assert.equal(e.message, 'rolled back'))
 })
 
-test('each is started again by its own press: a webhook turned on, a hook given a new URL, an agent a new token', async () => {
+test('each is started again by its own press, and nothing sends to the previous holder until somebody says where', async () => {
   const w = await world('again')
   await asAuth((tx) => tx`select auth_claim_email(${w.h.actor_id})`)
 
@@ -346,30 +346,69 @@ test('each is started again by its own press: a webhook turned on, a hook given 
     (await owner()<{ n: number }[]>`select count(*)::int as n from room_hook_take(${id}, ${sha(secret)})`)[0]!.n
   assert.equal(await takes(w.mine.hook, `s-${w.mine.hook}`), 0)
 
-  // An admin turns the webhook on.
-  assert.equal((await call('PATCH', `/api/webhooks/${w.mine.webhook}`, { enabled: true }, w.boss.token)).status, 200)
+  // The webhooks list says which was turned off for this, and turning it on gives it a new secret, said once.
+  const hooks = (await (await call('GET', '/api/webhooks', undefined, w.boss.token)).json()) as {
+    webhooks: { id: string; stopped_at: string | null }[]
+  }
+  assert.ok(hooks.webhooks.find((x) => x.id === w.mine.webhook)?.stopped_at)
+  assert.equal(hooks.webhooks.find((x) => x.id === w.theirs.webhook)?.stopped_at, null)
+  const on = await call('PATCH', `/api/webhooks/${w.mine.webhook}`, { enabled: true }, w.boss.token)
+  assert.equal(on.status, 200)
+  const said = (await on.json()) as { ok: boolean; secret?: string }
+  assert.match(said.secret ?? '', /^whs_/)
+  const [wh] = await owner()<{ secret: string; stopped: boolean }[]>`
+    select secret_enc as secret, stopped_at is not null as stopped from webhook where id = ${w.mine.webhook}`
+  assert.deepEqual({ ...wh }, { secret: said.secret, stopped: false })
+  // Off and on again after that is the same webhook: no new secret.
+  await call('PATCH', `/api/webhooks/${w.mine.webhook}`, { enabled: false }, w.boss.token)
+  const again = await call('PATCH', `/api/webhooks/${w.mine.webhook}`, { enabled: true }, w.boss.token)
+  assert.equal(((await again.json()) as { secret?: string }).secret, undefined)
+
   // The owner gives the hook a new URL: started, theirs, the old secret still refused.
   const turned = await call('POST', `/api/hooks/${w.mine.hook}/turn`, undefined, w.boss.token)
   assert.equal(turned.status, 200)
   const url = ((await turned.json()) as { url: string }).url
   assert.equal(await takes(w.mine.hook, url.split('/').at(-1)!), 1)
   assert.equal(await takes(w.mine.hook, `s-${w.mine.hook}`), 0)
-  const [hk] = await owner()<{ by: string }[]>`select created_by as by from room_hook where id = ${w.mine.hook}`
-  assert.equal(hk!.by, w.boss.ctx.actorId)
-  // Its connector — the account, now its new holder's — gives the agent a new token.
+
+  // The agent's webhook lost its secret and key at the put-out, and a new token sends nothing.
+  const agentHook = async () =>
+    (
+      await owner()<{ on: boolean; secret: string; stopped: boolean }[]>`
+        select enabled as on, secret_enc as secret, stopped_at is not null as stopped from webhook where id = ${w.mine.agentHook}`
+    )[0]!
+  assert.deepEqual({ ...(await agentHook()) }, { on: false, secret: '', stopped: true })
   const [ended] = await asAuthActor(
     w.h.actor_id,
     w.boss.workspaceId,
     (tx) => tx<{ ok: boolean }[]>`select agent_end_tokens(${w.mine.agent}) as ok`,
   )
   assert.equal(ended!.ok, true)
-
   const s = await state(owner(), w)
-  assert.deepEqual(s.mine, { webhook: true, hook: true, agent: true, token: false, agent_hook: true })
+  assert.deepEqual(s.mine, { webhook: true, hook: true, agent: true, token: false, agent_hook: false })
   assert.deepEqual(s.theirs, ON)
+  // Only its reach set again — the address given, a new secret — sends to it.
+  const [reached] = await inWorkspaceOf(
+    w.h.actor_id,
+    w.boss.workspaceId,
+    (tx) =>
+      tx<
+        { new_secret: boolean }[]
+      >`select * from agent_reach(${w.mine.agent}, 'webhook', 'https://hooks.example.com/a', 'tuff', 'whs_given_again')`,
+  )
+  assert.equal(reached!.new_secret, true)
+  assert.deepEqual({ ...(await agentHook()) }, { on: true, secret: 'whs_given_again', stopped: false })
 })
 
-test('an agent list says which agent is stopped', async () => {
+test('a new token never turns on an agent’s webhook that was off for another reason', async () => {
+  const w = await world('offbefore')
+  await owner()`update webhook set enabled = false where id = ${w.theirs.agentHook}`
+  await asAuthActor(w.boss.ctx.actorId, w.boss.workspaceId, (tx) => tx`select agent_end_tokens(${w.theirs.agent})`)
+  const [r] = await owner()<{ on: boolean }[]>`select enabled as on from webhook where id = ${w.theirs.agentHook}`
+  assert.equal(r!.on, false)
+})
+
+test('the agent list says which agent is stopped, and to its manager that its webhook is, without the address', async () => {
   const w = await world('listed')
   await asAuth((tx) => tx`select auth_claim_email(${w.h.actor_id})`)
   const r = await call('GET', '/api/agents', undefined, w.boss.token)
@@ -377,43 +416,252 @@ test('an agent list says which agent is stopped', async () => {
   const { agents } = (await r.json()) as { agents: { actor_id: string; stopped?: boolean }[] }
   assert.equal(agents.find((a) => a.actor_id === w.mine.agent)?.stopped, true)
   assert.equal(agents.find((a) => a.actor_id === w.theirs.agent)?.stopped, false)
+  // Its manager — the account, joined again by its new holder — reads it.
+  await owner()`update membership set joined_at = now(), unconfirmed_at = null
+                where actor_id = ${w.h.actor_id} and workspace_id = ${w.boss.workspaceId}`
+  const mine = await startSession(w.h.actor_id, w.boss.workspaceId, {}, null)
+  const seen = (await (await call('GET', '/api/agents', undefined, mine.access_token)).json()) as {
+    agents: { actor_id: string; webhook_stopped?: boolean; webhook_url?: string }[]
+  }
+  const a = seen.agents.find((x) => x.actor_id === w.mine.agent)
+  assert.equal(a?.webhook_stopped, true)
+  assert.equal(a?.webhook_url, undefined)
 })
 
-test('a webhook, a hook or an agent the holder made in flight is written off or stopped', async () => {
-  const boss = await makeOwner()
-  const h = await holderIn(boss, 'madeinflight')
-  const signIn = await held.reserve()
-  const putOut = await held.reserve()
-  const ids = { webhook: uuidv7(), agent: uuidv7() }
-  await owner()`insert into actor (id, name) values (${ids.agent}, 'Late agent')`
-  let opened = 0
-  try {
-    await signIn`begin`
-    await signIn`select now()`
-    opened |= 1
-    await putOut`begin`
-    opened |= 2
-    await putOut`select auth_claim_email(${h.actor_id})`
-    const writing = (async () => {
-      await signIn`insert into webhook (id, workspace_id, url, events, secret_enc, created_by)
-                   values (${ids.webhook}, ${boss.workspaceId}, 'https://hooks.example.com/late', '{}', 'whs_x', ${h.actor_id})`
-      await signIn`insert into agent (actor_id, workspace_id, created_by, reach) values (${ids.agent}, ${boss.workspaceId}, ${h.actor_id}, 'mcp')`
-      await signIn`insert into membership (id, workspace_id, actor_id, role, joined_at)
-                   values (${uuidv7()}, ${boss.workspaceId}, ${ids.agent}, 'member', now())`
-    })()
-    await putOut`commit`
-    opened &= ~2
-    await writing
-    await signIn`commit`
-    opened &= ~1
-  } finally {
-    if (opened & 2) await putOut`rollback`
-    if (opened & 1) await signIn`rollback`
-    putOut.release()
-    signIn.release()
+test('a repository link the holder made stops, and a document they shared to the web in a workspace now waiting is unshared', async () => {
+  const w = await world('linked')
+  const p = await makeProject(w.boss.ctx, w.boss.workspaceId, 'Linked')
+  const install = uuidv7()
+  const link = uuidv7()
+  await owner()`insert into github_install (id, workspace_id, installation_id, account_login, account_type, installed_by)
+                values (${install}, ${w.boss.workspaceId}, ${Math.floor(Math.random() * 1e12)}, 'acme', 'Organization', ${w.boss.ctx.actorId})`
+  await owner()`insert into github_link (id, workspace_id, project_id, install_id, repo_id, repo_name, private, linked_by)
+                values (${link}, ${w.boss.workspaceId}, ${p}, ${install}, ${Math.floor(Math.random() * 1e12)}, 'acme/web', true, ${w.h.actor_id})`
+  const docs = { mine: uuidv7(), theirs: uuidv7() }
+  for (const [id, by] of [
+    [docs.mine, w.h.actor_id],
+    [docs.theirs, w.boss.ctx.actorId],
+  ] as const) {
+    await owner()`insert into file (id, workspace_id, project_id, author_id, name, body, public_token)
+                  values (${id}, ${w.boss.workspaceId}, ${p}, ${by}, 'Shared', '{"type":"doc","content":[]}'::jsonb, ${`pub-${id}`})`
   }
-  const [r] = await owner()<{ webhook: boolean; agent: boolean }[]>`
-    select (select enabled from webhook where id = ${ids.webhook}) as webhook,
-           (select stopped_at is not null from agent where actor_id = ${ids.agent}) as agent`
-  assert.deepEqual({ ...r }, { webhook: false, agent: true })
+  await asAuth((tx) => tx`select auth_claim_email(${w.h.actor_id})`)
+  const [l] = await owner()<{ why: string | null }[]>`select stopped_why as why from github_link where id = ${link}`
+  assert.equal(l!.why, 'linker_unproved')
+  const shared = await owner()<{ id: string; shared: boolean }[]>`
+    select id, public_token is not null as shared from file where id in (${docs.mine}, ${docs.theirs})`
+  assert.deepEqual(Object.fromEntries(shared.map((f) => [f.id, f.shared])), { [docs.mine]: false, [docs.theirs]: true })
+})
+
+/* ------------------------------------- 3. a request let in before the put-out */
+
+/** A body that arrives only when `go` is called: the request is let in first, then waits. */
+function slowBody(json: unknown) {
+  const bytes = new TextEncoder().encode(JSON.stringify(json))
+  let go!: () => void
+  const gate = new Promise<void>((r) => (go = r))
+  const stream = new ReadableStream({
+    async pull(ctrl) {
+      await gate
+      ctrl.enqueue(bytes)
+      ctrl.close()
+    },
+  })
+  return { stream, go, length: String(bytes.length) }
+}
+
+/** A by-hand account owning a workspace of its own: signs in anywhere, makes webhooks. */
+async function byHandOwner() {
+  const o = await makeOwner()
+  await owner()`update app_user set email_by_hand = true where actor_id = ${o.ctx.actorId}`
+  return o
+}
+
+/** Sent with its body held back; the account put out while it waits; then the body. */
+async function heldBack(token: string, method: string, path: string, json: unknown, actor: string) {
+  const { stream, go, length } = slowBody(json)
+  const req = app.request(path, {
+    method,
+    headers: { 'content-type': 'application/json', 'content-length': length, authorization: `Bearer ${token}` },
+    body: stream,
+    duplex: 'half',
+  } as RequestInit)
+  // Let in: the request is past who is asking before its body is read.
+  await new Promise((r) => setTimeout(r, 200))
+  await asAuth((tx) => tx`select auth_claim_email(${actor})`)
+  go()
+  return req
+}
+
+test('a webhook made by a request let in before the put-out and written after it is not made', async () => {
+  const m = await byHandOwner()
+  const r = await heldBack(m.token, 'POST', '/api/webhooks', { url: 'https://93.184.216.34/collect', events: [] }, m.ctx.actorId)
+  assert.equal(r.status, 401)
+  const rows = await owner()`select id from webhook where workspace_id = ${m.workspaceId} and deleted_at is null`
+  assert.equal(rows.length, 0)
+})
+
+test('a room hook made by a request let in before the put-out is not made, and no secret is answered', async () => {
+  const m = await byHandOwner()
+  const p = await makeProject(m.ctx, m.workspaceId, 'Acme')
+  const room = uuidv7()
+  await withActor(
+    m.ctx.actorId,
+    (tx) =>
+      tx`insert into conversation (id, workspace_id, project_id, name, channel) values (${room}, ${m.workspaceId}, ${p}, 'deploys', true)`,
+  )
+  const r = await heldBack(m.token, 'POST', `/api/conversations/${room}/hooks`, { name: 'Deploys' }, m.ctx.actorId)
+  assert.equal(r.status, 401)
+  const rows = await owner()`select id from room_hook where conversation_id = ${room}`
+  assert.equal(rows.length, 0)
+})
+
+test('a webhook turned on by a request let in before the put-out stays off', async () => {
+  const m = await byHandOwner()
+  const id = uuidv7()
+  await owner()`insert into webhook (id, workspace_id, url, events, secret_enc, created_by, enabled)
+                values (${id}, ${m.workspaceId}, 'https://hooks.example.com/w', '{}', 'whs_x', ${m.ctx.actorId}, false)`
+  const r = await heldBack(m.token, 'PATCH', `/api/webhooks/${id}`, { enabled: true }, m.ctx.actorId)
+  assert.equal(r.status, 401)
+  const [w] = await owner()<{ on: boolean }[]>`select enabled as on from webhook where id = ${id}`
+  assert.equal(w!.on, false)
+})
+
+test('any transaction of a request let in before the put-out is refused — a new token for an agent, a session — and one after goes on', async () => {
+  const boss = await makeOwner()
+  const m = await byHandOwner()
+  const sid = decodeJwt(m.token).sid as string
+  await owner()`insert into membership (id, workspace_id, actor_id, role, joined_at)
+                values (${uuidv7()}, ${boss.workspaceId}, ${m.ctx.actorId}, 'member', now())`
+  const agent = uuidv7()
+  await owner()`insert into actor (id, name) values (${agent}, 'Mallory bot')`
+  await owner()`insert into agent (actor_id, workspace_id, created_by, reach) values (${agent}, ${boss.workspaceId}, ${m.ctx.actorId}, 'mcp')`
+  await owner()`insert into membership (id, workspace_id, actor_id, role, joined_at) values (${uuidv7()}, ${boss.workspaceId}, ${agent}, 'member', now())`
+  await asAuth((tx) => tx`select auth_claim_email(${m.ctx.actorId})`)
+  // What POST /api/agents/:id/token runs after a check made before the put-out.
+  const asTheRequest = <T>(fn: () => Promise<T>) => bounded({ actorId: m.ctx.actorId, tokenProjectIds: [], sessionId: sid }, fn)
+  await assert.rejects(
+    asTheRequest(() => asAuthActor(m.ctx.actorId, boss.workspaceId, (tx) => tx`select agent_end_tokens(${agent})`)),
+    (e: { code?: string }) => e.code === '28000',
+  )
+  await assert.rejects(
+    asTheRequest(() => startSession(m.ctx.actorId, m.workspaceId, {}, null)),
+    (e: { code?: string }) => e.code === '28000',
+  )
+  const [a] = await owner()<{ stopped: boolean }[]>`select stopped_at is not null as stopped from agent where actor_id = ${agent}`
+  assert.equal(a!.stopped, true)
+  // A session begun after the put-out goes on.
+  const after = await startSession(m.ctx.actorId, m.workspaceId, {}, null)
+  const later = await bounded({ actorId: m.ctx.actorId, tokenProjectIds: [], sessionId: decodeJwt(after.access_token).sid as string }, () =>
+    asAuthActor(m.ctx.actorId, boss.workspaceId, (tx) => tx<{ ok: boolean }[]>`select agent_end_tokens(${agent}) as ok`),
+  )
+  assert.equal(later[0]!.ok, true)
+})
+
+test('a request’s write that holds the account first is seen and stopped by the put-out, which waits for it', async () => {
+  const m = await byHandOwner()
+  const sid = decodeJwt(m.token).sid as string
+  const id = uuidv7()
+  let release!: () => void
+  const gate = new Promise<void>((r) => (release = r))
+  let written!: () => void
+  const inserted = new Promise<void>((r) => (written = r))
+  const writing = bounded({ actorId: m.ctx.actorId, tokenProjectIds: [], sessionId: sid }, () =>
+    inWorkspaceOf(m.ctx.actorId, m.workspaceId, async (tx) => {
+      await tx`insert into webhook (id, workspace_id, url, events, secret_enc, created_by)
+               values (${id}, ${m.workspaceId}, 'https://hooks.example.com/first', '{}', 'whs_x', ${m.ctx.actorId})`
+      written()
+      await gate
+    }),
+  )
+  await inserted
+  const marker = `put-out-first-${fresh()}`
+  const out = claim(m.ctx.actorId, marker)
+  assert.ok(await waitingOrDone(marker, out), 'the put-out waits for the request holding the account')
+  release()
+  await writing
+  await out
+  const [w] = await owner()<{ on: boolean; stopped: boolean }[]>`
+    select enabled as on, stopped_at is not null as stopped from webhook where id = ${id}`
+  assert.deepEqual({ ...w }, { on: false, stopped: true })
+})
+
+/* --------------------------------------------- 4. tickets, codes, OAuth */
+
+test('a ticket or an OAuth code written in a transaction begun before the put-out is spent; a token dated before it revoked', async () => {
+  const boss = await makeOwner()
+  const h = await holderIn(boss, 'tickets')
+  const before = await checkedNow()
+  const writer = await held.reserve()
+  const ticket = `tk-${uuidv7()}`
+  const code = `cd-${uuidv7()}`
+  const client = uuidv7()
+  await owner()`insert into oauth_client (id, name, redirect_uris) values (${client}, 'Probe', ${['https://x.example/cb']})`
+  try {
+    await writer`begin`
+    await writer`select now()`
+    await claim(h.actor_id, 'put-out-tickets')
+    await writer`insert into auth_ticket (token_hash, kind, actor_id, expires_at)
+                 values (${ticket}, 'handoff', ${h.actor_id}, now() + interval '2 minutes')`
+    await writer`insert into oauth_code (code_hash, workspace_id, client_id, actor_id, redirect_uri, challenge, expires_at)
+                 values (${code}, ${h.workspace_id}, ${client}, ${h.actor_id}, 'https://x.example/cb', 'ch', now() + interval '10 minutes')`
+    await writer`commit`
+  } finally {
+    writer.release()
+  }
+  const [t] = await owner()<{ used: boolean }[]>`select used_at is not null as used from auth_ticket where token_hash = ${ticket}`
+  assert.equal(t!.used, true)
+  const [c] = await owner()<{ used: boolean }[]>`select used_at is not null as used from oauth_code where code_hash = ${code}`
+  assert.equal(c!.used, true)
+  // What an OAuth exchange mints, dated from when it took its code: revoked.
+  await issueApiToken(h.actor_id, h.workspace_id, 'oauth', [], 30, before)
+  const [tok] = await owner()<{ live: boolean }[]>`
+    select revoked_at is null as live from api_token where actor_id = ${h.actor_id} and name = 'oauth'`
+  assert.equal(tok!.live, false)
+})
+
+test('the new owner’s reset ticket, written right after the put-out in the same transaction, is good', async () => {
+  const w = await world('instanceticket')
+  await owner()
+    .begin(async (tx) => {
+      await tx`update instance_setting set community = true, claimed_at = null, owner_email = ${w.h.email}`
+      const hash = `rs-${uuidv7()}-${'r'.repeat(20)}`
+      await tx`select instance_name_owner(${w.h.email}::citext, ${hash})`
+      const [t] = await tx<{ used: boolean }[]>`select used_at is not null as used from auth_ticket where token_hash = ${hash}`
+      assert.equal(t!.used, false)
+      throw new Error('rolled back')
+    })
+    .catch((e: Error) => assert.equal(e.message, 'rolled back'))
+})
+
+/* ------------------------------------------------- 5. an account deleted */
+
+test('an account deleted while a refresh holds its row waits for the refresh instead of deadlocking', async () => {
+  const m = await makeOwner()
+  const r = await held.reserve()
+  const d = await held.reserve()
+  let open = 0
+  try {
+    await r`begin`
+    open |= 1
+    await r`select 1 from app_user where actor_id = ${m.ctx.actorId} for key share`
+    await d`begin`
+    open |= 2
+    const marker = `deletion-${fresh()}`
+    const deleting = d.unsafe(`select account_deletion($1, false) as answer /* ${marker} */`, [m.ctx.actorId]).execute()
+    assert.ok(await waitingOrDone(marker, deleting), 'the deletion waits for the row')
+    // The refresh goes on to its session, which the deletion has not touched.
+    await r`update refresh_session set revoked_at = now() where actor_id = ${m.ctx.actorId} and revoked_at is null`
+    await r`commit`
+    open &= ~1
+    const [answer] = (await deleting) as unknown as { answer: { ok: boolean } }[]
+    assert.equal(answer!.answer.ok, true)
+    await d`rollback`
+    open &= ~2
+  } finally {
+    if (open & 1) await r`rollback`
+    if (open & 2) await d`rollback`
+    r.release()
+    d.release()
+  }
 })

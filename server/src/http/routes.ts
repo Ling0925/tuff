@@ -119,6 +119,9 @@ export const answerError = (e: Error, c: Context) => {
   /* Too much waiting for the workers already: come back shortly. */
   if (e instanceof Busy) return c.json(busy, 503, { 'retry-after': '5' })
   const code = (e as { code?: string }).code
+  /* The account's previous holder was put out after this request was let
+     in: nothing it would write is written — `auth_still_in`, migration 317, */
+  if (code === '28000') return c.json({ error: { code: 'unauthorized' } }, 401)
   if (code === '23514') {
     return c.json({ error: { code: 'invalid', message: (e as Error).message } }, 400)
   }

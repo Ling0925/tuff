@@ -18,6 +18,17 @@ type Hook = {
   authorization_set?: boolean
   last_status: number | null
   last_at: string | null
+  /** Turned off because the account that made it changed hands.
+      Turning it on gives it a new secret. */
+  stopped_at?: string | null
+}
+/* Where it sends, said by its host: the rest of an address can carry a key. */
+const hostOf = (url: string) => {
+  try {
+    return new URL(url).host
+  } catch {
+    return url
+  }
 }
 const day = (s: string | null) => (s ? s.slice(0, 16).replace('T', ' ') : '—')
 
@@ -35,6 +46,9 @@ export function Webhooks() {
   /* What was said about a row — a test sent, a change refused — under its address. */
   const [said, setSaid] = useState<Record<string, string>>({})
   const [deleting, setDeleting] = useState<Hook | null>(null)
+  /* A webhook made by the account's previous holder, being turned on: the
+     screen says where everything will go before it does. */
+  const [reviving, setReviving] = useState<Hook | null>(null)
 
   const load = useCallback(async () => {
     setHooks((await ahead<{ webhooks: Hook[] }>('/webhooks')).webhooks)
@@ -105,7 +119,7 @@ export function Webhooks() {
             <HookRow
               hook={h}
               said={said[h.id] ?? null}
-              onChange={(to) => void change(h, to)}
+              onChange={(to) => (to.enabled && h.stopped_at ? setReviving(h) : void change(h, to))}
               onTest={() => void test(h)}
               onKey={async (to) => {
                 await api(`/webhooks/${h.id}`, { method: 'PATCH', body: JSON.stringify({ authorization: to }) })
@@ -144,6 +158,43 @@ export function Webhooks() {
           }
         >
           <p className="px-4 pt-2 pb-4 text-base leading-5 text-ink-2">{W.deleteWebhookSays(deleting.url)}</p>
+        </Dialog>
+      )}
+
+      {reviving && (
+        <Dialog
+          title={W.reviveAsk}
+          testId="webhook-revive-dialog"
+          onClose={() => setReviving(null)}
+          footer={
+            <div className="flex flex-1 items-center justify-end gap-2">
+              <button onClick={() => setReviving(null)} className="h-8 px-3 text-base font-medium text-ink-2">
+                {MORE.cancel}
+              </button>
+              <Button
+                tone="primary"
+                data-testid="webhook-revive-go"
+                onClick={async () => {
+                  const h = reviving
+                  setReviving(null)
+                  try {
+                    const r = await api<{ ok: true; secret?: string }>(`/webhooks/${h.id}`, {
+                      method: 'PATCH',
+                      body: JSON.stringify({ enabled: true }),
+                    })
+                    if (r.secret) setSecret(r.secret)
+                  } catch {
+                    setSaid((was) => ({ ...was, [h.id]: W.couldntChange }))
+                  }
+                  await load()
+                }}
+              >
+                {W.turnOn}
+              </Button>
+            </div>
+          }
+        >
+          <p className="px-4 pt-2 pb-4 text-base leading-5 text-ink-2">{W.reviveSays(hostOf(reviving.url))}</p>
         </Dialog>
       )}
     </section>
@@ -188,7 +239,7 @@ function HookRow({
         <span data-webhook-said className="truncate text-sm text-ink-3">
           {said ??
             [
-              h.enabled ? (h.last_status ? W.lastResponse(h.last_status) : W.noDeliveries) : W.off,
+              h.enabled ? (h.last_status ? W.lastResponse(h.last_status) : W.noDeliveries) : h.stopped_at ? W.offFromBefore : W.off,
               h.events.length ? W.nEvents(h.events.length) : W.allEvents,
               ...(h.authorization_set ? [W.withKey] : []),
               ...(h.last_at ? [day(h.last_at)] : []),

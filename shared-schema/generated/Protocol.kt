@@ -660,6 +660,9 @@ data class Contract (
     @SerialName("WaysIn")
     val waysIn: WaysIn? = null,
 
+    @SerialName("WebhookChanged")
+    val webhookChanged: WebhookChanged? = null,
+
     @SerialName("WebhookMade")
     val webhookMade: WebhookMade? = null,
 
@@ -929,6 +932,9 @@ data class AgentRow (
 
     @SerialName("webhook_shape")
     val webhookShape: String? = null,
+
+    @SerialName("webhook_stopped")
+    val webhookStopped: Boolean? = null,
 
     @SerialName("webhook_url")
     val webhookURL: String? = null
@@ -4888,6 +4894,12 @@ enum class AsksEnum(val value: String) {
 }
 
 @Serializable
+data class WebhookChanged (
+    val ok: Boolean,
+    val secret: String? = null
+)
+
+@Serializable
 data class WebhookMade (
     val id: String,
     val secret: String
@@ -4910,6 +4922,9 @@ data class WebhookRow (
 
     @SerialName("last_status")
     val lastStatus: Long? = null,
+
+    @SerialName("stopped_at")
+    val stoppedAt: String? = null,
 
     val url: String
 )

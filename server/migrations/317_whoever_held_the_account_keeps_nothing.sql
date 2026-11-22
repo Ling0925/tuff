@@ -1,7 +1,8 @@
 /*
  * Whoever held the account keeps nothing,
  * 
- * found by the independent reviews of.
+ * found by the independent reviews of, and of this
+ * file's first draft.
  *
  * Every path that puts an account's previous holder out — 212's
  * `app_user_proved`, `auth_claim_email`, `auth_set_password` for an
@@ -10,53 +11,72 @@
  * that moment. Two kinds of thing were not there to find:
  *
  * 1. What was in flight. A refresh that had spent session A and written B,
- *    uncommitted, was invisible to the put-out's `update refresh_session`;
- *    it waited on A, ended A, and B went live at the refresh's commit. The
- *    same for a sign-in, a switch or a token. Now:
- *    - `app_user.sessions_after`, the moment the holder was put out —
- *      `clock_timestamp()`, the put-out's last step;
- *    - `credential_after_put_out`, a trigger on every write of a session,
- *      a token, a webhook, a room hook (and a room hook given a new URL)
- *      and an agent: it takes a share lock on the account's row (an
- *      agent's token and an agent: its connector's) and writes the row
- *      ended, revoked, turned off or stopped when the account was put out
- *      at or after the row was begun (`created_at`, or the transaction's
- *      start for a new URL). The lock orders it with the put-out, whose
- *      update of the same row comes before everything it ends: first, the
- *      put-out's statements see it and end it; second, it reads the time;
- *    - `auth_spend_refresh` takes the lock before it spends, so a refresh
- *      never holds A while waiting for the row the put-out holds while
- *      waiting for A.
- *    316's second round of ends in `auth_email_confirm` is taken out: it
- *    caught a refresh committed by the time it ran, and this catches both.
+ *    uncommitted, was invisible to the put-out's `update refresh_session`.
+ *    So was anything a request of the holder's wrote after it was let in —
+ *    a webhook, a room hook, an agent, a webhook turned back on — and the
+ *    holder chooses how long that takes: a body sent slowly is read after
+ *    the request was let in. Now the account's row orders them:
+ *    - `put_out` takes `app_user` FOR UPDATE first and sets
+ *      `app_user.sessions_after` last;
+ *    - every transaction a signed-in request runs as its own person asks
+ *      `auth_still_in(actor, session, token)` before anything else
+ *      (`db.ts`): FOR KEY SHARE on the account's row (an agent's: its
+ *      connector's), then a refusal (`28000`, answered 401) when the
+ *      session or token the request came with was begun at or before
+ *      `sessions_after`. A request first: the put-out waits for it and sees
+ *      what it wrote. The put-out first: the request waits, and is refused.
+ *      KEY SHARE, not SHARE: it waits for nothing but a put-out or a
+ *      deletion, and two requests of one person that both write the row
+ *      never wait on each other's;
+ *    - what is written with no such request — a sign-in's session, a token
+ *      an OAuth exchange mints, a ticket, an OAuth code — goes through
+ *      `credential_after_put_out`, a trigger taking the same lock and
+ *      writing the row spent when it was begun at or before
+ *      `sessions_after` (`created_at`, which the server dates from the
+ *      check it was made on when that came earlier);
+ *    - `auth_spend_refresh` takes the lock before it spends.
+ *    316's second round of ends in `auth_email_confirm` is taken out.
  *
- * 2. What it left running: webhooks it made went on delivering the
- *    workspace's events, room hooks posting, agents it connected working
- *    with tokens it held, and the account said two-factor was on since a
- *    time. Now `put_out(actor, row)` is the one step every path calls —
- *    what 315 and before took, and: webhooks it made turned off, room
- *    hooks stopped (`room_hook.stopped_at`, started again by a new URL),
- *    agents it connected stopped (`agent.stopped_at`: every token revoked,
- *    their webhooks off with the rest, started again by a new token), the
- *    OAuth codes it was given spent, and the factor's times cleared.
- *    Nothing deleted: an admin turns a webhook on, the hook's maker gives
- *    it a new URL, the agent's connector gives it a new token.
+ * 2. What it left running. `put_out(actor, row)` is the one step every path
+ *    calls — what 315 and before took, and:
+ *    - webhooks it made turned off and marked (`webhook.stopped_at`), the
+ *      receiver's key it gave taken off; Turn on gives a new secret;
+ *    - room hooks it made stopped (`room_hook.stopped_at`); a new URL
+ *      starts one again with a secret the holder never saw;
+ *    - agents it connected stopped (`agent.stopped_at`), every token of
+ *      theirs revoked; their webhooks off and marked as above, address
+ *      kept but secret and key emptied, so a new token never sends to the
+ *      holder's receiver — only the agent's reach set again does, with a
+ *      new secret, on a screen that names the address;
+ *    - its GitHub links stopped (`linker_unproved`) as its Slack links are,
+ *      and documents it wrote shared to the web in a workspace now waiting
+ *      for the person's word unshared;
+ *    - the OAuth codes it was given spent, and the factor's times cleared.
  *
- * Rows: none changed or deleted here — three nullable columns with no
+ * 3. `account_deletion` takes the account's row FOR UPDATE first, so a
+ *    refresh or a request in flight is waited for rather than deadlocked
+ *    with.
+ *
+ * Rows: none changed or deleted here — four nullable columns with no
  * default (the catalogue alone), functions, triggers. Not backfilled.
- * Locks: ACCESS EXCLUSIVE on `app_user`, `room_hook` and `agent` for the
- * columns, SHARE ROW EXCLUSIVE on `refresh_session`, `api_token` and
- * `webhook` for the triggers, each until this file commits, which is the
- * moment its functions take to write. `lock_timeout` so that a long
- * transaction holding one of them fails the deploy rather than stopping
- * every request behind this file.
+ * Locks: ACCESS EXCLUSIVE on `app_user`, `room_hook`, `agent` and `webhook`
+ * for the columns, SHARE ROW EXCLUSIVE on `refresh_session`, `api_token`,
+ * `auth_ticket` and `oauth_code` for the triggers, each until this file
+ * commits, which is the moment its functions take to write. `lock_timeout`
+ * so that a long transaction holding one of them fails the deploy rather
+ * than stopping every request behind this file.
  */
 
-set local lock_timeout = '10s';
+set local lock_timeout = '3s';
 
 alter table app_user add column sessions_after timestamptz;
 comment on column app_user.sessions_after is
-  'When the account''s previous holder was put out: a session, token, webhook, room hook or agent begun at or before it is written ended, revoked, off or stopped.';
+  'When the account''s previous holder was put out: a session, token, ticket or code begun at or before it is dead, and a request that came with one is refused.';
+
+alter table webhook add column stopped_at timestamptz;
+comment on column webhook.stopped_at is
+  'Turned off because its maker''s account changed hands; turning it on gives it a new secret.';
+grant select (stopped_at) on webhook to tracker_app;
 
 alter table room_hook add column stopped_at timestamptz;
 comment on column room_hook.stopped_at is
@@ -65,51 +85,80 @@ grant select (stopped_at) on room_hook to tracker_app;
 
 alter table agent add column stopped_at timestamptz;
 comment on column agent.stopped_at is
-  'Stopped because its connector''s account changed hands: its tokens revoked, its webhook off; a new token starts it again.';
+  'Stopped because its connector''s account changed hands: its tokens revoked; a new token starts it again.';
 
 /* ------------------------------------------------------------ 1. in flight */
 
 /*
- * Written under a share lock on the account the row acts for, and written
- * dead when that account was put out at or after the row was begun.
- * Nobody's to run: a trigger.
+ * Whether a signed-in request may go on as its person: asked first in every
+ * transaction it runs as them (`db.ts`), with the session or the token it
+ * came with. Holds the account's row (an agent's: its connector's) until
+ * the transaction ends, so a put-out of that account either waits for this
+ * transaction and then sees what it wrote, or has committed and this is
+ * refused. The application's (and so the sign-in role's, its member).
+ */
+create function auth_still_in(p_actor uuid, p_session uuid, p_token uuid) returns boolean
+language plpgsql volatile security definer set search_path = public, pg_temp as $$
+declare
+  v_person uuid;
+  v_after timestamptz;
+  v_begun timestamptz;
+begin
+  if p_actor is null or (p_session is null and p_token is null) then
+    return true;
+  end if;
+  v_person := coalesce((select g.created_by from agent g where g.actor_id = p_actor), p_actor);
+  select u.sessions_after into v_after from app_user u where u.actor_id = v_person for key share;
+  if v_after is null then
+    return true;
+  end if;
+  if p_session is not null then
+    select s.created_at into v_begun from refresh_session s where s.id = p_session;
+  else
+    select t.created_at into v_begun from api_token t where t.id = p_token;
+  end if;
+  if v_begun is not null and v_begun <= v_after then
+    raise exception 'put_out' using errcode = '28000';
+  end if;
+  return true;
+end $$;
+revoke all on function auth_still_in(uuid, uuid, uuid) from public;
+grant execute on function auth_still_in(uuid, uuid, uuid) to tracker_app;
+
+/*
+ * What is written with no signed-in request to ask — a sign-in's session,
+ * a token an OAuth exchange mints, a ticket, an OAuth code — under the same
+ * lock, and written spent when the account was put out at or after it was
+ * begun. Nobody's to run: a trigger.
  */
 create function credential_after_put_out() returns trigger
 language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   v_who uuid;
-  v_begun timestamptz;
   v_after timestamptz;
 begin
-  if tg_table_name = 'refresh_session' then
-    v_who := new.actor_id;
-  elsif tg_table_name = 'api_token' then
+  if tg_table_name = 'api_token' then
     /* An agent's token acts for whoever connected the agent. */
     v_who := coalesce((select g.created_by from agent g where g.actor_id = new.actor_id), new.actor_id);
   else
-    v_who := new.created_by;
+    v_who := new.actor_id;
   end if;
-  v_begun := case when tg_op = 'UPDATE' then now() else new.created_at end;
-
-  /* Held until this transaction ends: a put-out of the same account waits
-     for this write and then sees it, or this waits for the put-out and
-     reads its time. An actor with no account (an agent, a page) has none. */
-  select u.sessions_after into v_after from app_user u where u.actor_id = v_who for share;
-  if v_after is null or v_begun > v_after then
+  if v_who is null then
     return new;
   end if;
-
+  select u.sessions_after into v_after from app_user u where u.actor_id = v_who for key share;
+  if v_after is null or new.created_at > v_after then
+    return new;
+  end if;
   if tg_table_name = 'refresh_session' then
     new.revoked_at := coalesce(new.revoked_at, now());
     new.ended_at := coalesce(new.ended_at, now());
   elsif tg_table_name = 'api_token' then
     new.revoked_at := coalesce(new.revoked_at, now());
     new.refresh_hash := null;
-  elsif tg_table_name = 'webhook' then
-    new.enabled := false;
   else
-    -- room_hook, agent
-    new.stopped_at := coalesce(new.stopped_at, now());
+    -- auth_ticket, oauth_code
+    new.used_at := coalesce(new.used_at, now());
   end if;
   return new;
 end $$;
@@ -119,11 +168,9 @@ create trigger credential_after_put_out before insert on refresh_session
   for each row execute function credential_after_put_out();
 create trigger credential_after_put_out before insert on api_token
   for each row execute function credential_after_put_out();
-create trigger credential_after_put_out before insert on webhook
+create trigger credential_after_put_out before insert on auth_ticket
   for each row execute function credential_after_put_out();
-create trigger credential_after_put_out before insert or update of created_by on room_hook
-  for each row execute function credential_after_put_out();
-create trigger credential_after_put_out before insert on agent
+create trigger credential_after_put_out before insert on oauth_code
   for each row execute function credential_after_put_out();
 
 /* 061's, with the account's row held first — before the spend, so a
@@ -139,7 +186,7 @@ begin
   if v_actor is null then
     return;
   end if;
-  perform 1 from app_user u where u.actor_id = v_actor for share;
+  perform 1 from app_user u where u.actor_id = v_actor for key share;
   return query
     update refresh_session s set revoked_at = now()
     where s.token_hash = p_hash and s.revoked_at is null and s.expires_at > now()
@@ -147,6 +194,51 @@ begin
 end $$;
 
 /* --------------------------------------------------------- 2. one put-out */
+
+/* 315's, and the GitHub links it chose stop as its Slack links do, and what
+   it wrote and shared to the web in a workspace now waiting is unshared. */
+create or replace function before_proof_held(p_actor uuid) returns void
+language plpgsql volatile security definer set search_path = public, pg_temp as $$
+begin
+  if p_actor is null then
+    return;
+  end if;
+  /* Nobody walks in later on a link the previous holder handed out —
+     first, so nobody walks in between this and the rows below either. */
+  update invite set deleted_at = now(), updated_at = now()
+  where created_by = p_actor and used_at is null and deleted_at is null;
+  /* Nor does a project keep posting to a Slack channel they chose. */
+  update slack_link set stopped_at = now(), stopped = 'linker_unproved'
+  where linked_by = p_actor and stopped_at is null and deleted_at is null;
+  /* Nor a repository keep acting as them (149's stop, with why). */
+  update github_link set stopped_at = now(), stopped_why = 'linker_unproved'
+  where linked_by = p_actor and stopped_at is null and deleted_at is null;
+  /* Every workspace waits, but the one sign-up made for this account
+     (`register_owner` wrote its `register` line there) while nobody else
+     has ever had a row in it. */
+  update membership m
+  set joined_at = null, unconfirmed_at = now(), updated_at = now()
+  where m.actor_id = p_actor and m.deleted_at is null and m.joined_at is not null
+    and not (
+      exists (
+        select 1 from security_event e
+        where e.workspace_id = m.workspace_id and e.actor_id = p_actor and e.kind = 'register'
+      )
+      and not exists (
+        select 1 from membership o
+        where o.workspace_id = m.workspace_id and o.actor_id <> p_actor
+      )
+    );
+  /* And a document they wrote there, shared to the web, stops being: the
+     link was theirs to hand out. Sharing it again is a press. */
+  update file f set public_token = null
+  where f.author_id = p_actor and f.public_token is not null
+    and exists (
+      select 1 from membership m
+      where m.workspace_id = f.workspace_id and m.actor_id = p_actor
+        and m.deleted_at is null and m.joined_at is null and m.unconfirmed_at is not null
+    );
+end $$;
 
 /*
  * The previous holder of an account, put out: everything it held or made
@@ -162,6 +254,11 @@ begin
   if p_actor is null then
     return;
   end if;
+  /* First: every transaction of the holder's still running — a request,
+     a refresh, a sign-in — finishes before anything below reads, and
+     none starts until this one has committed (`auth_still_in`). */
+  perform 1 from app_user u where u.actor_id = p_actor for update;
+
   delete from recovery_code where actor_id = p_actor;
   update refresh_session set revoked_at = coalesce(revoked_at, now()), ended_at = now()
   where actor_id = p_actor and ended_at is null;
@@ -182,9 +279,13 @@ begin
   from agent g
   where g.created_by = p_actor and g.deleted_at is null
     and t.actor_id = g.actor_id and t.workspace_id = g.workspace_id and t.revoked_at is null;
-  /* The webhooks it made, agents' among them: off, kept. */
-  update webhook set enabled = false, updated_at = now()
-  where created_by = p_actor and enabled and deleted_at is null;
+  /* The webhooks it made, off and marked, without the receiver's key it
+     gave; an agent's without its secret either — only its reach set again
+     sends anything, with a new one. The address is kept, to be shown. */
+  update webhook set enabled = false, stopped_at = now(), authorization_enc = null,
+                     secret_enc = case when agent_id is not null then '' else secret_enc end,
+                     updated_at = now()
+  where created_by = p_actor and deleted_at is null and stopped_at is null;
   /* Its room hooks: stopped, kept. */
   update room_hook set stopped_at = now()
   where created_by = p_actor and stopped_at is null and deleted_at is null;
@@ -217,7 +318,8 @@ begin
   return new;
 end $$;
 
-/* 315's, with the shared step. */
+/* 315's, with the shared step; the row held before it is written, so a
+   request of the holder's in flight is waited for, not deadlocked with. */
 create or replace function auth_claim_email(p_actor uuid) returns void
 language plpgsql security definer set search_path = public, pg_temp as $$
 begin
@@ -225,6 +327,7 @@ begin
      and exists (select 1 from instance_applicant where actor_id = p_actor) then
     raise exception 'sign_up_closed';
   end if;
+  perform 1 from app_user where actor_id = p_actor for update;
   if exists (select 1 from app_user where actor_id = p_actor
              and (email_verified_at is null or email_by_hand)) then
     update app_user set email_verified_at = now(), email_by_hand = false, password_hash = null,
@@ -245,7 +348,8 @@ begin
   select password_hash is not null, email_verified_at is null or email_by_hand,
          coalesce(totp_enabled and totp_enabled_at > now() - interval '7 days', false)
   into v_had, v_unproved, v_fresh
-  from app_user where actor_id = p_actor;
+  from app_user where actor_id = p_actor
+  for update;
   update app_user
   set password_hash = p_hash, email_verified_at = coalesce(email_verified_at, now()),
       email_by_hand = false, updated_at = now()
@@ -282,7 +386,9 @@ declare
 begin
   select * into s from instance_setting where id for update;
   if not s.community then raise exception 'not_community'; end if;
-  select actor_id, email_verified_at is null or email_by_hand into v_actor, v_weak from app_user where email = p_email;
+  select actor_id, email_verified_at is null or email_by_hand into v_actor, v_weak
+  from app_user where email = p_email
+  for update;
   if v_actor is null then return null; end if;
   if p_email = 'dev@example.com' then raise exception 'dev_account'; end if;
   v_recovery := s.claimed_at is not null and instance_usable_owners() = 0;
@@ -313,8 +419,11 @@ begin
     delete from auth_identity where actor_id = v_actor;
     update auth_ticket set used_at = now() where actor_id = v_actor and used_at is null;
   end if;
-  insert into auth_ticket (token_hash, kind, actor_id, workspace_id, expires_at)
-  values (p_reset_hash, 'reset', v_actor, null, now() + interval '1 hour');
+  /* The new owner's ticket, begun after the put-out above by the clock
+     (`credential_after_put_out` would spend one dated from this
+     transaction's start). */
+  insert into auth_ticket (token_hash, kind, actor_id, workspace_id, expires_at, created_at)
+  values (p_reset_hash, 'reset', v_actor, null, now() + interval '1 hour', clock_timestamp());
   insert into security_event (id, workspace_id, actor_id, kind)
   select gen_random_uuid(), m.workspace_id, v_actor, 'password_reset'
   from membership m
@@ -322,8 +431,8 @@ begin
   return v_actor;
 end $$;
 
-/* 316's, without the second round of ends: the trigger's put-out and a
-   refresh in flight are ordered on the account's row now. */
+/* 316's, without the second round of ends: the put-out holds the account's
+   row first, and a refresh in flight is ordered by it. */
 create or replace function auth_email_confirm(p_hash text, p_session uuid)
 returns table (said text, actor_id uuid, email citext, old citext, put_out boolean)
 language plpgsql security definer set search_path = public, pg_temp as $$
@@ -389,10 +498,6 @@ begin
   if current_actor() is null then
     return false;
   end if;
-  /* The presser's account before the hook, as the trigger below will want
-     it: a put-out holds the account and then the account's hooks, and
-     taking them the other way round would deadlock with it. */
-  perform 1 from app_user u where u.actor_id = current_actor() for share;
   update room_hook h set secret_hash = p_hash, turned_at = now(), created_by = current_actor(), stopped_at = null
   where h.id = p_id and h.deleted_at is null
     and h.workspace_id = current_workspace()
@@ -402,10 +507,10 @@ begin
 end $$;
 
 /*
- * A new token starts a stopped agent again: 269's, and when the agent was
- * stopped, its webhook turned back on and the mark cleared — its
- * connector's one press, the new token shown to them once. An agent not
- * stopped is as before: a webhook off for any other reason stays off.
+ * A new token starts a stopped agent's tokens again: 269's, and the mark
+ * cleared. Nothing is sent anywhere by it — a webhook the put-out turned off
+ * stays off until the agent's reach is set again (`agent_reach`), and one
+ * off for any other reason stays as it was.
  */
 create or replace function agent_end_tokens(p_agent uuid) returns boolean
 language plpgsql volatile security definer set search_path = public, pg_temp as $$
@@ -419,11 +524,121 @@ begin
   where workspace_id = current_workspace() and agent_id = p_agent and used_at is null;
   update agent set stopped_at = null
   where actor_id = p_agent and workspace_id = current_workspace() and stopped_at is not null;
-  if found then
-    update webhook set enabled = true, updated_at = now()
-    where workspace_id = current_workspace() and agent_id = p_agent and deleted_at is null and not enabled;
-  end if;
   return true;
 end $$;
+
+/*
+ * 268's, and a webhook the put-out stopped counts as moved, whatever
+ * address it is given: a new secret, no key, on again, the mark cleared —
+ * the press on the agent's page, which shows the address it sends to.
+ */
+create or replace function agent_reach(p_agent uuid, p_reach text, p_url text, p_shape text, p_secret text)
+returns table (
+  was_reach text, was_url text, was_shape text, had_key boolean, cleared boolean, hook_id uuid, new_secret boolean
+)
+language plpgsql volatile security definer set search_path = public, pg_temp as $$
+declare
+  ws uuid := current_workspace();
+  g record;
+  h record;
+  has_hook boolean;
+  moved boolean;
+  fresh uuid;
+begin
+  if not agent_may_be_managed(p_agent) or p_reach not in ('mcp', 'webhook')
+     or (p_reach = 'webhook') <> (p_url is not null)
+     or (p_reach = 'webhook' and (p_shape is null or p_shape not in ('tuff', 'claude_routine'))) then
+    return;
+  end if;
+  select a.reach into g from agent a
+  where a.actor_id = p_agent and a.workspace_id = ws and a.deleted_at is null
+  for update;
+  if not found then
+    return;
+  end if;
+  select w.id, w.url, w.shape, w.authorization_enc is not null as had, w.stopped_at is not null as stopped into h
+  from webhook w
+  where w.agent_id = p_agent and w.workspace_id = ws and w.deleted_at is null
+  for update;
+  has_hook := found;
+
+  if p_reach = 'mcp' then
+    update agent set reach = 'mcp' where actor_id = p_agent and workspace_id = ws;
+    if has_hook then
+      /* The columns are not null: emptied rather than nulled. */
+      update webhook set enabled = false, deleted_at = now(), authorization_enc = null,
+                         url = '', secret_enc = '', updated_at = now()
+      where webhook.id = h.id;
+      delete from webhook_delivery where webhook_id = h.id and delivered_at is null;
+      return query select g.reach, h.url, h.shape, h.had, h.had, h.id, false;
+    else
+      return query select g.reach, null::text, null::text, false, false, null::uuid, false;
+    end if;
+    return;
+  end if;
+
+  if p_secret is null then
+    raise exception 'agent_reach: a webhook needs its secret';
+  end if;
+  update agent set reach = 'webhook' where actor_id = p_agent and workspace_id = ws;
+  if not has_hook then
+    fresh := gen_random_uuid();
+    insert into webhook (id, workspace_id, url, events, secret_enc, created_by, agent_id, shape)
+    values (fresh, ws, p_url, '{}', p_secret, current_actor(), p_agent, p_shape);
+    return query select g.reach, null::text, null::text, false, false, fresh, true;
+    return;
+  end if;
+  moved := h.stopped or h.url is distinct from p_url or h.shape is distinct from p_shape;
+  if not moved then
+    return query select g.reach, h.url, h.shape, h.had, false, h.id, false;
+    return;
+  end if;
+  update webhook set
+    url = p_url,
+    shape = p_shape,
+    authorization_enc = null,
+    secret_enc = p_secret,
+    enabled = case when h.stopped then true else enabled end,
+    stopped_at = null,
+    updated_at = now()
+  where webhook.id = h.id;
+  delete from webhook_delivery where webhook_id = h.id and delivered_at is null;
+  return query select g.reach, h.url, h.shape, h.had, h.had, h.id, true;
+end $$;
+
+/* What its webhook says, and whether the put-out stopped it — then not
+   where it sent, which was the previous holder's to say (268's). */
+drop function if exists agent_webhook_said(uuid);
+create function agent_webhook_said(p_agent uuid)
+returns table (authorization_set boolean, shape text, url text, stopped boolean)
+language sql stable security definer set search_path = public, pg_temp as $$
+  select h.authorization_enc is not null, h.shape,
+         case when h.stopped_at is null then h.url end, h.stopped_at is not null
+  from webhook h
+  where agent_may_be_managed(p_agent)
+    and h.agent_id = p_agent and h.workspace_id = current_workspace() and h.deleted_at is null
+  limit 1
+$$;
+revoke all on function agent_webhook_said(uuid) from public;
+grant execute on function agent_webhook_said(uuid) to tracker_app;
+
+/* ------------------------------------------- 3. an account deleted, in turn */
+
+/*
+ * 298's, behind a hold on the account's row: deleting it last, after its
+ * sessions, waited for a refresh holding the row while the refresh waited
+ * for a session the deletion held. Holding the row first, the deletion
+ * waits for the refresh instead. A dry run holds nothing.
+ */
+alter function account_deletion(uuid, boolean) rename to account_deletion_rows;
+create function account_deletion(p_actor uuid, p_dry boolean) returns json
+language plpgsql volatile security definer set search_path = public, pg_temp as $$
+begin
+  if not p_dry then
+    perform 1 from app_user u where u.actor_id = p_actor for update;
+  end if;
+  return account_deletion_rows(p_actor, p_dry);
+end $$;
+revoke all on function account_deletion(uuid, boolean) from public;
 
 set local lock_timeout to default;

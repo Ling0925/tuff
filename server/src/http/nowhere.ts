@@ -1,6 +1,6 @@
 import { Hono, type Context, type Next } from 'hono'
 import { DEFAULT_SETTINGS } from '@tracker/shared-schema'
-import { authSql, sql, withoutActor } from '../db.js'
+import { authSql, bounded, sql, withoutActor } from '../db.js'
 import { edition } from '../edition.js'
 import { faced } from '../storage.js'
 import { allow, type AuthContext } from '../auth/context.js'
@@ -77,7 +77,10 @@ nowhere.use('*', async (c, next) => {
     ctx: { ...personOnly(claims.sub, claims.sid, person, closed?.closed === true), checkedAt: alive.at },
     person,
   })
-  return next()
+  /* Every transaction made for this person asks whether the account changed
+     hands since the session was begun, as every signed-in request's does
+     (`bounded`, `db.ts`). */
+  return bounded({ actorId: claims.sub, tokenProjectIds: [], sessionId: claims.sid }, next)
 })
 
 /*

@@ -64,19 +64,43 @@ export const sql: Sql = postgres(env.databaseUrlApp, { ...OPTIONS, max: env.pool
  * anybody else — a mention's reader, a linked GitHub account — is not
  * bound by this token, and the worker, outside any request, never is.
  */
-type Bound = { actorId: string; projectIds: readonly string[] }
+type Bound = { actorId: string; projectIds: readonly string[]; sessionId: string | null; tokenId: string | null }
 const scope = new AsyncLocalStorage<Bound>()
 
-/** Runs `fn` with the token's limit on, when it has one. */
-export function bounded<T>(who: { actorId: string; tokenProjectIds: readonly string[] }, fn: () => T): T {
-  return who.tokenProjectIds.length > 0 ? scope.run({ actorId: who.actorId, projectIds: who.tokenProjectIds }, fn) : fn()
+/**
+ * Runs `fn` with the token's limit on, when it has one — and with the
+ * session or token the request came with, which every transaction made for
+ * its person asks about first (`stillIn`).
+ */
+export function bounded<T>(
+  who: { actorId: string; tokenProjectIds: readonly string[]; sessionId?: string | undefined; tokenId?: string | undefined },
+  fn: () => T,
+): T {
+  return scope.run(
+    { actorId: who.actorId, projectIds: who.tokenProjectIds, sessionId: who.sessionId ?? null, tokenId: who.tokenId ?? null },
+    fn,
+  )
 }
 
 /** The settings for the limit, or empty strings for none — set every time,
     so a pooled connection never carries one request's list into another's. */
 function limitFor(actorId: string): [string, string] {
   const b = scope.getStore()
-  return b && b.actorId === actorId ? [actorId, `{${b.projectIds.join(',')}}`] : ['', '']
+  return b && b.actorId === actorId && b.projectIds.length > 0 ? [actorId, `{${b.projectIds.join(',')}}`] : ['', '']
+}
+
+/**
+ * The session and the token the request came with, for a transaction made
+ * for the request's own person; nulls for anybody else's, and outside a
+ * request. `auth_still_in` (migration 317) holds the account's row for the
+ * transaction and refuses (`28000`, answered 401) when the account's
+ * previous holder was put out after that session or token was begun — so a
+ * request let in before a put-out and writing after it, however slowly its
+ * body came, writes nothing, and one writing first is seen by the put-out.
+ */
+function stillIn(actorId: string): [string | null, string | null] {
+  const b = scope.getStore()
+  return b && b.actorId === actorId ? [b.sessionId, b.tokenId] : [null, null]
 }
 
 /**
@@ -94,6 +118,7 @@ function actorOn<T>(pool: Sql, actorId: string, workspaceId: string, fn: (tx: Tx
   /* Read here, not inside: the driver may start the transaction from a
      socket's callback, where the request's store is not. */
   const [tokenActor, tokenProjects] = limitFor(actorId)
+  const [sid, tid] = stillIn(actorId)
   return pool.begin(async (tx) => {
     /*
      * One statement for both, and not waited for.
@@ -117,7 +142,8 @@ function actorOn<T>(pool: Sql, actorId: string, workspaceId: string, fn: (tx: Tx
                           set_config('app.actor_id', ${actorId}, true),
                           set_config('app.workspace_id', ${workspaceId}, true),
                           set_config('app.token_actor', ${tokenActor}, true),
-                          set_config('app.token_projects', ${tokenProjects}, true)`.execute()
+                          set_config('app.token_projects', ${tokenProjects}, true),
+                          auth_still_in(${actorId}, ${sid}::uuid, ${tid}::uuid)`.execute()
     const [, out] = await Promise.all([set, fn(tx)])
     return out
   }) as Promise<T>
@@ -143,11 +169,13 @@ export async function withActorEverywhere<T>(actorId: string, fn: (tx: Tx) => Pr
 
 function everywhereOn<T>(pool: Sql, actorId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
   const [tokenActor, tokenProjects] = limitFor(actorId)
+  const [sid, tid] = stillIn(actorId)
   return pool.begin(async (tx) => {
-    // Sent ahead of the handler's queries, as `withActor` does.
+    // Sent ahead of the handler's queries, as `withActor` does, and asking the same.
     const set = tx`select set_config('app.actor_id', ${actorId}, true),
                           set_config('app.token_actor', ${tokenActor}, true),
-                          set_config('app.token_projects', ${tokenProjects}, true)`.execute()
+                          set_config('app.token_projects', ${tokenProjects}, true),
+                          auth_still_in(${actorId}, ${sid}::uuid, ${tid}::uuid)`.execute()
     const [, out] = await Promise.all([set, fn(tx)])
     return out
   }) as Promise<T>

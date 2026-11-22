@@ -3,9 +3,9 @@ import { createHash } from 'node:crypto'
 import { v7 as uuidv7 } from 'uuid'
 import { z } from 'zod'
 import { origin } from '../publicUrl.js'
-import { asAuth, withActor, withoutActor } from '../db.js'
+import { asAuth, asAuthActor, withActor, withoutActor } from '../db.js'
 import { generateToken, hashToken } from '../auth/crypto.js'
-import { issueApiToken } from '../auth/flows.js'
+import { checkedNow, issueApiToken } from '../auth/flows.js'
 import { allow, contextOf, type AuthContext } from '../auth/context.js'
 import { agentsHeld } from '../ceilings.js'
 import { faced } from '../storage.js'
@@ -252,7 +252,12 @@ oauthApi.post('/oauth/authorize', async (c) => {
     if (may !== 'yes') return c.json({ error: { code: 'forbidden', message: 'You don’t manage this agent.' } }, 403)
   }
   const code = generateToken('code')
-  const [made] = await asAuth(
+  /* As the person pressing, so the transaction asks whether the account
+     changed hands since this session was begun (`db.ts`, `stillIn`): a code
+     written for the previous holder after the put-out would become a token. */
+  const [made] = await asAuthActor(
+    ctx.actorId,
+    ctx.workspaceId,
     (tx) => tx<{ ok: boolean }[]>`
       select oauth_code_make(${hashToken(code)}, ${ctx.workspaceId}, ${d.client_id},
                              ${ctx.actorId}, ${d.redirect_uri}, ${d.code_challenge}, ${agentId}) as ok`,
@@ -290,7 +295,18 @@ function answers(verifier: string, challenge: string): boolean {
 /* A token and the refresh token that renews it, issued as one. */
 /* `grant` ties every pair one connection makes, so a refresh spent twice
    ends them all — migration 152. */
-async function pair(actorId: string, workspaceId: string, clientId: string, name: string, grant: string, linkedBy: string | null) {
+async function pair(
+  actorId: string,
+  workspaceId: string,
+  clientId: string,
+  name: string,
+  grant: string,
+  linkedBy: string | null,
+  /* When the code or the refresh token it is made on was taken: the token is
+     dated from it, so an account put out in between leaves it revoked
+     (`Meta.since`). */
+  since: Date,
+) {
   /* Not for somebody no longer in the workspace: a code taken or a refresh
      spent after they were removed minted them a fresh token every time —
      `docs/specs/removing-someone.md`. */
@@ -299,7 +315,7 @@ async function pair(actorId: string, workspaceId: string, clientId: string, name
   /* An agent's: whoever linked it still manages it, asked of `can()` as
      they stand now — not as they stood when they pressed Allow. */
   if (linkedBy && !(await stillManages(linkedBy, actorId, workspaceId))) return null
-  const access = await issueApiToken(actorId, workspaceId, name, [], ACCESS_DAYS)
+  const access = await issueApiToken(actorId, workspaceId, name, [], ACCESS_DAYS, since)
   const refresh = generateToken('ref')
   await asAuth((tx) => tx`select oauth_token_bind(${hashToken(access)}, ${clientId}, ${hashToken(refresh)}, ${grant})`)
   return {
@@ -343,6 +359,7 @@ oauth.post('/oauth/token', async (c) => {
 
   c.header('cache-control', 'no-store')
   if (p('grant_type') === 'authorization_code') {
+    const since = await checkedNow()
     const [code] = await asAuth(
       (tx) =>
         tx<
@@ -370,11 +387,12 @@ oauth.post('/oauth/token', async (c) => {
     if (code.agent_id) {
       await asAuth((tx) => tx`select oauth_agent_link(${grant}, ${code.workspace_id}, ${code.agent_id}, ${clientId}, ${code.actor_id})`)
     }
-    const made = await pair(as, code.workspace_id, clientId, client.name, grant, linkedBy)
+    const made = await pair(as, code.workspace_id, clientId, client.name, grant, linkedBy, since)
     return made ? c.json(made) : grantError(c, 'invalid_grant', 'You are no longer in this workspace.')
   }
 
   if (p('grant_type') === 'refresh_token') {
+    const since = await checkedNow()
     const [was] = await asAuth(
       (tx) => tx<{ actor_id: string; workspace_id: string; name: string; grant_id: string }[]>`
         select * from oauth_refresh_take(${hashToken(p('refresh_token'))}, ${clientId})`,
@@ -393,7 +411,7 @@ oauth.post('/oauth/token', async (c) => {
     if ((link?.actor_is_agent && !linked) || (linked && linked.agent_id !== was.actor_id)) {
       return grantError(c, 'invalid_grant', 'The refresh token is spent, revoked or expired.')
     }
-    const made = await pair(was.actor_id, was.workspace_id, clientId, was.name, was.grant_id, linked?.linked_by ?? null)
+    const made = await pair(was.actor_id, was.workspace_id, clientId, was.name, was.grant_id, linked?.linked_by ?? null, since)
     return made ? c.json(made) : grantError(c, 'invalid_grant', 'You are no longer in this workspace.')
   }
 
