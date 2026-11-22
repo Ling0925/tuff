@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { linkOf } from '../InviteDialog.jsx'
 import { type Invitation, type Project } from './model.js'
 import { reachOf, NoAgents, AgentPage } from '../Agents.jsx'
+import { readAgentWork } from '../AgentWeek.jsx'
 import { AGENTS } from '../../words/agents.js'
 import { readPerson } from '../Stats.jsx'
 import { PageTitle, Fluid, Avatar, Empty, GroupLabel, findField } from '../kit.jsx'
@@ -172,7 +173,11 @@ export function membersScreen({
                   onClick={() => navigate({ view: 'members', actorId: a.actor_id })}
                   /* Read ahead under the pointer, as a person's row
                        does, so its page opens whole. */
-                  onPointerEnter={() => void readPerson(a.actor_id).catch(() => {})}
+                  onPointerEnter={() => {
+                    void readPerson(a.actor_id).catch(() => {})
+                    /* And its week. */
+                    void readAgentWork(a.actor_id, 'week').catch(() => {})
+                  }}
                   className="flex w-full shrink-0 items-center gap-3 rounded-[var(--r-row)] px-2 text-left"
                   style={{
                     height: 'var(--nav-h)',
@@ -283,6 +288,7 @@ export function membersScreen({
                   }}
                   onProject={(projectId) => navigate({ view: 'projects', projectId, tool: 'tasks' })}
                   onOpen={(projectId, taskId) => navigate({ view: 'projects', projectId, tool: 'tasks', objectId: taskId })}
+                  onOpenIn={(projectId, tool, objectId) => navigate({ view: 'projects', projectId, tool, objectId })}
                   onMessage={(actorId) => void startDirect(actorId, true)}
                 />
               )

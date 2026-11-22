@@ -60,6 +60,15 @@ data class Contract (
     @SerialName("AgentTokenMade")
     val agentTokenMade: AgentTokenMade? = null,
 
+    @SerialName("AgentWork")
+    val agentWork: AgentWork? = null,
+
+    @SerialName("AgentWorkTask")
+    val agentWorkTask: AgentWorkTask? = null,
+
+    @SerialName("AgentWorkTasks")
+    val agentWorkTasks: AgentWorkTasks? = null,
+
     @SerialName("ApiError")
     val apiError: APIError? = null,
 
@@ -956,6 +965,76 @@ data class AgentStatusSet (
 @Serializable
 data class AgentTokenMade (
     val token: String
+)
+
+@Serializable
+data class AgentWork (
+    val answered: Count,
+    val asked: Count,
+
+    @SerialName("cost_usd")
+    val costUsd: Double? = null,
+
+    val events: List<ActivityLine>,
+    val finished: Count,
+    val open: Count,
+    val period: Period,
+    val since: String,
+
+    @SerialName("spent_on")
+    val spentOn: Count,
+
+    val tokens: Double,
+    val took: Count
+)
+
+@Serializable
+enum class Period(val value: String) {
+    @SerialName("month") Month("month"),
+    @SerialName("week") Week("week");
+}
+
+@Serializable
+data class AgentWorkTask (
+    val color: String? = null,
+
+    @SerialName("completed_at")
+    val completedAt: String? = null,
+
+    @SerialName("cost_usd")
+    val costUsd: Double? = null,
+
+    @SerialName("due_on")
+    val dueOn: String? = null,
+
+    val icon: String? = null,
+    val id: String,
+    val number: Long? = null,
+    val overdue: Boolean? = null,
+
+    @SerialName("project_id")
+    val projectID: String,
+
+    @SerialName("project_key")
+    val projectKey: String? = null,
+
+    @SerialName("project_name")
+    val projectName: String? = null,
+
+    @SerialName("project_slug")
+    val projectSlug: String? = null,
+
+    val questions: Count? = null,
+    val title: String,
+    val tokens: Double? = null
+)
+
+@Serializable
+data class AgentWorkTasks (
+    @SerialName("next_cursor")
+    val nextCursor: String? = null,
+
+    val tasks: List<AgentWorkTask>
 )
 
 @Serializable

@@ -228,6 +228,10 @@ const RESPONSES: Record<string, z.ZodType> = {
   PersonDay: S.PersonDay,
   PersonHours: S.PersonHours,
   PersonPage: S.PersonPage,
+  // What an agent did this week.
+  AgentWork: S.AgentWork,
+  AgentWorkTask: S.AgentWorkTask,
+  AgentWorkTasks: S.AgentWorkTasks,
   InviteRow: S.InviteRow,
   InviteList: S.InviteList,
   InviteMade: S.InviteMade,

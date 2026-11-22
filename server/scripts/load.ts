@@ -284,6 +284,56 @@ await owner`
   from generate_series(1, 1000) n`
 
 
+/* An agent with a busy month on the big project:
+   two and a half thousand tasks given to it in the feed's lines, five
+   hundred questions asked, two thousand spend lines, five thousand lines of
+   its own. Made last and named as the people are, so nothing above counts
+   it and the clean-up below takes it. */
+console.log('  an agent’s month…')
+const agentId = uuidv7()
+await owner`insert into actor (id, name) values (${agentId}, 'Person Agent')`
+await owner`
+  insert into membership (id, workspace_id, actor_id, role, joined_at)
+  values (${uuidv7()}, ${ws}, ${agentId}, 'member', now())`
+await owner`insert into agent (actor_id, workspace_id, created_by, reach) values (${agentId}, ${ws}, ${me}, 'mcp')`
+await owner`
+  insert into project_member (id, workspace_id, project_id, actor_id, added_by)
+  values (${uuidv7()}, ${ws}, ${big}, ${agentId}, ${me})`
+await owner`
+  update task set assignee_ids = assignee_ids || ${agentId}::uuid
+  where project_id = ${big} and number % 4 = 0`
+await owner`
+  insert into activity_event (id, workspace_id, project_id, actor_id, action, object_type, object_id, meta, at)
+  select gen_random_uuid(), ${ws}, ${big}, ${me}, 'task.update', 'task', t.id,
+         jsonb_build_object('given_to', 'Person Agent', 'given_ids', jsonb_build_array(${agentId}::text)),
+         now() - ((t.number % 30) || ' days')::interval
+  from task t where t.project_id = ${big} and t.number % 4 = 0`
+await owner`
+  insert into comment (id, workspace_id, project_id, object_type, object_id, author_id, body, choices, asked,
+                       answer, answered_by, answered_at, created_at)
+  select gen_random_uuid(), ${ws}, ${big}, 'task', t.id, ${agentId},
+         jsonb_build_object('type', 'doc', 'content', jsonb_build_array(
+           jsonb_build_object('type', 'paragraph', 'content', jsonb_build_array(
+             jsonb_build_object('type', 'text', 'text', 'Keep the old route?'))))),
+         '[{"label":"Keep it","recommended":false},{"label":"Remove it","recommended":true}]'::jsonb,
+         array[${me}::uuid],
+         case when t.number % 3 = 0 then 0 end, case when t.number % 3 = 0 then ${me}::uuid end,
+         case when t.number % 3 = 0 then now() end,
+         now() - ((t.number % 30) || ' days')::interval
+  from task t where t.project_id = ${big} and t.number % 20 = 0`
+await owner`
+  insert into task_spend (id, workspace_id, project_id, task_id, actor_id, client, model, tokens, cost_usd, session,
+                          created_at, updated_at)
+  select gen_random_uuid(), ${ws}, ${big}, t.id, ${agentId}, 'Claude Code', 'claude-opus-5-5',
+         100000 + t.number, 1.25, 's-' || t.number,
+         now() - ((t.number % 30) || ' days')::interval, now() - ((t.number % 30) || ' days')::interval
+  from task t where t.project_id = ${big} and t.number % 5 = 0`
+await owner`
+  insert into activity_event (id, workspace_id, project_id, actor_id, action, object_type, object_id, meta, at)
+  select gen_random_uuid(), ${ws}, ${big}, ${agentId}, 'task.update', 'task', t.id,
+         '{"finished": true}'::jsonb, now() - ((t.number % 30) || ' days')::interval
+  from task t where t.project_id = ${big} and t.number % 2 = 0`
+
 await owner`analyze`
 
 /* ----------------------------------------------------------- the questions */
@@ -489,6 +539,11 @@ const budget: [string, number, () => Promise<unknown>][] = [
   ['the notifications panel, unread only', 200, asked('/inbox?unread=1')],
   ['an announcement to a hundred people', 200, announced],
   ['a project’s Activity', 200, asked(`/activity?project=${big}`)],
+  /* An agent's page: its week and its month, and a tile's tasks. */
+  ['an agent’s week: what it took, finished, asked and spent', 200, asked(`/agents/${agentId}/work`)],
+  ['an agent’s month: two thousand tasks given, its spend', 200, asked(`/agents/${agentId}/work?period=month`)],
+  ['an agent’s month: what it took, the first page', 200, asked(`/agents/${agentId}/work/tasks?of=took&period=month`)],
+  ['an agent’s month: what it spent, the most first', 200, asked(`/agents/${agentId}/work/tasks?of=spend&period=month`)],
   /* Four thousand rows, two thirds of the documents kept and every
      picture asking about its document — read
      a page at a time, each kind on its own: */

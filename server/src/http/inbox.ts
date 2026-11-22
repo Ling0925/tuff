@@ -395,7 +395,6 @@ inbox.get('/activity', async (c) => {
   /* The lines whose thing or whose person says these words —
      `docs/specs/find.md`. */
   const words = (c.req.query('q') ?? '').trim()
-  const like = `%${words.replace(/[\\%_]/g, (x) => `\\${x}`)}%`
   /* Which tab the lines happened in. Read from
      the action, as the screen reads its place. */
   const IN: Record<string, string[]> = {
@@ -407,11 +406,59 @@ inbox.get('/activity', async (c) => {
   }
   const where = IN[c.req.query('in') ?? ''] ?? null
 
-  const rows = await withActor(
-    ctx.actorId,
-    ctx.workspaceId,
-    (tx) =>
-      tx<{ id: string; at: string; at_key: string }[]>`
+  const rows = await withActor(ctx.actorId, ctx.workspaceId, (tx) =>
+    feedLines(tx, ctx, {
+      limit,
+      from,
+      where,
+      settings: where !== null && c.req.query('in') === 'settings',
+      ...(actorId ? { actorId } : {}),
+      ...(projectId ? { projectId } : {}),
+      ...(objectId ? { objectId } : {}),
+      ...(words ? { words } : {}),
+    }),
+  )
+  const last = rows[rows.length - 1]
+  return c.json({
+    events: shapeLines(rows),
+    next_cursor: rows.length === limit && last ? `${last.at_key}_${last.id}` : null,
+  })
+})
+
+/** The feed's lines as they are answered: the face signed, the cursor's key gone. */
+export const shapeLines = (rows: { at_key: string }[]): Record<string, unknown>[] =>
+  rows.map(({ at_key: _, ...r }) => facedAs(r as Record<string, unknown>, 'actor_avatar', 'actor_avatar_url'))
+
+/**
+ * The feed's lines, newest first, under the reader's own policies — what
+ * `GET /api/activity` answers, and an agent's latest on its page.
+ * One query, so the rules about whose lines
+ * are whose are written once.
+ */
+export function feedLines(
+  tx: Tx,
+  ctx: AuthContext,
+  o: {
+    limit: number
+    from: { at: string; id: string | null } | null
+    where?: string[] | null
+    settings?: boolean
+    actorId?: string
+    projectId?: string
+    objectId?: string
+    words?: string
+    /** From this moment on, as the database writes one. */
+    since?: string
+  },
+) {
+  const { limit, from } = o
+  const where = o.where ?? null
+  const words = o.words ?? ''
+  const like = `%${words.replace(/[\\%_]/g, (x) => `\\${x}`)}%`
+  const actorId = o.actorId
+  const projectId = o.projectId
+  const objectId = o.objectId
+  return tx<{ id: string; at: string; at_key: string }[]>`
       select e.id, e.action, e.object_type, e.object_id, e.origin, e.at,
              to_char(e.at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as at_key,
              /* A copy says where it came from only to whoever can see
@@ -478,8 +525,9 @@ inbox.get('/activity', async (c) => {
         -- "Copied to …" on the original, only to whoever can see the copy.
         and (e.action <> 'task.copied' or (e.meta->>'to_project_id')::uuid in (select visible_projects()))
         ${where ? tx`and e.action like any(${where})` : tx``}
-        ${where && c.req.query('in') === 'settings' ? tx`and e.action not in ('project.create', 'project.copy', 'project.import')` : tx``}
+        ${where && o.settings ? tx`and e.action not in ('project.create', 'project.copy', 'project.import')` : tx``}
         ${actorId ? tx`and e.actor_id = ${actorId}` : tx``}
+        ${o.since ? tx`and e.at >= ${o.since}::text::timestamptz` : tx``}
         ${projectId ? tx`and e.project_id = ${projectId}` : tx``}
         ${objectId ? tx`and e.object_id = ${objectId}` : tx``}
         ${words ? tx`and (o.title ilike ${like} or a.name ilike ${like})` : tx``}
@@ -495,14 +543,8 @@ inbox.get('/activity', async (c) => {
               : tx`and e.at < ${from.at}::text::timestamptz + interval '1 millisecond'`
         }
       order by e.at desc, e.id desc
-      limit ${limit}`,
-  )
-  const last = rows[rows.length - 1]
-  return c.json({
-    events: rows.map(({ at_key: _, ...r }) => facedAs(r as Record<string, unknown>, 'actor_avatar', 'actor_avatar_url')),
-    next_cursor: rows.length === limit && last ? `${last.at_key}_${last.id}` : null,
-  })
-})
+      limit ${limit}`
+}
 
 /** What points at this, and what it points at. */
 inbox.get('/links/:type/:id', async (c) => {

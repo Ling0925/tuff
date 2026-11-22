@@ -29,6 +29,7 @@ import { Icon } from './glyphs.jsx'
 import { ProjectMark, markOf } from './icons.jsx'
 import { Stats, readPerson, type PersonRead } from './Stats.jsx'
 import { TheirWork } from './TheirWork.jsx'
+import { AgentWeek } from './AgentWeek.jsx'
 import { ROUTINE_URL, keyFits } from './WebhookKey.jsx'
 import { ReachEditor, ReachPicker, ReachShown, reachName, reachOfRow, type Reach } from './AgentReach.jsx'
 import { WEBHOOK_KEY as K } from '../words/webhookKey.js'
@@ -188,6 +189,7 @@ export function AgentPage({
   onChanged,
   onProject,
   onOpen,
+  onOpenIn,
   onMessage,
 }: {
   agent: Agent
@@ -201,6 +203,8 @@ export function AgentPage({
   onChanged: () => Promise<void>
   onProject: (projectId: string) => void
   onOpen: (projectId: string, taskId: string) => void
+  /** A line of its week opens what it happened to. */
+  onOpenIn?: (projectId: string, tool: string, objectId: string) => void
   /** The conversation with it — beside this page where there is room, */
   onMessage?: (actorId: string) => void
 }) {
@@ -533,6 +537,14 @@ export function AgentPage({
       {/* Its numbers, the person's block. No
           hours: an agent logs no time. */}
       {work && <Stats open={work.open} weeks={work.weeks} days={work.days} />}
+
+      {/* What it did this week, and what that cost.
+          Drawn only for whoever may read it; the server says who. */}
+      <AgentWeek
+        agentId={agent.actor_id}
+        onOpenTask={onOpen}
+        onOpenLine={(projectId, tool, objectId) => (tool === 'tasks' ? onOpen(projectId, objectId) : onOpenIn?.(projectId, tool, objectId))}
+      />
 
       {/* How it is reached, on a ground of its own, with the picker the
           window that connected it drew — changed here by whoever manages

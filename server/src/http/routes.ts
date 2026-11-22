@@ -3,6 +3,7 @@ import { oneLine } from '../text.js'
 import { address } from './address.js'
 import { waysIn } from './waysIn.js'
 import { agents } from './agents.js'
+import { agentWork } from './agentWork.js'
 import { password } from './password.js'
 import { ownership } from './ownership.js'
 import { Hono, type Context } from 'hono'
@@ -1193,6 +1194,8 @@ app.route('/api', preview)
 app.route('/api', address)
 app.route('/api', waysIn)
 app.route('/api', agents)
+/* What an agent did this week. */
+app.route('/api', agentWork)
 app.route('/api', password)
 app.route('/api', ownership)
 app.route('/api', oauthApi)

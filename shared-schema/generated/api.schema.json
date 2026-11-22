@@ -2479,6 +2479,7 @@
                   "agent.connect",
                   "agent.manage",
                   "agent.remove",
+                  "agent.work.read",
                   "feedback.manage",
                   "token.issue.own",
                   "token.revoke.any",
@@ -9759,6 +9760,187 @@
         "person"
       ]
     },
+    "AgentWork": {
+      "title": "AgentWork",
+      "type": "object",
+      "properties": {
+        "period": {
+          "type": "string",
+          "enum": [
+            "week",
+            "month"
+          ]
+        },
+        "since": {
+          "type": "string"
+        },
+        "took": {
+          "$ref": "#/$defs/Count"
+        },
+        "finished": {
+          "$ref": "#/$defs/Count"
+        },
+        "open": {
+          "$ref": "#/$defs/Count"
+        },
+        "asked": {
+          "$ref": "#/$defs/Count"
+        },
+        "answered": {
+          "$ref": "#/$defs/Count"
+        },
+        "tokens": {
+          "type": "number"
+        },
+        "cost_usd": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "spent_on": {
+          "$ref": "#/$defs/Count"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ActivityLine"
+          }
+        }
+      },
+      "required": [
+        "period",
+        "since",
+        "took",
+        "finished",
+        "open",
+        "asked",
+        "answered",
+        "tokens",
+        "spent_on",
+        "events"
+      ]
+    },
+    "AgentWorkTask": {
+      "title": "AgentWorkTask",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "number": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "due_on": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "completed_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "project_id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "project_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "project_key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "project_slug": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "overdue": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tokens": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "cost_usd": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "questions": {
+          "$ref": "#/$defs/Count"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "project_id"
+      ]
+    },
+    "AgentWorkTasks": {
+      "title": "AgentWorkTasks",
+      "type": "object",
+      "properties": {
+        "tasks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AgentWorkTask"
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "tasks"
+      ]
+    },
     "InviteRow": {
       "title": "InviteRow",
       "type": "object",
@@ -11407,6 +11589,7 @@
     "agent.connect",
     "agent.manage",
     "agent.remove",
+    "agent.work.read",
     "feedback.manage",
     "token.issue.own",
     "token.revoke.any",

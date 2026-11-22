@@ -360,6 +360,18 @@ test('an agent is managed by whoever connected it alone, and taken away by the o
   assert.equal(can('agent.remove', base('member', { connectedIt: true, agent: true })), false)
 })
 
+test('an agent’s week is read where the Members screen is open, or by whoever connected it', () => {
+  const closed = { ...DEFAULT_SETTINGS, who_sees_members: 'owner' as const }
+  assert.equal(can('agent.work.read', base('owner')), true)
+  assert.equal(can('agent.work.read', base('member')), true)
+  assert.equal(can('agent.work.read', base('member', { settings: closed })), false)
+  assert.equal(can('agent.work.read', base('member', { settings: closed, connectedIt: true })), true)
+  assert.equal(can('agent.work.read', base('member', { settings: closed, maySeeMembers: true })), true)
+  // Never an agent, never a token made for some projects.
+  assert.equal(can('agent.work.read', base('member', { agent: true, viaMcp: true, plan: 'team', connectedIt: true })), false)
+  assert.equal(can('agent.work.read', base('owner', { tokenLimited: true, connectedIt: true })), false)
+})
+
 /*
  * Leaving is anybody's who is on the project, and asks for nothing they
  * were given there.

@@ -1456,6 +1456,52 @@ export const PersonPage = z.object({
   hours: z.array(PersonHours).optional(),
 })
 
+/**
+ * What an agent did this week or this month — `GET /api/agents/:id/work`:
+ * the tasks it took, finished and holds, the questions it asked and how
+ * many were answered, what its clients said it spent, and its latest ten
+ * lines in the feed in the period. Counted under the reader's own sight.
+ */
+export const AgentWork = z.object({
+  period: z.enum(['week', 'month']),
+  /** Where the period began, on the reader's calendar. */
+  since: z.string(),
+  took: Count,
+  finished: Count,
+  open: Count,
+  asked: Count,
+  answered: Count,
+  tokens: z.number(),
+  cost_usd: z.number().nullable().optional(),
+  /** How many tasks the spend was on. */
+  spent_on: Count,
+  events: z.array(ActivityLine),
+})
+/** One of its numbers' tasks — `GET /api/agents/:id/work/tasks?of=`. */
+export const AgentWorkTask = z.object({
+  id: Uuid,
+  number: z.number().int().nullable().optional(),
+  title: z.string(),
+  due_on: z.string().nullable().optional(),
+  completed_at: z.string().nullable().optional(),
+  project_id: Uuid,
+  project_name: z.string().nullable().optional(),
+  project_key: z.string().nullable().optional(),
+  project_slug: z.string().nullable().optional(),
+  overdue: z.boolean().nullable().optional(),
+  icon: z.string().nullable().optional(),
+  color: z.string().nullable().optional(),
+  /** `of=spend`: what it spent on this task in the period. */
+  tokens: z.number().nullable().optional(),
+  cost_usd: z.number().nullable().optional(),
+  /** `of=asked` or `answered`: how many of its questions on this task. */
+  questions: Count.optional(),
+})
+export const AgentWorkTasks = z.object({
+  tasks: z.array(AgentWorkTask),
+  next_cursor: z.string().nullable().optional(),
+})
+
 /** An invitation still out, used or revoked — `GET /api/invites`. */
 export const InviteRow = z.object({
   id: Uuid,

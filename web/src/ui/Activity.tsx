@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, unlessOffline } from '../data/api.js'
 import { recall, remember } from '../data/memory.js'
-import { alsoSaid, clock, day, verb, whereIn, type Event } from '../data/said.js'
+import { alsoSaid, clock, day, dayAndClock, verb, whereIn, type Event } from '../data/said.js'
 import { LABEL, TOOL_ICON } from '../data/tools.js'
 import { Icon } from './glyphs.jsx'
 import { Avatar, EmptyState, Find, GroupLabel, Hairline, PageTitle, Panel, Segments, Toolbar } from './kit.jsx'
@@ -139,8 +139,6 @@ export function Activity({
     days[days.length - 1]!.of.push(e)
   }
 
-  const TOOL: Record<string, string> = { task: 'tasks', post: 'posts', file: 'files' }
-
   return (
     <div className="reads flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto" data-reads-down data-foot>
       {/* The same heading every tool has: a screen without one is a screen
@@ -150,105 +148,9 @@ export function Activity({
         <section key={on} className="flex shrink-0 flex-col gap-3">
           <GroupLabel>{on}</GroupLabel>
           <Panel>
-            {of.map((e, i) => {
-              const tool = e.object_type ? TOOL[e.object_type] : undefined
-              const named = Boolean(tool && e.object_id && e.object_title && !e.action.endsWith('.delete'))
-              const place = whereIn(e)
-              const room = e.object_type === 'conversation' && Boolean(e.object_id && e.object_title) && e.action !== 'conversation.delete'
-              return (
-                <div key={e.id} className="contents">
-                  {i > 0 && <Hairline inset={14} />}
-                  <div
-                    data-event
-                    data-row={named || room ? '' : undefined}
-                    onClick={
-                      named || room
-                        ? (ev) => {
-                            if ((ev.target as Element).closest('button,a')) return
-                            if (room) onOpen('messages', e.object_id!)
-                            else onOpen(tool!, e.object_id!)
-                          }
-                        : undefined
-                    }
-                    className="flex items-start gap-2 px-4 py-3 text-base"
-                  >
-                    {/*
-                      The face is centred on the first line of the sentence,
-                      not on the block and not on its baseline.
-                      
-                      The row was `items-baseline` with the face pushed down
-                      four pixels to compensate, which is a number that was
-                      right for one font size and one avatar: the letter got
-                      smaller, and the face ended up five and a half pixels
-                      below the middle of the words beside it.
-                      
-                      `1lh` is one line box of this row's own line-height, so
-                      the face sits in the middle of the first line whatever
-                      the type does — and a sentence that wraps still hangs
-                      below it rather than dragging it to the middle of two
-                      lines, which is what centring the whole row would do.
-                    */}
-                    <span className="flex shrink-0 items-center" style={{ height: '1lh' }}>
-                      <Avatar name={e.actor_name} id={e.actor_id} url={e.actor_avatar_url} size={22} />
-                    </span>
-                    <span className="min-w-px flex-1">
-                      <span className="text-ink">{e.actor_name}</span> <span className="text-ink-2">{verb(e)}</span>{' '}
-                      {/* A room by its name — the feed sends it only to
-                          whoever may see the room — and a thing removed by
-                          the name it had, neither of which opens anything. */}
-                      {/* A room opens where it is, the project's Chat on it —
-                          unless it was the line about its removal. */}
-                      {!named &&
-                        e.object_title &&
-                        e.object_type === 'conversation' &&
-                        e.object_id &&
-                        e.action !== 'conversation.delete' && (
-                          <button data-open-event onClick={() => onOpen('messages', e.object_id!)} className="text-left text-ink">
-                            #{e.object_title}
-                          </button>
-                        )}
-                      {!named && e.object_title && (e.object_type !== 'conversation' || e.action === 'conversation.delete') && (
-                        <span data-named className="text-ink">
-                          {e.object_type === 'conversation' ? `#${e.object_title}` : e.object_title}
-                        </span>
-                      )}
-                      {named && (
-                        <button data-open-event onClick={() => onOpen(tool!, e.object_id!)} className="text-left text-ink">
-                          {e.object_title}
-                        </button>
-                      )}
-                      {alsoSaid(e) && (
-                        <span data-detail className="text-ink-2">
-                          {' '}
-                          {alsoSaid(e)}
-                        </span>
-                      )}
-                      {/* A person must be able to tell their own action from
-                          one their tool took for them. */}
-                      <Origin origin={e.origin} authorId={e.actor_id} lead />
-                    </span>
-                    {/* Where it happened, in a column of its own before the
-                        time: in grey, there for somebody scanning down for
-                        "what happened in Docs" and out of the sentence's way.
-                        The glyph alone on a phone. */}
-                    <span
-                      data-where={place ?? ''}
-                      title={place ? LABEL[place] : undefined}
-                      className="flex shrink-0 items-center gap-2 text-sm sm:w-[136px] text-ink-3"
-                      style={{ height: '1lh' }}
-                    >
-                      {place && (
-                        <>
-                          <Icon name={TOOL_ICON[place]!} size={14} />
-                          <span className="truncate max-sm:hidden">{LABEL[place]}</span>
-                        </>
-                      )}
-                    </span>
-                    <span className="shrink-0 tabular-nums text-ink-3">{clock(e.at)}</span>
-                  </div>
-                </div>
-              )
-            })}
+            {of.map((e, i) => (
+              <EventRow key={e.id} e={e} first={i === 0} onOpen={onOpen} />
+            ))}
           </Panel>
         </section>
       ))}
@@ -279,6 +181,121 @@ export function Activity({
           {more ? MORE.loading : W.showMore}
         </button>
       )}
+    </div>
+  )
+}
+
+const TOOL: Record<string, string> = { task: 'tasks', post: 'posts', file: 'files' }
+
+/**
+ * One line of the feed — a project's Activity, and an agent's latest on its
+ * page: who, what they did, to what, where and
+ * when, opening what it happened to.
+ */
+export function EventRow({
+  e,
+  first,
+  onOpen,
+  dated = false,
+}: {
+  e: Event
+  /** The first of its panel, with no line above it. */
+  first: boolean
+  onOpen: (tool: string, objectId: string) => void
+  /** The day beside the hour, where no heading above says it. */
+  dated?: boolean
+}) {
+  const tool = e.object_type ? TOOL[e.object_type] : undefined
+  const named = Boolean(tool && e.object_id && e.object_title && !e.action.endsWith('.delete'))
+  const place = whereIn(e)
+  const room = e.object_type === 'conversation' && Boolean(e.object_id && e.object_title) && e.action !== 'conversation.delete'
+  return (
+    <div className="contents">
+      {!first && <Hairline inset={14} />}
+      <div
+        data-event
+        data-row={named || room ? '' : undefined}
+        onClick={
+          named || room
+            ? (ev) => {
+                if ((ev.target as Element).closest('button,a')) return
+                if (room) onOpen('messages', e.object_id!)
+                else onOpen(tool!, e.object_id!)
+              }
+            : undefined
+        }
+        className="flex items-start gap-2 px-4 py-3 text-base"
+      >
+        {/*
+          The face is centred on the first line of the sentence,
+          not on the block and not on its baseline.
+          
+          The row was `items-baseline` with the face pushed down
+          four pixels to compensate, which is a number that was
+          right for one font size and one avatar: the letter got
+          smaller, and the face ended up five and a half pixels
+          below the middle of the words beside it.
+          
+          `1lh` is one line box of this row's own line-height, so
+          the face sits in the middle of the first line whatever
+          the type does — and a sentence that wraps still hangs
+          below it rather than dragging it to the middle of two
+          lines, which is what centring the whole row would do.
+        */}
+        <span className="flex shrink-0 items-center" style={{ height: '1lh' }}>
+          <Avatar name={e.actor_name} id={e.actor_id} url={e.actor_avatar_url} size={22} />
+        </span>
+        <span className="min-w-px flex-1">
+          <span className="text-ink">{e.actor_name}</span> <span className="text-ink-2">{verb(e)}</span>{' '}
+          {/* A room by its name — the feed sends it only to
+              whoever may see the room — and a thing removed by
+              the name it had, neither of which opens anything. */}
+          {/* A room opens where it is, the project's Chat on it —
+              unless it was the line about its removal. */}
+          {!named && e.object_title && e.object_type === 'conversation' && e.object_id && e.action !== 'conversation.delete' && (
+            <button data-open-event onClick={() => onOpen('messages', e.object_id!)} className="text-left text-ink">
+              #{e.object_title}
+            </button>
+          )}
+          {!named && e.object_title && (e.object_type !== 'conversation' || e.action === 'conversation.delete') && (
+            <span data-named className="text-ink">
+              {e.object_type === 'conversation' ? `#${e.object_title}` : e.object_title}
+            </span>
+          )}
+          {named && (
+            <button data-open-event onClick={() => onOpen(tool!, e.object_id!)} className="text-left text-ink">
+              {e.object_title}
+            </button>
+          )}
+          {alsoSaid(e) && (
+            <span data-detail className="text-ink-2">
+              {' '}
+              {alsoSaid(e)}
+            </span>
+          )}
+          {/* A person must be able to tell their own action from
+              one their tool took for them. */}
+          <Origin origin={e.origin} authorId={e.actor_id} lead />
+        </span>
+        {/* Where it happened, in a column of its own before the
+            time: in grey, there for somebody scanning down for
+            "what happened in Docs" and out of the sentence's way.
+            The glyph alone on a phone. */}
+        <span
+          data-where={place ?? ''}
+          title={place ? LABEL[place] : undefined}
+          className="flex shrink-0 items-center gap-2 text-sm sm:w-[136px] text-ink-3"
+          style={{ height: '1lh' }}
+        >
+          {place && (
+            <>
+              <Icon name={TOOL_ICON[place]!} size={14} />
+              <span className="truncate max-sm:hidden">{LABEL[place]}</span>
+            </>
+          )}
+        </span>
+        <span className="shrink-0 tabular-nums text-ink-3">{dated ? dayAndClock(e.at) : clock(e.at)}</span>
+      </div>
     </div>
   )
 }

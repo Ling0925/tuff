@@ -730,7 +730,14 @@ tasks.post('/projects/:projectId/tasks', async (c) => {
         assignees,
         whatFor: { assigned: (l) => LINES(l).gaveYou(who(l)) },
       })
-      await record(tx, ctx, 'task.create', { projectId, objectType: 'task', objectId: id })
+      /* With who it was given to, by id: an agent's week counts what it
+         took from these lines. */
+      await record(tx, ctx, 'task.create', {
+        projectId,
+        objectType: 'task',
+        objectId: id,
+        ...(assignees.length ? { meta: { given_ids: assignees } } : {}),
+      })
       /* Its number, which the trigger gave it, so the screen that made it can
        open it at the address a person reads. */
       const [n] = await tx<{ number: number }[]>`select number from task where id = ${id}`
@@ -1557,8 +1564,12 @@ tasks.patch('/tasks/:id', async (c) => {
       /* Who came on, or who went off when nobody came on: the feed's line is
        one of the two, as it was for one person. */
       const names = async (ids: string[]) => (await Promise.all(ids.map(whose))).filter(Boolean).join(', ')
-      if (added.length) meta.given_to = await names(added)
-      else if (removed.length) meta.taken_off = (await names(removed)) || null
+      /* And their ids beside the names, which two agents both called
+         Claude Code share. */
+      if (added.length) {
+        meta.given_to = await names(added)
+        meta.given_ids = added
+      } else if (removed.length) meta.taken_off = (await names(removed)) || null
       if (d.due_on !== undefined && d.due_on !== row.due_on) meta.due = d.due_on ?? null
       if (d.priority !== undefined && d.priority !== row.priority) meta.priority = d.priority ?? null
       if (d.title !== undefined && d.title !== row.title) {
@@ -2700,6 +2711,7 @@ tasks.post('/tasks/:id/steps', async (c) => {
       projectId: t.project_id,
       objectType: 'task',
       objectId: id,
+      ...(assignees.length ? { meta: { given_ids: assignees } } : {}),
     })
     /* The part as the list draws it, so the list behind its parent's screen
        gains the row, and the parent its count, without reading the project

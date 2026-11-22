@@ -178,6 +178,13 @@ export const Action = z.enum([
    */
   'agent.remove',
   /*
+   * Reading what one agent did this week or month — the tasks it took and
+   * finished, the questions it asked, what it spent. Whoever the Members
+   * screen is open to, and whoever connected it, since it works for them;
+   * the rows stay the reader's own.
+   */
+  'agent.work.read',
+  /*
    * Setting up a project's public feedback page.
    * Whoever runs the project, on a paid plan, and never through a token:
    * putting a page on the web is a person's press.
@@ -475,7 +482,7 @@ const has = (input: PermissionInput, right: Right): boolean =>
 const NEVER_AN_AGENT: readonly Action[] = [
   'workspace.create', 'workspace.enter',
   'project.create', 'project.member.add', 'project.member.remove', 'project.leave', 'project.archive', 'project.tools',
-  'people.invite', 'people.role', 'members.read', 'agent.connect', 'agent.manage', 'agent.remove', 'token.issue.own',
+  'people.invite', 'people.role', 'members.read', 'agent.connect', 'agent.manage', 'agent.remove', 'agent.work.read', 'token.issue.own',
   'channel.create', 'channel.create.workspace', 'channel.delete', 'task.delete', 'file.delete', 'file.share', 'time.any', 'feedback.manage',
   'instance', 'task.remind', 'hook.manage', 'question.answer', 'workspace.leave', 'channel.leave', 'list.agent',
 ]
@@ -491,7 +498,7 @@ const NEVER_A_LIMITED_TOKEN: readonly Action[] = [
   'workspace.billing', 'workspace.transfer', 'workspace.delete',
   'people.invite', 'people.role', 'members.read',
   'project.create', 'channel.create.workspace',
-  'agent.connect', 'agent.manage', 'agent.remove',
+  'agent.connect', 'agent.manage', 'agent.remove', 'agent.work.read',
   'token.issue.own', 'token.revoke.any', 'audit.read', 'operator', 'instance', 'hook.manage',
 ]
 
@@ -687,6 +694,12 @@ export function can(action: Action, input: PermissionInput): boolean {
    * one person. Who is in the workspace is `people.read` and is not asked
    * here: closing the screen does not take anybody out of a picker.
    */
+  /* An agent's week: the Members screen's, or its connector's — the rows
+     are bounded by what the reader sees whatever this says. */
+  if (action === 'agent.work.read') {
+    if (role !== 'owner' && role !== 'member') return false
+    return input.connectedIt === true || can('members.read', input)
+  }
   if (action === 'members.read') {
     if (role === 'owner') return true
     if (input.maySeeMembers != null) return input.maySeeMembers && role === 'member'
