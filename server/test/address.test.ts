@@ -93,6 +93,7 @@ test('the address changes when the new one confirms it, the password having been
     kind: 'email',
     email: to,
     account: { id: me.actor_id, name: 'Eve', email: `m…@example.com` },
+    needs_session: true,
   })
   const followed = await confirm(token, me.access_token)
   assert.equal(followed.status, 200)

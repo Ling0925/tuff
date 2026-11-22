@@ -7488,41 +7488,53 @@
       "type": "object",
       "properties": {
         "kind": {
-          "type": "string",
-          "enum": [
-            "approve",
-            "email"
-          ]
+          "$ref": "#/$defs/AddressLinkKind"
         },
         "email": {
           "type": "string"
         },
         "account": {
-          "type": "object",
-          "properties": {
-            "id": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-            },
-            "name": {
-              "type": "string"
-            },
-            "email": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "id",
-            "name",
-            "email"
-          ]
+          "$ref": "#/$defs/AddressLinkAccount"
+        },
+        "needs_session": {
+          "type": "boolean"
         }
       },
       "required": [
         "kind",
         "email",
-        "account"
+        "account",
+        "needs_session"
+      ]
+    },
+    "AddressLinkAccount": {
+      "title": "AddressLinkAccount",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "name": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "email"
+      ]
+    },
+    "AddressLinkKind": {
+      "title": "AddressLinkKind",
+      "type": "string",
+      "enum": [
+        "approve",
+        "email"
       ]
     },
     "Pending": {

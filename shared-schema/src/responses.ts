@@ -2021,10 +2021,19 @@ export const Verified = Session.partial().extend({
  * address's link, confirmed only from a session of `account`
  * (`POST /api/me/email/confirm`). The account's address is masked.
  */
+export const AddressLinkKind = z.enum(['approve', 'email'])
+/** The account a change of address moves: its name, and its address masked. */
+export const AddressLinkAccount = z.object({ id: Uuid, name: z.string(), email: z.string() })
 export const AddressLink = z.object({
-  kind: z.enum(['approve', 'email']),
+  kind: AddressLinkKind,
   email: z.string(),
-  account: z.object({ id: Uuid, name: z.string(), email: z.string() }),
+  account: AddressLinkAccount,
+  /** Whether confirming takes a session of `account`. False for an account
+      whose address was never proved, or proved only by a link handed over:
+      it has no way to sign in on another device, and confirming puts out
+      whoever held it, so the press alone confirms. False for
+      `approve` too, whose press asks for no session. */
+  needs_session: z.boolean(),
 })
 
 /**

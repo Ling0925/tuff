@@ -164,6 +164,8 @@ const RESPONSES: Record<string, z.ZodType> = {
   InviteForMe: S.InviteForMe,
   Verified: S.Verified,
   AddressLink: S.AddressLink,
+  AddressLinkAccount: S.AddressLinkAccount,
+  AddressLinkKind: S.AddressLinkKind,
   Pending: S.Pending,
   TwoFactor: S.TwoFactor,
   TwoFactorBegun: S.TwoFactorBegun,

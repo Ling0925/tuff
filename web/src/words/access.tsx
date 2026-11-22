@@ -69,6 +69,18 @@ export const ACCESS = say({
     (email: string, name: string, now: string) =>
       `${email} deviendra l’adresse e-mail de votre compte Tuff, ${name} (${now}). Vous vous connecterez désormais avec elle.`,
   ],
+  /* An account whose address nobody proved: confirmed from anywhere, and
+     whoever was signed in to it is signed out. */
+  saidAskConfirmNew: [
+    (email: string, name: string, now: string) =>
+      `${email} will be the email for the Tuff account ${name} (${now}). After you confirm, everyone signed in to it is signed out, and we’ll send you a link to choose a password.`,
+    (email: string, name: string, now: string) =>
+      `${email} deviendra l’adresse e-mail du compte Tuff ${name} (${now}). Après votre confirmation, tout le monde sera déconnecté de ce compte, et nous vous enverrons un lien pour choisir un mot de passe.`,
+  ],
+  saidChangedChoose: [
+    (email: string) => `We sent a link to ${email}. Open it to choose a password, then sign in with ${email}.`,
+    (email: string) => `Nous avons envoyé un lien à ${email}. Ouvrez-le pour choisir un mot de passe, puis connectez-vous avec ${email}.`,
+  ],
   confirm: ['Confirm', 'Confirmer'],
   askApprove: ['Approve the new email.', 'Approuvez la nouvelle adresse e-mail.'],
   saidAskApprove: [

@@ -30,6 +30,12 @@ data class Contract (
     @SerialName("AddressLink")
     val addressLink: AddressLink? = null,
 
+    @SerialName("AddressLinkAccount")
+    val addressLinkAccount: AddressLinkAccount? = null,
+
+    @SerialName("AddressLinkKind")
+    val addressLinkKind: AddressLinkKind? = null,
+
     @SerialName("AgentFacePick")
     val agentFacePick: AgentFacePick? = null,
 
@@ -802,20 +808,23 @@ data class Actor (
 
 @Serializable
 data class AddressLink (
-    val account: Account,
+    val account: AddressLinkAccount,
     val email: String,
-    val kind: Kind
+    val kind: AddressLinkKind,
+
+    @SerialName("needs_session")
+    val needsSession: Boolean
 )
 
 @Serializable
-data class Account (
+data class AddressLinkAccount (
     val email: String,
     val id: String,
     val name: String
 )
 
 @Serializable
-enum class Kind(val value: String) {
+enum class AddressLinkKind(val value: String) {
     @SerialName("approve") Approve("approve"),
     @SerialName("email") Email("email");
 }

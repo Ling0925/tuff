@@ -295,6 +295,9 @@ export async function sendToNew(base: string, actorId: string, to: string, scree
         'Confirm the change to sign in with this address from now on. The link expires in 24 hours. If this wasn’t you, ignore this email and nothing will change.',
         'Confirmez le changement pour vous connecter désormais avec cette adresse. Le lien expire dans 24 heures. Si ce n’était pas vous, ignorez cet e-mail et rien ne changera.',
       ],
+      /* A review: the account that asked can confirm it, so a
+         forwarded letter hands the address over. */
+      forward: ['Don’t forward this email to anyone.', 'Ne transférez cet e-mail à personne.'],
       confirm: ['Confirm the new email', 'Confirmer la nouvelle adresse'],
     },
     language,
@@ -302,7 +305,7 @@ export async function sendToNew(base: string, actorId: string, to: string, scree
   await send({
     to,
     subject: w.subject,
-    ...letter([w.what, w.then], { label: w.confirm, url: link(base, token) }, language),
+    ...letter([w.what, w.then, w.forward], { label: w.confirm, url: link(base, token) }, language),
   })
 }
 
@@ -340,18 +343,38 @@ export async function sendForApproval(base: string, actorId: string, current: st
  * anybody presses.
  * Opening the link changes nothing. Null when the token is not one of
  * these, or is spent or out of time.
+ *
+ * `needsSession`: whether confirming takes a session of the account. Not
+ * for an address nobody proved or proved only by hand — such an account
+ * cannot sign in on another device, and confirming puts its previous
+ * holder out (`auth_email_confirm`, migration 316) — nor for an approval.
  */
-export async function peekLink(
-  token: string,
-): Promise<{ kind: 'approve' | 'email'; actorId: string; email: string; name: string; current: string } | null> {
+export async function peekLink(token: string): Promise<{
+  kind: 'approve' | 'email'
+  actorId: string
+  email: string
+  name: string
+  current: string
+  needsSession: boolean
+} | null> {
   const [t] = await asAuth(
     (tx) => tx<{ kind: 'approve' | 'email'; actor_id: string; email: string }[]>`
       select * from auth_email_ticket_peek(${hashToken(token)})`,
   )
   if (!t) return null
-  const [who] = await asAuth((tx) => tx<{ name: string; email: string }[]>`select name, email from auth_nowhere(${t.actor_id})`)
+  const [who] = await asAuth(
+    (tx) => tx<{ name: string; email: string; unproved: boolean; by_hand: boolean | null }[]>`
+      select name, email, unproved, auth_email_by_hand(${t.actor_id}) as by_hand from auth_nowhere(${t.actor_id})`,
+  )
   if (!who) return null
-  return { kind: t.kind, actorId: t.actor_id, email: t.email, name: who.name, current: who.email }
+  return {
+    kind: t.kind,
+    actorId: t.actor_id,
+    email: t.email,
+    name: who.name,
+    current: who.email,
+    needsSession: t.kind === 'email' && !who.unproved && !who.by_hand,
+  }
 }
 
 /**
@@ -392,11 +415,13 @@ export async function approveLink(base: string, token: string, screen: Language 
 export async function confirmLink(
   base: string,
   token: string,
-  session: string,
+  session: string | null,
   screen: Language = 'en',
-): Promise<{ kind: 'changed' | 'taken' | 'gone' | 'not_this_account'; email: string }> {
+): Promise<
+  { kind: 'changed'; email: string; actorId: string; putOut: boolean } | { kind: 'taken' | 'gone' | 'not_this_account'; email: string }
+> {
   const [r] = await asAuth(
-    (tx) => tx<{ said: string; actor_id: string | null; email: string | null; old: string | null }[]>`
+    (tx) => tx<{ said: string; actor_id: string | null; email: string | null; old: string | null; put_out: boolean }[]>`
       select * from auth_email_confirm(${hashToken(token)}, ${session}::uuid)`,
   )
   if (r?.said === 'not_this_account') return { kind: 'not_this_account', email: '' }
@@ -404,6 +429,12 @@ export async function confirmLink(
   if (r?.said !== 'changed' || !r.actor_id || !r.email) return { kind: 'gone', email: '' }
   const t = { actor_id: r.actor_id, email: r.email }
   const old = r.old ?? ''
+  /* Whoever held the account kept it: the new address is told whose it now
+     signs in to, so a letter forwarded to somebody who asked for it — "send
+     me that email" — is seen by the address's owner. Not when the holder
+     was put out: then the new address is sent the letter that chooses a
+     password, which says it already. */
+  if (!r.put_out) await tellNewAddress(base, t.actor_id, t.email, screen)
   /* A Google sign-in made under the old address goes with it: the company
      that owns that inbox owns that Google account too, and hands both to
      whoever comes next — migration 151. */
@@ -443,5 +474,38 @@ export async function confirmLink(
       ...letter([w.what, w.then], { label: w.signIn, url: `${base}/signin` }, language),
     })
   }
-  return { kind: 'changed', email: t.email }
+  return { kind: 'changed', email: t.email, actorId: t.actor_id, putOut: r.put_out }
+}
+
+/**
+ * Told to the new address once it signs in to an account — a review: the confirmation letter forwarded to the person who asked for
+ * the change ("send me that email") would otherwise attach the address
+ * with its owner none the wiser. Names the account, and what to do.
+ */
+async function tellNewAddress(base: string, actorId: string, to: string, screen: Language): Promise<void> {
+  const [who] = await asAuth((tx) => tx<{ name: string }[]>`select name from auth_nowhere(${actorId})`)
+  const name = (who?.name ?? '').slice(0, 80)
+  const language = await languageFor(actorId, screen)
+  const support = edition.vendor?.support ?? null
+  const w = say(
+    {
+      subject: ['This email now signs in to a Tuff account', 'Cette adresse e-mail permet maintenant de se connecter à un compte Tuff'],
+      what: [
+        `This address now signs in to the Tuff account ${name}.`,
+        `Cette adresse permet maintenant de se connecter au compte Tuff ${name}.`,
+      ],
+      then: support
+        ? [
+            `If this wasn’t you, don’t use that account, and email ${support} from this address.`,
+            `Si ce n’était pas vous, n’utilisez pas ce compte, et écrivez à ${support} depuis cette adresse.`,
+          ]
+        : [
+            'If this wasn’t you, don’t use that account, and tell the owner of this server.',
+            'Si ce n’était pas vous, n’utilisez pas ce compte, et prévenez le propriétaire de ce serveur.',
+          ],
+      signIn: ['Sign in', 'Se connecter'],
+    },
+    language,
+  )
+  await send({ to, subject: w.subject, ...letter([w.what, w.then], { label: w.signIn, url: `${base}/signin` }, language) })
 }

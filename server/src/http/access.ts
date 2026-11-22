@@ -20,7 +20,7 @@ import {
   startSession,
 } from '../auth/flows.js'
 import { NO_WORKSPACE_YET } from './nowhere.js'
-import { approveLink, masked, peekLink, tellWayIn } from '../auth/address.js'
+import { approveLink, confirmLink, masked, peekLink, tellWayIn } from '../auth/address.js'
 import { tellInviter } from '../notify.js'
 import { letter, mailOn, send } from '../mail.js'
 import { heard, languageFor, say } from '../words.js'
@@ -1092,8 +1092,39 @@ access.post('/verify/peek', async (c) => {
     kind: about.kind,
     email: about.email,
     account: { id: about.actorId, name: about.name, email: masked(about.current) },
+    needs_session: about.needsSession,
   })
 })
+
+/**
+ * The new address confirmed by a press, and the answer — for both doors:
+ * `POST /api/me/email/confirm` with the account's session, and
+ * `POST /auth/verify` with none for an account nobody proved or proved by
+ * hand (`session` null). The database decides which may: `auth_email_confirm`,
+ * migration 316. When the previous holder was put out with it, the
+ * password went too, so the new address is sent the letter that chooses
+ * one, or the person is left with no way in.
+ */
+export async function answerConfirmation(c: Context, token: string, session: string | null) {
+  const done = await confirmLink(origin(c), token, session, heard(c))
+  if (done.kind === 'not_this_account') {
+    return c.json(
+      {
+        error: {
+          code: 'not_this_account',
+          message: 'This link is for another account. Sign in to the account that asked for the change, then confirm.',
+        },
+      },
+      403,
+    )
+  }
+  if (done.kind === 'gone') return c.json({ error: { code: 'gone', message: 'This link has already been used or has expired.' } }, 410)
+  if (done.kind === 'taken') {
+    return c.json({ error: { code: 'conflict', message: 'That email address already has an account.' } }, 409)
+  }
+  if (done.kind === 'changed' && done.putOut) await sendChoosePassword(c, done.actorId, done.email)
+  return c.json({ changed: true, email: done.email })
+}
 
 /**
  * A confirmation link from before the password came after the proof, followed — a letter still in
@@ -1111,12 +1142,19 @@ access.post('/verify', async (c) => {
   /*
    * A link from a change of address comes here too, and nothing it says
    * is taken from opening it. The old address's yes (`approve`) only
-   * from a press, said in the body. The new address's confirmation never
-   * here: it is pressed from the account's own session, at
-   * `POST /api/me/email/confirm`. The apps from before open the link and
-   * post it at once; they are told no, and nothing changes.
+   * from a press, said in the body. The new address's confirmation is
+   * pressed from the account's own session, at `POST /api/me/email/confirm`
+   * — except for an account nobody proved or proved by hand, which has no
+   * way to sign in elsewhere: its press comes here with no session, and the
+   * database puts the previous holder out with it. The apps from before
+   * open the link and post it at once, without `pressed`; they are told no,
+   * and nothing changes.
    */
   const about = await peekLink(body.data.token)
+  if (about?.kind === 'email' && !about.needsSession) {
+    if (body.data.pressed) return answerConfirmation(c, body.data.token, null)
+    return c.json({ error: { code: 'press_required', message: 'Open this link in a browser and confirm the change there.' } }, 403)
+  }
   if (about?.kind === 'email') {
     return c.json(
       {

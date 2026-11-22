@@ -266,16 +266,27 @@ export function Verify({ token }: { token: string }) {
   return /^(eml|apv)_/.test(token) ? <ChangeOfAddress token={token} /> : <Confirmation token={token} />
 }
 
-type AddressLink = { kind: 'approve' | 'email'; email: string; account: { id: string; name: string; email: string } }
+type AddressLink = {
+  kind: 'approve' | 'email'
+  email: string
+  account: { id: string; name: string; email: string }
+  needs_session: boolean
+}
 
 /* Whose a link to confirm is, against who this browser is signed in as: a
    press from anybody else is refused by the server anyway, so it is not
-   offered. */
+   offered. A link that asks no session — an approval, or an account whose
+   address nobody proved — is pressed from anywhere. */
 function placed(l: AddressLink): 'ask' | 'sign-in' | 'other' {
-  if (l.kind === 'approve') return 'ask'
+  if (!l.needs_session) return 'ask'
   const s = stored()
   return !s ? 'sign-in' : s.actor_id === l.account.id ? 'ask' : 'other'
 }
+
+/* A name somebody chose, at most this long where the page says it: a name
+   written to look like a warning does not get to fill the page. */
+const NAME_SHOWN = 60
+const shortName = (name: string) => (name.length > NAME_SHOWN ? `${name.slice(0, NAME_SHOWN - 1)}…` : name)
 
 /**
  * A link of a change of address. Opening it changes nothing: the page says
@@ -314,13 +325,16 @@ function ChangeOfAddress({ token }: { token: string }) {
     if (!link || busy) return
     setBusy(true)
     try {
-      if (link.kind === 'approve') {
+      /* No session asked: the old address's yes, or a new address for an
+         account nobody proved, whose previous holder the press puts out. */
+      if (!link.needs_session) {
         const r = await fetch('/auth/verify', {
           method: 'POST',
           headers: authHeaders(),
           body: JSON.stringify({ token, pressed: true }),
         }).catch(() => null)
-        setState(r?.ok ? 'approved' : r?.status === 410 ? 'gone' : 'failed')
+        const done = link.kind === 'approve' ? 'approved' : 'changed'
+        setState(r?.ok ? done : r?.status === 410 ? 'gone' : r?.status === 409 ? 'taken' : 'failed')
         return
       }
       await api('/me/email/confirm', { method: 'POST', body: JSON.stringify({ token, pressed: true }) })
@@ -353,9 +367,12 @@ function ChangeOfAddress({ token }: { token: string }) {
   }
 
   if (state === 'reading') return null
-  const name = link?.account.name ?? ''
+  const name = shortName(link?.account.name ?? '')
   const now = link?.account.email ?? ''
   const email = link?.email ?? ''
+  /* A new address for an account nobody proved: whoever held it goes, and
+     the password with them. */
+  const weak = link?.kind === 'email' && !link.needs_session
   const title = {
     ask: link?.kind === 'approve' ? W.askApprove : W.askConfirm,
     'sign-in': W.signInToConfirm,
@@ -367,17 +384,23 @@ function ChangeOfAddress({ token }: { token: string }) {
     failed: W.failed,
   }[state]
   const said = {
-    ask: link?.kind === 'approve' ? W.saidAskApprove(email, name, now) : W.saidAskConfirm(email, name, now),
+    ask:
+      link?.kind === 'approve'
+        ? W.saidAskApprove(email, name, now)
+        : weak
+          ? W.saidAskConfirmNew(email, name, now)
+          : W.saidAskConfirm(email, name, now),
     'sign-in': W.saidSignInToConfirm(email, name, now),
     other: W.saidOtherAccount(email, name, now),
-    changed: W.saidChanged(email),
+    changed: weak ? W.saidChangedChoose(email) : W.saidChanged(email),
     approved: W.saidApproved(email),
     taken: W.saidTaken,
     gone: W.saidGoneMoving,
     failed: W.saidFailed,
   }[state]
   const button = 'flex h-11 w-full items-center justify-center rounded-full text-md font-medium'
-  const signedIn = Boolean(stored())
+  /* After a weak account's change every session of it ended. */
+  const signedIn = Boolean(stored()) && !(weak && state === 'changed')
   return (
     <AuthShell title={title}>
       <div data-testid="verify" data-state={state} data-kind={link?.kind} className="flex flex-col items-center gap-4 text-center">

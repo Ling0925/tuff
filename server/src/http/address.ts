@@ -2,8 +2,8 @@ import { Hono, type Context } from 'hono'
 import { z } from 'zod'
 import { asAuth } from '../db.js'
 import type { AuthContext } from '../auth/context.js'
-import { asksOf, byInbox, confirmLink, emailOf, itIsThem, mailCode, masked, peekLink, sendForApproval, sendToNew } from '../auth/address.js'
-import { origin, sendChoosePassword } from './access.js'
+import { asksOf, byInbox, emailOf, itIsThem, mailCode, masked, peekLink, sendForApproval, sendToNew } from '../auth/address.js'
+import { answerConfirmation, origin } from './access.js'
 import { reask } from './limits.js'
 import { heard } from '../words.js'
 
@@ -147,23 +147,12 @@ export async function confirmAddress(c: Context<{ Variables: Vars }>) {
   if (!body.success) {
     return c.json({ error: { code: 'invalid', message: 'Open the link from the email and press Confirm.' } }, 400)
   }
-  const gone = () => c.json({ error: { code: 'gone', message: 'This link has already been used or has expired.' } }, 410)
   const about = await peekLink(body.data.token)
-  if (about?.kind !== 'email') return gone()
-  if (about.actorId !== ctx.actorId || !ctx.sessionId || !UUID.test(ctx.sessionId)) return notThisAccount(c)
-  /* Whether the account was unproved before: confirming proves the new
-     address, and that takes a password set before the proof (migration
-     212) — so the new address is sent the letter that chooses one, or the
-     person is left with no way in. */
-  const [before] = await asAuth((tx) => tx<{ proved: boolean | null }[]>`select auth_email_confirmed(${ctx.actorId}) as proved`)
-  const done = await confirmLink(origin(c), body.data.token, ctx.sessionId, heard(c))
-  if (done.kind === 'not_this_account') return notThisAccount(c)
-  if (done.kind === 'gone') return gone()
-  if (done.kind === 'taken') {
-    return c.json({ error: { code: 'conflict', message: 'That email address already has an account.' } }, 409)
+  if (about?.kind !== 'email') {
+    return c.json({ error: { code: 'gone', message: 'This link has already been used or has expired.' } }, 410)
   }
-  if (before?.proved === false) await sendChoosePassword(c, ctx.actorId, done.email)
-  return c.json({ changed: true, email: done.email })
+  if (about.actorId !== ctx.actorId || !ctx.sessionId || !UUID.test(ctx.sessionId)) return notThisAccount(c)
+  return answerConfirmation(c, body.data.token, ctx.sessionId)
 }
 address.post('/me/email/confirm', (c) => confirmAddress(c))
 

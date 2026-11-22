@@ -6,7 +6,7 @@ import { whoIs } from '../src/http/access.js'
 import { outbox } from '../src/mail.js'
 import { issueApiToken, registerUser } from '../src/auth/flows.js'
 import { hashToken } from '../src/auth/crypto.js'
-import { asAuth, asTableOwner, closeDb, stamp as fresh } from './helpers.js'
+import { asAuth, asTableOwner, closeDb, makeOwner, stamp as fresh, uuidv7 } from './helpers.js'
 
 after(async () => {
   await closeDb()
@@ -67,6 +67,7 @@ test('Mallory’s change to Bob’s address is not confirmed by Bob’s link, an
     kind: 'email',
     email: bob,
     account: { id: mallory.actor_id, name: 'Mallory', email: 'm…@example.com' },
+    needs_session: true,
   })
 
   // Opened the way the page and the apps used to: refused, nothing moves.
@@ -222,4 +223,120 @@ test('the old address’s yes is a press too, and no session is asked for it', a
   assert.deepEqual(await (await post('/auth/verify', { token: yes, pressed: true })).json(), { approved: true, email: to })
   assert.ok(linkIn(to))
   assert.equal(await emailOf(made.actorId), email)
+})
+
+/*
+ * An account whose address nobody proved, or proved only by a link handed
+ * over, cannot sign in on another device — signing in refuses it and mails
+ * the letter that chooses a password instead. Its press needs no session,
+ * and puts whoever held the account out (Medium).
+ */
+const held = async (actorId: string, workspaceId: string) => {
+  const [m] = await asTableOwner()<{ joined: Date | null; waiting: Date | null }[]>`
+    select joined_at as joined, unconfirmed_at as waiting from membership
+    where actor_id = ${actorId} and workspace_id = ${workspaceId} and deleted_at is null`
+  return m
+}
+const wayIn = async (actorId: string) => {
+  const [r] = await asTableOwner()<{ password: boolean; sessions: number; tokens: number; ids: number }[]>`
+    select (select password_hash is not null from app_user where actor_id = ${actorId}) as password,
+           (select count(*)::int from refresh_session where actor_id = ${actorId} and ended_at is null) as sessions,
+           (select count(*)::int from api_token where actor_id = ${actorId} and revoked_at is null) as tokens,
+           (select count(*)::int from auth_identity where actor_id = ${actorId}) as ids`
+  return { ...r! }
+}
+const chooseLinkTo = (to: string) => {
+  const mail = outbox.filter((m) => m.to === to).at(-1)
+  return Boolean(mail && /\/reset\/chs_/.test(mail.text))
+}
+
+test('an unproved account’s new address is confirmed by the press alone, from any device, and its holder goes', async () => {
+  const boss = await makeOwner()
+  const stamp = fresh()
+  const typed = `typo${stamp}@example.com`
+  const link = (await (await post('/api/invites', { role: 'member', rights: [] }, boss.token)).json()) as { token: string }
+  const joined = await post(`/auth/invite/${link.token}/accept`, { name: 'Moe', email: typed, password: PASSWORD })
+  assert.equal(joined.status, 200)
+  const acc = (await joined.json()) as { actor_id: string; access_token: string }
+  // Signing in anywhere else is refused: the only session is the one it joined with.
+  assert.equal((await post('/auth/login', { email: typed, password: PASSWORD })).status, 403)
+
+  // It asks for the change the ordinary way, and the link reaches the new address.
+  const to = `moe-real${stamp}@example.com`
+  assert.equal((await post('/api/me/email', { email: to, password: PASSWORD }, acc.access_token)).status, 202)
+  const token = linkIn(to)!
+  assert.match(token, /^eml_/)
+  const peeked = (await (await post('/auth/verify/peek', { token })).json()) as { needs_session: boolean }
+  assert.equal(peeked.needs_session, false)
+
+  // Opened, not pressed: nothing.
+  const opened = await post('/auth/verify', { token })
+  assert.equal(opened.status, 403)
+  assert.equal(await code(opened), 'press_required')
+  assert.equal(await emailOf(acc.actor_id), typed)
+
+  // Pressed on another device, signed in to nobody.
+  const pressed = await post('/auth/verify', { token, pressed: true })
+  assert.equal(pressed.status, 200)
+  assert.deepEqual(await pressed.json(), { changed: true, email: to })
+  assert.equal(await emailOf(acc.actor_id), to)
+  // Whoever held it is out: its password, its session; the workspace it joined waits for a Join.
+  assert.deepEqual(await wayIn(acc.actor_id), { password: false, sessions: 0, tokens: 0, ids: 0 })
+  assert.equal((await get('/api/me', acc.access_token)).status, 401)
+  const m = await held(acc.actor_id, boss.workspaceId)
+  assert.equal(m?.joined, null)
+  assert.ok(m?.waiting)
+  // The new address chooses a password; no "now signs in" note beside it.
+  assert.ok(chooseLinkTo(to), 'the letter that chooses a password')
+  assert.equal(
+    outbox.some((x) => x.to === to && /now signs in/.test(x.subject)),
+    false,
+  )
+})
+
+test('a by-hand account’s new address is confirmed by the press alone, and its holder goes', async () => {
+  const boss = await makeOwner()
+  const stamp = fresh()
+  const mallory = await someone(stamp, 'byhand', 'Mallory')
+  await asTableOwner()`update app_user set email_by_hand = true where actor_id = ${mallory.actor_id}`
+  await asTableOwner()`
+    insert into membership (id, workspace_id, actor_id, role, joined_at)
+    values (${uuidv7()}, ${boss.workspaceId}, ${mallory.actor_id}, 'member', now())`
+  await issueApiToken(mallory.actor_id, mallory.workspace_id, 'agent')
+  await asAuth((tx) => tx`select auth_identity_link(${mallory.actor_id}, 'google', ${`mal-${stamp}`}, ${mallory.email})`)
+
+  const bob = `bob-hand${stamp}@gmail.com`
+  assert.equal((await post('/api/me/email', { email: bob, password: PASSWORD }, mallory.access_token)).status, 202)
+  const token = linkIn(bob)!
+  const peeked = (await (await post('/auth/verify/peek', { token })).json()) as { needs_session: boolean }
+  assert.equal(peeked.needs_session, false)
+  // Bob presses, signed in to nobody.
+  const pressed = await post('/auth/verify', { token, pressed: true })
+  assert.equal(pressed.status, 200, await pressed.clone().text())
+  assert.equal(await emailOf(mallory.actor_id), bob)
+  // Mallory kept nothing: no password, no session, no token, no Google sign-in.
+  assert.deepEqual(await wayIn(mallory.actor_id), { password: false, sessions: 0, tokens: 0, ids: 0 })
+  assert.equal((await get('/api/me', mallory.access_token)).status, 401)
+  assert.equal((await post('/auth/login', { email: bob, password: PASSWORD })).status, 401)
+  // Proved for real now, and every workspace with somebody else in it waits for Bob's word.
+  const [u] = await asTableOwner()<
+    { by_hand: boolean }[]
+  >`select email_by_hand as by_hand from app_user where actor_id = ${mallory.actor_id}`
+  assert.equal(u?.by_hand, false)
+  assert.equal((await held(mallory.actor_id, boss.workspaceId))?.joined, null)
+  assert.ok(chooseLinkTo(bob))
+})
+
+test('a forwarded letter is seen: the new address is told whose account it now signs in to', async () => {
+  const stamp = fresh()
+  const me = await someone(stamp, 'forward', 'Mallory')
+  const to = `forwarded${stamp}@example.com`
+  assert.equal((await post('/api/me/email', { email: to, password: PASSWORD }, me.access_token)).status, 202)
+  const sent = outbox.filter((m) => m.to === to).at(-1)!
+  assert.match(sent.text, /Don’t forward this email/)
+  assert.equal((await confirm(linkIn(to)!, me.access_token)).status, 200)
+  const note = outbox.filter((m) => m.to === to).at(-1)!
+  assert.match(note.subject, /now signs in to a Tuff account/)
+  assert.match(note.text, /the Tuff account Mallory/)
+  assert.match(note.text, /If this wasn’t you/)
 })
