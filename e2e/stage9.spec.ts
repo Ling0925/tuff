@@ -12650,9 +12650,10 @@ test('changing the password asks for the one there is now, and a wrong one is on
 
 test('the projects index puts away, bins, and opens what was archived', async ({ page }) => {
   // `docs/specs/projects-index.md`.
-  /* Tall: a project put back goes back to its place in the order, which in
-     a studio the other tests have filled can be behind "n more". */
-  await page.setViewportSize({ width: 1280, height: 2400 })
+  /* At the window's own height: a project put back goes back to its place
+     in the order, which in a studio the other tests have filled can be
+     behind "n more" — and the open project is drawn in the column even
+     then. */
   await login(page)
   const stamp = Date.now()
   const shelved = `Shelved index ${stamp}`

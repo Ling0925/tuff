@@ -8,6 +8,9 @@ when both do not fit, each keeps at least eight and the projects at most half,
 so a workspace with sixty projects still shows its chats. What somebody put
 away stays behind "more" either way.
 
+The open project and the open room are never cut: past the cap, each takes
+the last place before "more".
+
 ## The Chats page
 
 The Chat heading in the column is a way in, as the Projects heading is: the

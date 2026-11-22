@@ -167,7 +167,8 @@ export function Project({
     navigate,
   })
   /* Folded into the sidebar only where the sidebar has a place for it:
-     behind "n more", or below the breakpoint, the column stays. */
+     below the breakpoint, or before the sidebar has drawn the project's
+     row, the column stays. */
   const { folded: foldWanted, moving: foldMoving, slot: foldPlace } = useFold()
   const folded = wide && foldWanted && !!foldPlace
   const {
