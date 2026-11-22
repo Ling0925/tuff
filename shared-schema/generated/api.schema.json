@@ -6669,6 +6669,12 @@
             "string",
             "null"
           ]
+        },
+        "stopped_at": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -9167,6 +9173,9 @@
               "type": "null"
             }
           ]
+        },
+        "stopped": {
+          "type": "boolean"
         }
       },
       "required": [

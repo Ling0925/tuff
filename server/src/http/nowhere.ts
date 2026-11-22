@@ -55,7 +55,9 @@ nowhere.use('*', async (c, next) => {
   const claims = await verifyNowhereToken(token)
   if (!claims) return next()
   const [[alive], [person]] = await Promise.all([
-    sql<{ ok: boolean }[]>`select auth_session_alive(${claims.sid}) as ok`,
+    /* With the moment it was asked, by the database's clock: a session
+       this request makes is dated from it (`Meta.since`). */
+    sql<{ ok: boolean; at: Date }[]>`select auth_session_alive(${claims.sid}) as ok, statement_timestamp() as at`,
     sql<Person[]>`select * from auth_nowhere(${claims.sub})`,
   ])
   /* Signed out, ended from elsewhere, or the account gone. */
@@ -72,7 +74,7 @@ nowhere.use('*', async (c, next) => {
   c.set('nowhere', {
     actorId: claims.sub,
     sessionId: claims.sid,
-    ctx: personOnly(claims.sub, claims.sid, person, closed?.closed === true),
+    ctx: { ...personOnly(claims.sub, claims.sid, person, closed?.closed === true), checkedAt: alive.at },
     person,
   })
   return next()
@@ -171,7 +173,7 @@ nowhere.post(
     const took = await takeInvite(row.token_hash, who.actorId, true)
     if (took === 'full') return c.json(fullRefusal('invited'), 413)
     if (typeof took === 'string') return c.json({ error: { code: 'not_found', message: 'This invitation is no longer valid.' } }, 404)
-    const session = await startSession(who.actorId, took.workspaceId, metaOf(c), 'invite')
+    const session = await startSession(who.actorId, took.workspaceId, { ...metaOf(c), since: who.ctx.checkedAt ?? null }, 'invite')
     await endNowhere(who)
     return c.json(session)
   }),

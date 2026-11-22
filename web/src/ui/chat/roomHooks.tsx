@@ -139,8 +139,10 @@ export function RoomHooksWindow({
               <div data-hook-row={h.id} className="flex min-h-12 items-center gap-3 py-2">
                 <span className="flex min-w-px flex-1 flex-col">
                   <span className="truncate text-base font-medium text-ink">{h.name}</span>
-                  <span className="truncate text-sm text-ink-3">
-                    {W.hookBy(h.created_by_name, Boolean(h.turned_at), h.last_used_at ? ago(h.last_used_at) : null)}
+                  <span data-hook-stopped={h.stopped_at ? '' : undefined} className="truncate text-sm text-ink-3">
+                    {h.stopped_at
+                      ? W.hookStopped
+                      : W.hookBy(h.created_by_name, Boolean(h.turned_at), h.last_used_at ? ago(h.last_used_at) : null)}
                   </span>
                 </span>
                 {sure?.id === h.id ? (

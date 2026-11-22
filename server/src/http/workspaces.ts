@@ -102,11 +102,16 @@ export async function makeWorkspace(c: Context<{ Variables: Vars }>) {
   if (!body.success) return c.json({ error: { code: 'invalid' } }, 400)
 
   try {
-    const made = await newWorkspace(ctx.actorId, body.data.name, metaOf(c), {
-      slug: body.data.slug || null,
-      icon: body.data.mark_icon ?? null,
-      tint: body.data.mark_tint ?? null,
-    })
+    const made = await newWorkspace(
+      ctx.actorId,
+      body.data.name,
+      { ...metaOf(c), since: ctx.checkedAt ?? null },
+      {
+        slug: body.data.slug || null,
+        icon: body.data.mark_icon ?? null,
+        tint: body.data.mark_tint ?? null,
+      },
+    )
     return c.json(made, 201)
   } catch (e) {
     /* Taken between being told it was free and pressing Create: said, with
@@ -252,7 +257,12 @@ workspaces.post('/workspaces/:id/enter', async (c) => {
   /* A session opened into this workspace is a sign-in its owner reads —
      `method: switch`, in the log of the workspace entered. Entering the
      one it is already in opens nothing new. */
-  const session = await startSession(ctx.actorId, id, metaOf(c), id !== ctx.workspaceId ? 'switch' : null)
+  const session = await startSession(
+    ctx.actorId,
+    id,
+    { ...metaOf(c), since: ctx.checkedAt ?? null },
+    id !== ctx.workspaceId ? 'switch' : null,
+  )
   return c.json(session)
 })
 

@@ -75,7 +75,7 @@ tokens.post('/tokens', async (c) => {
 
   // Issuing does not revoke: rotation without downtime means two live tokens
   // while the old one is swapped out.
-  const token = await issueOwnToken(ctx.actorId, ctx.workspaceId, body.data.name, projects, body.data.ttl_days)
+  const token = await issueOwnToken(ctx.actorId, ctx.workspaceId, body.data.name, projects, body.data.ttl_days, ctx.checkedAt ?? null)
   /* At most `MAX_LIVE_TOKENS` live at once. */
   if (!token) {
     return c.json(

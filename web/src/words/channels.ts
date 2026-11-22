@@ -54,6 +54,8 @@ export const CHANNELS = say({
     (who: string, turned: boolean, last: string | null) =>
       `${turned ? 'Nouvelle URL par' : 'Ajouté par'} ${who} · ${last ? `Dernière publication ${last}` : 'Jamais utilisé'}`,
   ],
+  /** Its maker's account changed hands. */
+  hookStopped: ['Stopped. Get a new URL to start it again.', 'Arrêté. Créez une nouvelle URL pour le relancer.'],
   newUrl: ['New URL', 'Nouvelle URL'],
   newUrlSure: ['The old URL stops working. New URL?', 'L’ancienne URL ne fonctionnera plus. Nouvelle URL ?'],
   remove: ['Remove', 'Supprimer'],

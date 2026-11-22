@@ -120,6 +120,8 @@ export const AGENTS = say({
   nameLabel: ['Agent name', 'Nom de l’agent'],
   couldntRename: ['Couldn’t rename it. Try again.', 'Impossible de le renommer. Réessayez.'],
   newToken: ['New token', 'Nouveau jeton'],
+  /** Its tokens ended and its webhook off: a new token starts it again. */
+  stopped: ['Stopped', 'Arrêté'],
   newTokenAsk: [(name: string) => `Make a new token for ${name}?`, (name: string) => `Créer un nouveau jeton pour ${name} ?`],
   newTokenFor: [(name: string) => `New token for ${name}`, (name: string) => `Nouveau jeton pour ${name}`],
   newTokenSays: [

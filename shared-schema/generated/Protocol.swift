@@ -1011,6 +1011,7 @@ public enum API {
         public let offeredProjectIDS, projectIDS: [String]
         public let reach: String
         public let status: AgentStatus?
+        public let stopped: Bool?
         public let webhookShape, webhookURL: String?
 
         public enum CodingKeys: String, CodingKey {
@@ -1027,12 +1028,12 @@ public enum API {
             case name
             case offeredProjectIDS = "offered_project_ids"
             case projectIDS = "project_ids"
-            case reach, status
+            case reach, status, stopped
             case webhookShape = "webhook_shape"
             case webhookURL = "webhook_url"
         }
 
-        public init(activeAt: String?, actorID: String, authorizationSet: Bool?, avatarURL: String?, canDisconnect: Bool, canManage: Bool, connections: [ConnectionElement]?, createdAt: String, createdBy: String, createdByName: String, name: String, offeredProjectIDS: [String], projectIDS: [String], reach: String, status: AgentStatus?, webhookShape: String?, webhookURL: String?) {
+        public init(activeAt: String?, actorID: String, authorizationSet: Bool?, avatarURL: String?, canDisconnect: Bool, canManage: Bool, connections: [ConnectionElement]?, createdAt: String, createdBy: String, createdByName: String, name: String, offeredProjectIDS: [String], projectIDS: [String], reach: String, status: AgentStatus?, stopped: Bool?, webhookShape: String?, webhookURL: String?) {
             self.activeAt = activeAt
             self.actorID = actorID
             self.authorizationSet = authorizationSet
@@ -1048,6 +1049,7 @@ public enum API {
             self.projectIDS = projectIDS
             self.reach = reach
             self.status = status
+            self.stopped = stopped
             self.webhookShape = webhookShape
             self.webhookURL = webhookURL
         }
@@ -5213,6 +5215,7 @@ public enum API {
         public let id: String
         public let lastUsedAt: String?
         public let name: String
+        public let stoppedAt: String?
         public let turnedAt: String?
 
         public enum CodingKeys: String, CodingKey {
@@ -5222,16 +5225,18 @@ public enum API {
             case id
             case lastUsedAt = "last_used_at"
             case name
+            case stoppedAt = "stopped_at"
             case turnedAt = "turned_at"
         }
 
-        public init(createdAt: String, createdBy: String, createdByName: String, id: String, lastUsedAt: String?, name: String, turnedAt: String?) {
+        public init(createdAt: String, createdBy: String, createdByName: String, id: String, lastUsedAt: String?, name: String, stoppedAt: String?, turnedAt: String?) {
             self.createdAt = createdAt
             self.createdBy = createdBy
             self.createdByName = createdByName
             self.id = id
             self.lastUsedAt = lastUsedAt
             self.name = name
+            self.stoppedAt = stoppedAt
             self.turnedAt = turnedAt
         }
     }

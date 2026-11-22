@@ -925,6 +925,7 @@ data class AgentRow (
 
     val reach: String,
     val status: AgentStatus? = null,
+    val stopped: Boolean? = null,
 
     @SerialName("webhook_shape")
     val webhookShape: String? = null,
@@ -3755,6 +3756,9 @@ data class RoomHook (
     val lastUsedAt: String? = null,
 
     val name: String,
+
+    @SerialName("stopped_at")
+    val stoppedAt: String? = null,
 
     @SerialName("turned_at")
     val turnedAt: String? = null

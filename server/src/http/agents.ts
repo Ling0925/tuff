@@ -67,9 +67,14 @@ agents.get('/agents', async (c) => {
           webhook_shape: string | null
           webhook_url: string | null
           connections: { id: string; client: string; created_at: string; linked_by_name: string }[]
+          stopped: boolean
         }[]
       >`
       select g.actor_id, a.name, a.avatar_key, g.reach, g.created_by, b.name as created_by_name, g.created_at,
+             /* Stopped when whoever connected it was put out of the account:
+                its tokens revoked, its webhook off; a new token starts it
+                again. */
+             g.stopped_at is not null as stopped,
              coalesce((select array_agg(pm.project_id order by pm.project_id) from project_member pm
                        where pm.actor_id = g.actor_id and pm.deleted_at is null), '{}') as project_ids,
              /* Where the reader could put it: a live project they are on,
@@ -216,7 +221,7 @@ agents.post('/agents', async (c) => {
   /* No list on its token: what an agent reaches is its places, which its
      page changes after this. A list here
      would now bound it to the projects it was born with — migration 191. */
-  const token = await issueApiToken(id, ctx.workspaceId, body.data.name, [], TOKEN_DAYS)
+  const token = await issueApiToken(id, ctx.workspaceId, body.data.name, [], TOKEN_DAYS, ctx.checkedAt ?? null)
   return c.json({ agent_id: id, token, ...(secret ? { secret } : {}) }, 201)
 })
 
@@ -425,7 +430,7 @@ agents.post('/agents/:id/token', async (c) => {
     return a?.name ?? 'Agent'
   })
   if (name === null) return c.json({ error: { code: 'not_found' } }, 404)
-  const token = await issueApiToken(id, ctx.workspaceId, name, [], TOKEN_DAYS)
+  const token = await issueApiToken(id, ctx.workspaceId, name, [], TOKEN_DAYS, ctx.checkedAt ?? null)
   return c.json({ token }, 201)
 })
 

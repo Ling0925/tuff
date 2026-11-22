@@ -68,12 +68,17 @@ async function writeSession(
   s: { sid: string; actorId: string; workspaceId: string | null; refreshToken: string; meta: Meta; tradedFrom: string | null },
 ): Promise<void> {
   await tx`
-    insert into refresh_session (id, actor_id, workspace_id, token_hash, user_agent, ip, device, expires_at, family, traded_from)
+    insert into refresh_session (id, actor_id, workspace_id, token_hash, user_agent, ip, device, expires_at, family, traded_from, created_at)
     values (${s.sid}, ${s.actorId}, ${s.workspaceId}, ${hashToken(s.refreshToken)},
             ${s.meta.userAgent ?? null}, ${s.meta.ip ?? null}, ${s.meta.device ?? null},
             now() + ${`${REFRESH_TTL_DAYS} days`}::interval,
             coalesce(auth_family_of(${s.actorId}, ${s.meta.from ?? null}::uuid), ${s.sid}::uuid),
-            ${s.tradedFrom}::uuid)`
+            ${s.tradedFrom}::uuid,
+            /* Begun: the transaction's start, or the check this session is
+               made on when that was earlier (Meta.since). The database
+               writes it ended when the account was put out at or after it:
+               credential_after_put_out. */
+            least(now(), coalesce(${s.meta.since ?? null}::timestamptz, now())))`
 }
 
 /** Who is signing in from where: the address, the browser's name, and
@@ -89,6 +94,11 @@ export type Meta = {
       once joined the owner's line that way. Set here, never taken from the
       client. */
   from?: string | null
+  /** When the credential this session is made on was checked, by the
+      database's clock, when that was before this transaction — a
+      password read and verified, an access token checked as its request
+      arrived (`AuthContext.checkedAt`). See `writeSession`. */
+  since?: Date | null
 }
 
 /**
@@ -252,7 +262,11 @@ export async function newWorkspace(
 export async function login(
   input: { email: string; password: string; totp?: string | undefined },
   meta: Meta = {},
-): Promise<Session | 'totp_required' | { unconfirmed: string } | { nowhere: string } | null> {
+): Promise<Session | 'totp_required' | { unconfirmed: string } | { nowhere: string; since: Date } | null> {
+  /* Before the password is read: the session is dated from here, so an
+     account put out while the password was being checked — the old one
+     still read — leaves it ended (`Meta.since`). */
+  const since = await checkedNow()
   const checked = await credentials(input)
   if (checked === null || checked === 'totp_required') return checked
   /* The right password for an address nobody has confirmed: not in yet.
@@ -269,8 +283,14 @@ export async function login(
   })
   /* In no workspace: the caller decides whether this client can be given
      a session for nowhere. */
-  if (!workspaceId) return { nowhere: row.actor_id }
-  return startSession(row.actor_id, workspaceId, meta, 'password')
+  if (!workspaceId) return { nowhere: row.actor_id, since }
+  return startSession(row.actor_id, workspaceId, { ...meta, since }, 'password')
+}
+
+/** The database's clock, for `Meta.since`. */
+export async function checkedNow(): Promise<Date> {
+  const [r] = await asAuth((tx) => tx<{ at: Date }[]>`select statement_timestamp() as at`)
+  return r!.at
 }
 
 /** Whether somebody's address has been confirmed. */
@@ -616,8 +636,10 @@ export async function issueApiToken(
   name: string,
   projectIds: string[] = [],
   ttlDays = 90,
+  /** When the request asking for it was checked — `Meta.since`. */
+  since: Date | null = null,
 ): Promise<string> {
-  return (await mint(actorId, workspaceId, name, projectIds, ttlDays, null))!
+  return (await mint(actorId, workspaceId, name, projectIds, ttlDays, null, since))!
 }
 
 /**
@@ -635,8 +657,9 @@ export function issueOwnToken(
   name: string,
   projectIds: string[],
   ttlDays: number,
+  since: Date | null = null,
 ): Promise<string | null> {
-  return mint(actorId, workspaceId, name, projectIds, ttlDays, MAX_LIVE_TOKENS)
+  return mint(actorId, workspaceId, name, projectIds, ttlDays, MAX_LIVE_TOKENS, since)
 }
 
 async function mint(
@@ -646,6 +669,7 @@ async function mint(
   projectIds: string[],
   ttlDays: number,
   most: number | null,
+  since: Date | null,
 ): Promise<string | null> {
   const token = generateToken('tok')
   /* On the sign-in connection: a token is inserted by `tracker_auth` alone (migration 308). */
@@ -662,9 +686,12 @@ async function mint(
     }
     await tx`
       insert into api_token
-        (id, workspace_id, actor_id, name, project_ids, token_hash, expires_at)
+        (id, workspace_id, actor_id, name, project_ids, token_hash, expires_at, created_at)
       values (${uuidv7()}, ${workspaceId}, ${actorId}, ${name}, ${projectIds},
-              ${hashToken(token)}, now() + ${`${ttlDays} days`}::interval)`
+              ${hashToken(token)}, now() + ${`${ttlDays} days`}::interval,
+              /* Begun no later than the request asking was checked, as a
+                 session is (writeSession). */
+              least(now(), coalesce(${since}::timestamptz, now())))`
     return true
   })
   if (!made) return null

@@ -451,8 +451,10 @@ people.post('/me/leave', async (c) => {
         and m.deleted_at is null and m.joined_at is not null and w.deleted_at is null
       order by w.name limit 1`,
   )
-  if (!elsewhere) return c.json({ ok: true, session: await startNowhereSession(ctx.actorId, metaOf(c)), workspace: null })
-  const session = await startSession(ctx.actorId, elsewhere.id, metaOf(c), 'switch')
+  /* Dated from the check of the session this came from (`Meta.since`). */
+  const meta = { ...metaOf(c), since: ctx.checkedAt ?? null }
+  if (!elsewhere) return c.json({ ok: true, session: await startNowhereSession(ctx.actorId, meta), workspace: null })
+  const session = await startSession(ctx.actorId, elsewhere.id, meta, 'switch')
   return c.json({ ok: true, session, workspace: elsewhere })
 })
 

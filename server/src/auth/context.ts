@@ -105,6 +105,13 @@ export type AuthContext = {
   feedbackPage?: boolean
   /** That page's project, the one place its actor may file into. */
   feedbackProjectId?: string
+  /**
+   * When the database checked who is asking — its own clock, in the
+   * statement that checked. A session or a token this request makes is
+   * dated no later than it, so an account put out between the check and
+   * the write leaves it ended.
+   */
+  checkedAt?: Date
 }
 
 type Row = {
@@ -124,6 +131,7 @@ type Row = {
   live: boolean
   unproved: boolean
   by_hand: boolean | null
+  checked_at: Date
 }
 
 async function load(
@@ -146,6 +154,7 @@ async function load(
     select c.*, (${sessionId}::uuid is null or auth_session_alive(${sessionId}::uuid)) as live,
            auth_email_confirmed(${actorId}) is false as unproved,
            auth_email_by_hand(${actorId}) as by_hand,
+           statement_timestamp() as checked_at,
            /* Only where there are instance owners: the service never asks. */
            ${edition.instance ? db`instance_sign_up_open() is false` : db`false`} as sign_up_closed
     from auth_context(${actorId}, ${workspaceId}) c`
@@ -176,6 +185,7 @@ async function load(
     plan: row.plan,
     viaMcp,
     tokenProjectIds,
+    checkedAt: row.checked_at,
   }
 }
 

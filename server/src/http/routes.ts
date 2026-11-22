@@ -521,7 +521,7 @@ app.post('/auth/login', async (c) => {
   /* Right password, right code, and in no workspace: a session for nowhere
      to a client that can show its screen, said to one that cannot. */
   if ('nowhere' in session) {
-    if (canShowNowhere) return c.json(await startNowhereSession(session.nowhere, metaOf(c)))
+    if (canShowNowhere) return c.json(await startNowhereSession(session.nowhere, { ...metaOf(c), since: session.since }))
     return c.json(NO_WORKSPACE_YET, 403)
   }
   return c.json(session)

@@ -12,7 +12,7 @@ import { v7 as uuidv7 } from 'uuid'
 import { asAuth, withActor, withoutActor } from '../db.js'
 import { allow, type AuthContext } from '../auth/context.js'
 import { generateToken, hashToken, hashPassword } from '../auth/crypto.js'
-import { confirmed, credentials, startSession, takeInvite, type Session } from '../auth/flows.js'
+import { checkedNow, confirmed, credentials, startSession, takeInvite, type Session } from '../auth/flows.js'
 import { tellInviter } from '../notify.js'
 import { heard, languageFor, one, say } from '../words.js'
 
@@ -554,7 +554,7 @@ export async function joinAsMe(c: Context<{ Variables: Vars }>) {
   }
   if (took === 'full') return c.json(fullRefusal('invited'), 413)
   if (took === 'gone') return c.json({ error: { code: 'not_found', message: 'This link is no longer valid.' } }, 404)
-  return c.json(await startSession(ctx.actorId, took.workspaceId, metaOf(c), 'invite'))
+  return c.json(await startSession(ctx.actorId, took.workspaceId, { ...metaOf(c), since: ctx.checkedAt ?? null }, 'invite'))
 }
 invites.post('/invite/:token/join', joinAsMe)
 
@@ -620,6 +620,9 @@ publicInvites.post('/invite/:token/accept', async (c) => {
     const [r] = await tx<{ actor_id: string }[]>`select actor_id from auth_lookup_user(${body.data.email})`
     return r ?? null
   })
+  /* Before an existing account's password is read: the session is dated
+     from here, as signing in's is (`Meta.since`). */
+  const since = existing ? await checkedNow() : null
   if (existing) {
     /* The same ceilings as signing in, counted on the same keys. */
     const tried = await guess(body.data.email, c)
@@ -717,6 +720,6 @@ publicInvites.post('/invite/:token/accept', async (c) => {
     )
     if (!ok?.yes) await sendChoosePassword(c, row.actor_id, body.data.email.toLowerCase())
   }
-  const session: Session = await startSession(row.actor_id, row.workspace_id, metaOf(c), 'invite')
+  const session: Session = await startSession(row.actor_id, row.workspace_id, { ...metaOf(c), since }, 'invite')
   return c.json({ ...session, created_account: row.created_account })
 })

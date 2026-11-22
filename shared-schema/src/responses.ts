@@ -1710,6 +1710,10 @@ export const AgentRow = z.object({
     .optional(),
   /** What it says it is doing now. */
   status: AgentStatus.nullable().optional(),
+  /** Stopped because whoever connected it was put out of the account: its
+      tokens revoked, its webhook off, until its connector gives it a new
+      token. */
+  stopped: z.boolean().optional(),
 })
 export const AgentList = z.object({ agents: z.array(AgentRow) })
 /** A new token for an agent, the old one ended — `POST /api/agents/:id/token`. Said once. */
@@ -2222,6 +2226,9 @@ export const RoomHook = z.object({
   created_at: z.string(),
   turned_at: z.string().nullable(),
   last_used_at: z.string().nullable(),
+  /** Stopped because its maker's account changed hands: it takes nothing
+      until somebody gives it a new URL. */
+  stopped_at: z.string().nullable().optional(),
 })
 export type RoomHook = z.infer<typeof RoomHook>
 export const RoomHooks = z.object({ hooks: z.array(RoomHook) })

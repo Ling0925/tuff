@@ -59,6 +59,9 @@ type Agent_ = {
   webhook_url?: string
   /** To whoever manages it: what Tuff's connector signed in as it. */
   connections?: { id: string; client: string; created_at: string; linked_by_name: string }[]
+  /** Stopped because whoever connected it was put out of the account; a
+      new token starts it again. */
+  stopped?: boolean
 }
 export type Agent = Agent_
 type Listed = { agents: Agent[] }
@@ -494,9 +497,11 @@ export function AgentPage({
                   {face === 'busy'
                     ? W.uploading
                     : (face ??
-                      [W.connectedBy(agent.created_by_name), agent.active_at ? W.activeAgo(since(agent.active_at)) : W.neverActive].join(
-                        ' · ',
-                      ))}
+                      [
+                        ...(agent.stopped ? [W.stopped] : []),
+                        W.connectedBy(agent.created_by_name),
+                        agent.active_at ? W.activeAgo(since(agent.active_at)) : W.neverActive,
+                      ].join(' · '))}
                 </span>
               )
             }
