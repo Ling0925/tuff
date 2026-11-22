@@ -55,7 +55,8 @@ password.post('/me/password', async (c) => {
   if (!tries.ok) {
     return c.json({ error: { code: 'rate_limited', message: 'Too many attempts. Try again in a few minutes.' } }, 429)
   }
-  if (!(await itIsThem(ctx.actorId, email, asks, { password: body.data.current, code: body.data.code }))) {
+  const them = await itIsThem(ctx.actorId, email, asks, { password: body.data.current, code: body.data.code })
+  if (!them) {
     /* 403, not 401: a 401 tells the page its session is over, and a
        mistyped password is not a reason to be signed out. */
     const which = asks.code && !body.data.code ? 'totp_required' : 'wrong_password'
@@ -64,7 +65,13 @@ password.post('/me/password', async (c) => {
   await tries.right()
 
   const hash = await hashPassword(body.data.password)
-  const [r] = await asAuth((tx) => tx<{ n: number }[]>`select auth_change_password(${ctx.actorId}, ${hash}, ${ctx.sessionId!}) as n`)
+  /* Over the password just checked and no other: one taken or changed while
+     the new one was hashed — a reset, the account changing hands — is not
+     overwritten (migration 317). */
+  const [r] = await asAuth(
+    (tx) => tx<{ n: number }[]>`select auth_change_password(${ctx.actorId}, ${hash}, ${ctx.sessionId!}, ${them.hash}) as n`,
+  )
+  if (!r || r.n < 0) return c.json({ error: { code: 'wrong_password', message: 'That didn’t match. Try again.' } }, 403)
   const language = await languageFor(ctx.actorId, heard(c))
   const w = say(
     {

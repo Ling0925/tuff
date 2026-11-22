@@ -8,9 +8,10 @@ import { env } from '../env.js'
 import { secureAttr } from '../tryLocalhost.js'
 import { edition } from '../edition.js'
 import { origin } from '../publicUrl.js'
-import { asAuth, withActorEverywhere } from '../db.js'
+import { asAuth, bounded, outsideRequest, withActorEverywhere } from '../db.js'
 import { generateToken, hashPassword, hashToken } from '../auth/crypto.js'
 import {
+  checkedNow,
   confirmed,
   firstWorkspace,
   ownWorkspaceName,
@@ -378,11 +379,17 @@ async function callback(c: Context, p: Provider, params: { code?: string; state?
   if (!said) return back('failed')
   const { subject, email, verified, name, owns } = said
 
+  /* Before the account is found by what the provider said: the ticket below
+     is good only if the account was not put out since — unless finding it
+     was itself the proof that put its previous holder out, when the person
+     here is its new holder (`seen.claimed`). Migration 317. */
+  const since = await checkedNow()
+  const seen = { claimed: false }
   let who: Awaited<ReturnType<typeof joinByProvider>> | Awaited<ReturnType<typeof whoIs>>
   try {
     who = invite
-      ? await joinByProvider(p, invite, subject, email, verified, name, owns)
-      : await whoIs(p, subject, email, verified, name, owns)
+      ? await joinByProvider(p, invite, subject, email, verified, name, owns, seen)
+      : await whoIs(p, subject, email, verified, name, owns, seen)
   } catch (e) {
     /* A new account on your own server with sign-up closed. */
     if (isClosed(e)) return back('closed')
@@ -404,10 +411,17 @@ async function callback(c: Context, p: Provider, params: { code?: string; state?
     binding = `web:${hashToken(browser)}`
     c.header('set-cookie', `${HANDOFF}=${browser}; Path=/; Max-Age=120; HttpOnly; Secure; SameSite=Lax`, { append: true })
   }
-  await asAuth(
-    (tx) =>
-      tx`select auth_ticket_make_bound(${hashToken(ticket)}, 'handoff', ${who.actorId}, ${who.workspaceId}, interval '2 minutes', ${binding})`,
-  )
+  const made = await asAuth(async (tx) => {
+    /* Under the account's hold: a put-out between finding the account and
+       this ticket refuses it, and one in flight is waited for. */
+    await tx`select auth_not_put_out_since(${who.actorId}, ${seen.claimed ? null : since}::timestamptz)`
+    await tx`select auth_ticket_make_bound(${hashToken(ticket)}, 'handoff', ${who.actorId}, ${who.workspaceId}, interval '2 minutes', ${binding})`
+    return true
+  }).catch((e: { code?: string }) => {
+    if (e.code === '28000') return false
+    throw e
+  })
+  if (!made) return back('failed')
   c.header('set-cookie', `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=None`, { append: true })
   /* Somebody known, signed in and not joined: the invitation goes back with
      the ticket, and the page opens it once signed in, to be pressed. */
@@ -474,7 +488,18 @@ async function linked(
 
   const [spent] = await asAuth((tx) => tx<{ ok: boolean }[]>`select auth_ticket_spend(${hash}, 'link') as ok`)
   if (!spent?.ok) return back('failed')
-  return back(await attachWay(c, t.actor_id, p, said))
+  /* As the session that asked, as a signed-in request is: every transaction
+     of the link asks whether the account changed hands since that session
+     was begun, so a link finishing after a put-out writes nothing
+     (`auth_still_in`, migration 317) — the provider's answer above took a
+     round trip the session's check came before. */
+  const outcome = await bounded({ actorId: t.actor_id, tokenProjectIds: [], sessionId: b.sid }, () =>
+    attachWay(c, t.actor_id, p, said),
+  ).catch((e: { code?: string }) => {
+    if (e.code === '28000') return 'failed' as const
+    throw e
+  })
+  return back(outcome)
 }
 
 /**
@@ -717,8 +742,10 @@ export async function whoIs(
   name: string,
   /** The provider is the authority for the address, not only saw it checked once. */
   owns = verified,
+  /** Told whether finding the account proved its address and put its previous holder out. */
+  seen: { claimed: boolean } = { claimed: false },
 ): Promise<{ actorId: string; workspaceId: string | null } | 'conflict' | null> {
-  const found = await knownActor(p, subject, email, owns)
+  const found = await knownActor(p, subject, email, owns, seen)
   if (found === 'conflict') return 'conflict'
   let actorId = found
   if (!actorId) {
@@ -758,7 +785,13 @@ export async function whoIs(
  * is the authority for the email, or a provider account claiming somebody's
  * address would be handed their account.
  */
-async function knownActor(p: Provider, subject: string, email: string, verified: boolean): Promise<string | 'conflict' | null> {
+async function knownActor(
+  p: Provider,
+  subject: string,
+  email: string,
+  verified: boolean,
+  seen: { claimed: boolean } = { claimed: false },
+): Promise<string | 'conflict' | null> {
   const known = await asAuth(async (tx) => {
     const [r] = await tx<{ actor: string | null }[]>`select auth_identity_actor(${p}, ${subject}) as actor`
     return r?.actor ?? null
@@ -773,6 +806,7 @@ async function knownActor(p: Provider, subject: string, email: string, verified:
     const [acc] = await asAuth((tx) => tx<{ email: string | null }[]>`select auth_email_of(${known}) as email`)
     if (!verified || !email || acc?.email?.toLowerCase() !== email.toLowerCase()) return 'conflict'
     await orClosed(asAuth((tx) => tx`select auth_claim_email(${known})`))
+    seen.claimed = true
     return known
   }
   if (!email) return null
@@ -788,6 +822,7 @@ async function knownActor(p: Provider, subject: string, email: string, verified:
   /* On your own server, confirming an address that asked to sign up
      claims the server or is refused (`instance_confirming`). */
   await orClosed(asAuth((tx) => tx`select auth_claim_email(${existing})`))
+  seen.claimed = true
   return existing
 }
 
@@ -816,9 +851,10 @@ export async function joinByProvider(
   verified: boolean,
   name: string,
   owns = verified,
+  seen: { claimed: boolean } = { claimed: false },
 ): Promise<{ actorId: string; workspaceId: string | null; press?: true } | 'conflict' | 'gone' | 'full' | 'elsewhere' | null> {
   const tokenHash = hashToken(invite)
-  const found = await knownActor(p, subject, email, owns)
+  const found = await knownActor(p, subject, email, owns, seen)
   if (found === 'conflict') return 'conflict'
   let joined: { actorId: string; workspaceId: string | null }
   if (found) {
@@ -1106,6 +1142,15 @@ access.post('/verify/peek', async (c) => {
  * one, or the person is left with no way in.
  */
 export async function answerConfirmation(c: Context, token: string, session: string | null) {
+  /* Outside the request's scope: confirming an unproved account's address
+     from its own session puts the previous holder out — that session's
+     holder among them — and what follows is the confirmation's own, which
+     `auth_still_in` would otherwise refuse (`db.ts`). The database asks
+     who may press (`auth_email_confirm`). */
+  return outsideRequest(() => confirmationAnswered(c, token, session))
+}
+
+async function confirmationAnswered(c: Context, token: string, session: string | null) {
   const done = await confirmLink(origin(c), token, session, heard(c))
   if (done.kind === 'not_this_account') {
     return c.json(

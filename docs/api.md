@@ -285,7 +285,7 @@ Every path that confirms an address for somebody other than whoever held
 the account — `app_user_proved`, `auth_claim_email`, `auth_set_password`
 for an unproved or by-hand address, `instance_name_owner` for one, and
 through the trigger `auth_email_confirm` — calls `put_out(actor, row)`,
-nobody's to run. It takes the account's `app_user` row `for update` first;
+nobody's to run. It takes the account's hold first, exclusively — a transaction-level advisory lock on the person (`account_hold`, two keys, 31800 first), waiting at most three seconds — and every path takes it before writing the account's row, an old confirmation link (`auth_confirm_email`) included;
 the password goes (each path's own), and the recovery codes, sessions,
 tokens, push devices, provider identities, a linked GitHub, open tickets
 and unexchanged OAuth codes; the second factor with its times; every
@@ -298,19 +298,25 @@ documents it wrote and shared to the web in a workspace now waiting are
 unshared; and `before_proof_held`. Last it sets `app_user.sessions_after`
 to the clock.
 
-**Every transaction of a signed-in request**, made for the request's own
-person, first runs `auth_still_in(actor, session, token)` (the
-application's): a `for key share` lock on the account's row — an agent's
-token, its connector's — and `28000`, answered `401 unauthorized`, when
-the session or token the request came with was begun at or before
+**Every transaction made inside a signed-in request** — `withActor`,
+`asAuth`, `asAuthActor`, `asAuthEverywhere`, `withoutActor`, as whomever —
+first runs `auth_still_in(actor, session, token)` (the application's) with
+the request's own person and credential: the hold, shared — an agent's
+token, its connector's — and `28000`, answered `401 unauthorized`, when the
+session or token the request came with was begun at or before
 `sessions_after`. What is written with no such request goes through the
 trigger `credential_after_put_out`, before every insert into
-`refresh_session`, `api_token`, `auth_ticket` and `oauth_code`: the same
-lock, and the row written ended, revoked or spent when `sessions_after` is
-at or after its `created_at`. A session or token the server makes from a
-check made earlier (a password read, an OAuth code or refresh token taken,
-an access token checked) is written with `created_at` no later than that
-check. `account_deletion` takes the row `for update` first too.
+`refresh_session`, `api_token`, `auth_ticket` and `oauth_code`: the hold,
+shared, and the row written ended, revoked or spent when `sessions_after`
+is at or after its `created_at`. A session or token the server makes from
+a check made earlier (a password read, an OAuth code or refresh token
+taken, an access token checked) is written with `created_at` no later than
+that check. A password is read under the hold (`auth_hold_account`), a
+provider's callback asks `auth_not_put_out_since(actor, moment)` before its
+handoff ticket, `auth_change_password(actor, hash, keep, was)` changes the
+password only over the hash checked (`-1` otherwise, `403 wrong_password`),
+and `auth_totp_enable(actor, secret)` turns on only the secret checked.
+`account_deletion` takes the hold first too.
 Nothing deleted, nothing backfilled.
 
 **Spent sessions are swept** by the worker's `refresh_session_sweep(limit)`
@@ -2584,10 +2590,10 @@ actor it sets, an operator's or a server owner's included.
 `agent_oauth_end`, `auth_app_start_once`, `auth_change_password`,
 `auth_claim_email`, `auth_confirm_email`, `auth_confirm_if_invited`,
 `auth_email_cancel`, `auth_email_confirm`, `auth_email_ticket`,
-`auth_email_ticket_peek`, `auth_end_session`, `auth_identity_forget`,
+`auth_email_ticket_peek`, `auth_end_session`, `auth_hold_account`, `auth_identity_forget`,
 `auth_identity_link`, `auth_identity_remove`, `auth_invite_delivered`,
 `auth_lookup_user`, `auth_membership_answer`,
-`auth_password_hash`, `auth_recovery_replace`, `auth_recovery_spend`,
+`auth_not_put_out_since`, `auth_password_hash`, `auth_recovery_replace`, `auth_recovery_spend`,
 `auth_refresh_again`, `auth_revoke_others`, `auth_revoke_session`, `auth_set_password`,
 `auth_spend_refresh`, `auth_ticket_binding`, `auth_ticket_make`,
 `auth_ticket_make_bound`, `auth_ticket_peek`, `auth_ticket_recent`,

@@ -155,8 +155,9 @@ test('a second factor is asked for too, and a wrong code counts like a wrong pas
   const { generateSecret, seal } = await import('../src/auth/totp.js')
   const secret = generateSecret()
   await asAuth(async (tx) => {
-    await tx`select auth_totp_begin(${me.actor_id}, ${seal(secret)})`
-    await tx`select auth_totp_enable(${me.actor_id})`
+    const sealed = seal(secret)
+    await tx`select auth_totp_begin(${me.actor_id}, ${sealed})`
+    await tx`select auth_totp_enable(${me.actor_id}, ${sealed})`
   })
   const shown = (await (await as(me.access_token, '/api/me/email')).json()) as { asks: { code: boolean } }
   assert.equal(shown.asks.code, true)
@@ -268,8 +269,9 @@ test('the second factor is turned off with the password and a code from it', asy
   const { generateSecret, seal } = await import('../src/auth/totp.js')
   const secret = generateSecret()
   await asAuth(async (tx) => {
-    await tx`select auth_totp_begin(${me.actor_id}, ${seal(secret)})`
-    await tx`select auth_totp_enable(${me.actor_id})`
+    const sealed = seal(secret)
+    await tx`select auth_totp_begin(${me.actor_id}, ${sealed})`
+    await tx`select auth_totp_enable(${me.actor_id}, ${sealed})`
   })
   const off = async (body: unknown) => {
     const r = await post('/api/2fa/disable', body, me.access_token)

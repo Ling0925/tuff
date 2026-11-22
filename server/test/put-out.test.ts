@@ -5,9 +5,9 @@ import { decodeJwt } from 'jose'
 import postgres from 'postgres'
 import { app } from '../src/http/routes.js'
 import { outbox } from '../src/mail.js'
-import { asAuthActor, bounded, withActor as inWorkspaceOf } from '../src/db.js'
-import { checkedNow, issueApiToken, startSession } from '../src/auth/flows.js'
-import { hashToken } from '../src/auth/crypto.js'
+import { asAuthActor, bounded, withActor as inWorkspaceOf, withoutActor } from '../src/db.js'
+import { checkedNow, issueApiToken, login, startSession } from '../src/auth/flows.js'
+import { hashPassword, hashToken } from '../src/auth/crypto.js'
 import { asAuth, asTableOwner, closeDb, makeOwner, makeProject, stamp as fresh, uuidv7, withActor } from './helpers.js'
 
 /* Connections of the owner's to hold open — a refresh, a sign-in, a put-out
@@ -644,7 +644,8 @@ test('an account deleted while a refresh holds its row waits for the refresh ins
   try {
     await r`begin`
     open |= 1
-    await r`select 1 from app_user where actor_id = ${m.ctx.actorId} for key share`
+    /* As a refresh holds the account, before it spends. */
+    await r`select auth_hold_account(${m.ctx.actorId})`
     await d`begin`
     open |= 2
     const marker = `deletion-${fresh()}`
@@ -664,4 +665,189 @@ test('an account deleted while a refresh holds its row waits for the refresh ins
     r.release()
     d.release()
   }
+})
+
+/* ---------------------------------------- 6. a password, a factor, the hold */
+
+test('a password change in flight across the reset that puts the holder out does not hand the account back', async () => {
+  const m = await byHandOwner()
+  const [row] = await owner()<{ email: string }[]>`select email::text as email from app_user where actor_id = ${m.ctx.actorId}`
+  const email = row!.email
+  const bobs = await hashPassword('bob-chose-this-from-the-letter')
+  const bob = await held.reserve()
+  let open = false
+  try {
+    await bob`begin`
+    open = true
+    // The letter's reset, uncommitted: it holds the account and puts the holder out.
+    await bob`select auth_set_password(${m.ctx.actorId}, ${bobs})`
+    const req = Promise.resolve(call('POST', '/api/me/password', { current: PASSWORD, password: 'mallory-keeps-this-one' }, m.token))
+    assert.ok(await waitingOrDone('auth_still_in', req), 'the change waits for the put-out')
+    await bob`commit`
+    open = false
+    assert.ok([401, 403].includes((await req).status))
+  } finally {
+    if (open) await bob`rollback`
+    bob.release()
+  }
+  assert.equal(await login({ email, password: 'mallory-keeps-this-one' }), null)
+  const asBob = await login({ email, password: 'bob-chose-this-from-the-letter' })
+  assert.ok(asBob && typeof asBob === 'object' && ('access_token' in asBob || 'nowhere' in asBob))
+})
+
+test('an unproved holder’s password change in flight while Google proves the address leaves no password behind', async () => {
+  const boss = await makeOwner()
+  const h = await holderIn(boss, 'pwflight')
+  const bob = await held.reserve()
+  let open = false
+  try {
+    await bob`begin`
+    open = true
+    await bob`select auth_claim_email(${h.actor_id})`
+    const req = Promise.resolve(call('POST', '/api/me/password', { current: PASSWORD, password: 'mallory-keeps-this-one' }, h.access_token))
+    await waitingOrDone('auth_still_in', req)
+    await bob`commit`
+    open = false
+    assert.ok([401, 403].includes((await req).status))
+  } finally {
+    if (open) await bob`rollback`
+    bob.release()
+  }
+  const [u] = await owner()<{ pw: boolean }[]>`select password_hash is not null as pw from app_user where actor_id = ${h.actor_id}`
+  assert.equal(u!.pw, false)
+  assert.equal(await login({ email: h.email, password: 'mallory-keeps-this-one' }), null)
+})
+
+test('a password is changed only over the one that was checked, and a factor turned on only for the secret checked', async () => {
+  const m = await makeOwner()
+  const [was] = await asAuth((tx) => tx<{ hash: string }[]>`select auth_password_hash(${m.ctx.actorId}) as hash`)
+  const fresh1 = await hashPassword('another-long-password-1')
+  const [stale] = await asAuth(
+    (tx) => tx<{ n: number }[]>`select auth_change_password(${m.ctx.actorId}, ${fresh1}, ${null}::uuid, ${'scrypt$not-the-one'}) as n`,
+  )
+  assert.equal(stale!.n, -1)
+  const [kept] = await asAuth((tx) => tx<{ hash: string }[]>`select auth_password_hash(${m.ctx.actorId}) as hash`)
+  assert.equal(kept!.hash, was!.hash)
+  const [ok] = await asAuth(
+    (tx) => tx<{ n: number }[]>`select auth_change_password(${m.ctx.actorId}, ${fresh1}, ${null}::uuid, ${was!.hash}) as n`,
+  )
+  assert.ok(ok!.n >= 0)
+
+  // Begun with one secret, begun again with another: the first is not the one turned on.
+  await asAuth((tx) => tx`select auth_totp_begin(${m.ctx.actorId}, 'sealed-first')`)
+  await asAuth((tx) => tx`select auth_totp_begin(${m.ctx.actorId}, 'sealed-second')`)
+  const [first] = await asAuth((tx) => tx<{ how: string }[]>`select auth_totp_enable(${m.ctx.actorId}, 'sealed-first') as how`)
+  assert.equal(first!.how, 'expired')
+  const [second] = await asAuth((tx) => tx<{ how: string }[]>`select auth_totp_enable(${m.ctx.actorId}, 'sealed-second') as how`)
+  assert.equal(second!.how, 'ok')
+})
+
+test('every transaction of a signed-in request asks, on either connection and as nobody — and asking takes no transaction id', async () => {
+  const m = await byHandOwner()
+  const sid = decodeJwt(m.token).sid as string
+  await asAuth((tx) => tx`select auth_claim_email(${m.ctx.actorId})`)
+  const asTheRequest = <T>(fn: () => Promise<T>) => bounded({ actorId: m.ctx.actorId, tokenProjectIds: [], sessionId: sid }, fn)
+  const refused = (e: { code?: string }) => e.code === '28000'
+  await assert.rejects(
+    asTheRequest(() => asAuth((tx) => tx`select 1`)),
+    refused,
+  )
+  await assert.rejects(
+    asTheRequest(() => withoutActor((tx) => tx`select 1`)),
+    refused,
+  )
+  await assert.rejects(
+    asTheRequest(() => inWorkspaceOf(uuidv7(), m.workspaceId, (tx) => tx`select 1`)),
+    refused,
+  )
+
+  // A read asks without writing anything: no transaction id, no lock on the row.
+  const fine = await makeOwner()
+  const c = await held.reserve()
+  try {
+    await c`begin`
+    await c`select auth_still_in(${fine.ctx.actorId}, ${decodeJwt(fine.token).sid as string}::uuid, null)`
+    const [x] = await c<{ x: string | null }[]>`select txid_current_if_assigned()::text as x`
+    assert.equal(x!.x, null)
+    await c`commit`
+  } finally {
+    c.release()
+  }
+})
+
+test('an old confirmation link and a request holding the account do not deadlock: the request finishes, then the put-out', async () => {
+  const m = await makeOwner()
+  await owner()`update app_user set email_verified_at = null where actor_id = ${m.ctx.actorId}`
+  const sid = decodeJwt(m.token).sid as string
+  const r = await held.reserve()
+  const p = await held.reserve()
+  let open = false
+  try {
+    await r`begin`
+    open = true
+    await r`select auth_still_in(${m.ctx.actorId}, ${sid}::uuid, null)`
+    const marker = `confirm-${fresh()}`
+    const confirming = p.unsafe(`select auth_confirm_email($1) /* ${marker} */`, [m.ctx.actorId]).execute()
+    assert.ok(await waitingOrDone(marker, confirming), 'the confirmation waits for the request')
+    // The request writes its own row: nothing of the put-out holds it yet.
+    await r`update app_user set language = 'fr' where actor_id = ${m.ctx.actorId}`
+    await r`commit`
+    open = false
+    await confirming
+  } finally {
+    if (open) await r`rollback`
+    r.release()
+    p.release()
+  }
+  const [u] = await owner()<{ after: boolean; fr: boolean }[]>`
+    select sessions_after is not null as after, language = 'fr' as fr from app_user where actor_id = ${m.ctx.actorId}`
+  assert.deepEqual({ ...u }, { after: true, fr: true })
+})
+
+test('a put-out waiting for the account goes before a request that asks after it', async () => {
+  const m = await byHandOwner()
+  const sid = decodeJwt(m.token).sid as string
+  const a = await held.reserve()
+  const b = await held.reserve()
+  let open = 0
+  try {
+    await a`begin`
+    open |= 1
+    await a`select auth_still_in(${m.ctx.actorId}, ${sid}::uuid, null)`
+    const out = claim(m.ctx.actorId, `put-out-queue-${fresh()}`)
+    assert.ok(await waitingOrDone('put-out-queue', out), 'the put-out waits for the request holding the account')
+    // A second request, asking after the put-out did: it waits behind it.
+    await b`begin`
+    open |= 2
+    const marker = `asks-after-${fresh()}`
+    const asks = b.unsafe(`select auth_still_in($1, $2::uuid, null) /* ${marker} */`, [m.ctx.actorId, sid]).execute()
+    assert.ok(await waitingOrDone(marker, asks), 'the second request waits behind the put-out')
+    await a`commit`
+    open &= ~1
+    await out
+    // And, the put-out done, the second is refused.
+    await assert.rejects(asks, (e: { code?: string }) => e.code === '28000')
+    await b`rollback`
+    open &= ~2
+  } finally {
+    if (open & 1) await a`rollback`
+    if (open & 2) await b`rollback`
+    a.release()
+    b.release()
+  }
+})
+
+test('a provider’s ticket for an account put out since it was found is refused; the new holder’s own is not', async () => {
+  const boss = await makeOwner()
+  const h = await holderIn(boss, 'handoff')
+  const found = await checkedNow()
+  await claim(h.actor_id, 'put-out-handoff')
+  await assert.rejects(
+    asAuth((tx) => tx`select auth_not_put_out_since(${h.actor_id}, ${found})`),
+    (e: { code?: string }) => e.code === '28000',
+  )
+  // Found by the proof itself (`seen.claimed`): asked with no moment, and good.
+  await asAuth((tx) => tx`select auth_not_put_out_since(${h.actor_id}, ${null}::timestamptz)`)
+  const now = await checkedNow()
+  await asAuth((tx) => tx`select auth_not_put_out_since(${h.actor_id}, ${now})`)
 })

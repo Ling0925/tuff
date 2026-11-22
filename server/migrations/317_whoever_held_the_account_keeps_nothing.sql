@@ -15,26 +15,32 @@
  *    So was anything a request of the holder's wrote after it was let in —
  *    a webhook, a room hook, an agent, a webhook turned back on — and the
  *    holder chooses how long that takes: a body sent slowly is read after
- *    the request was let in. Now the account's row orders them:
- *    - `put_out` takes `app_user` FOR UPDATE first and sets
- *      `app_user.sessions_after` last;
- *    - every transaction a signed-in request runs as its own person asks
- *      `auth_still_in(actor, session, token)` before anything else
- *      (`db.ts`): FOR KEY SHARE on the account's row (an agent's: its
- *      connector's), then a refusal (`28000`, answered 401) when the
- *      session or token the request came with was begun at or before
- *      `sessions_after`. A request first: the put-out waits for it and sees
- *      what it wrote. The put-out first: the request waits, and is refused.
- *      KEY SHARE, not SHARE: it waits for nothing but a put-out or a
- *      deletion, and two requests of one person that both write the row
- *      never wait on each other's;
+ *    the request was let in, and a new password is hashed after the old one
+ *    was read. Now the account's hold orders them (`account_hold`, a
+ *    transaction-level advisory lock on the person — no transaction id, no
+ *    multixact, granted in the order asked):
+ *    - `put_out` holds it exclusively, and every path that puts a holder
+ *      out takes it before it writes the account's row (an old confirmation
+ *      link too, `auth_confirm_email`); it sets `sessions_after` last;
+ *    - every transaction made inside a signed-in request — as its person,
+ *      as anybody, as nobody, on either connection — asks
+ *      `auth_still_in(actor, session, token)` first (`db.ts`): the hold,
+ *      shared (an agent's token: its connector's), then a refusal (`28000`,
+ *      answered 401) when the session or token the request came with was
+ *      begun at or before `sessions_after`. A request first: the put-out
+ *      waits for it and sees what it wrote. The put-out first: the request
+ *      waits, and is refused;
  *    - what is written with no such request — a sign-in's session, a token
  *      an OAuth exchange mints, a ticket, an OAuth code — goes through
- *      `credential_after_put_out`, a trigger taking the same lock and
+ *      `credential_after_put_out`, a trigger taking the hold shared and
  *      writing the row spent when it was begun at or before
  *      `sessions_after` (`created_at`, which the server dates from the
- *      check it was made on when that came earlier);
- *    - `auth_spend_refresh` takes the lock before it spends.
+ *      check it was made on when that came earlier); a provider's callback
+ *      asks `auth_not_put_out_since` before its ticket, and a password is
+ *      read under the hold (`auth_hold_account`);
+ *    - `auth_spend_refresh` takes the hold before it spends;
+ *    - a password is changed, and a second factor turned on, only over the
+ *      password and the secret that were checked.
  *    316's second round of ends in `auth_email_confirm` is taken out.
  *
  * 2. What it left running. `put_out(actor, row)` is the one step every path
@@ -53,9 +59,8 @@
  *      for the person's word unshared;
  *    - the OAuth codes it was given spent, and the factor's times cleared.
  *
- * 3. `account_deletion` takes the account's row FOR UPDATE first, so a
- *    refresh or a request in flight is waited for rather than deadlocked
- *    with.
+ * 3. `account_deletion` takes the account's hold first, so a refresh or a
+ *    request in flight is waited for, not deadlocked with.
  *
  * Rows: none changed or deleted here — four nullable columns with no
  * default (the catalogue alone), functions, triggers. Not backfilled.
@@ -90,10 +95,40 @@ comment on column agent.stopped_at is
 /* ------------------------------------------------------------ 1. in flight */
 
 /*
- * Whether a signed-in request may go on as its person: asked first in every
- * transaction it runs as them (`db.ts`), with the session or the token it
- * came with. Holds the account's row (an agent's: its connector's) until
- * the transaction ends, so a put-out of that account either waits for this
+ * The account's hold: a transaction-level advisory lock on the person,
+ * shared by whatever runs as them (a request's transactions, a refresh, a
+ * sign-in's session) and exclusive for whatever puts their previous holder
+ * out or deletes them. Not a lock on the `app_user` row: a row lock taken
+ * by every request gave every read transaction an id and a multixact, and
+ * row-lock waiters do not queue in order, so a stream of overlapping
+ * requests could keep a put-out waiting for good. Advisory locks take no
+ * transaction id and are granted in the order asked. The two-number form,
+ * with 31800 first, is a key space of its own: every other advisory lock
+ * here takes one bigint (`hashtext…`, the migrations' 7295000295).
+ * Exclusive waits at most three seconds, then the put-out fails and is
+ * pressed again, rather than holding a sign-in connection.
+ * Nobody's to run but the functions below.
+ */
+create function account_hold(p_person uuid, p_exclusive boolean) returns void
+language plpgsql volatile set search_path = public, pg_temp as $$
+begin
+  if p_person is null then
+    return;
+  end if;
+  if p_exclusive then
+    perform set_config('lock_timeout', '3s', true);
+    perform pg_advisory_xact_lock(31800, hashtext(p_person::text));
+  else
+    perform pg_advisory_xact_lock_shared(31800, hashtext(p_person::text));
+  end if;
+end $$;
+revoke all on function account_hold(uuid, boolean) from public;
+
+/*
+ * Whether a signed-in request may go on: asked first in every transaction
+ * made inside it (`db.ts`), with who it is and the session or token it came
+ * with. Holds the account (an agent's: its connector's) until the
+ * transaction ends, so a put-out of that account either waits for this
  * transaction and then sees what it wrote, or has committed and this is
  * refused. The application's (and so the sign-in role's, its member).
  */
@@ -108,7 +143,8 @@ begin
     return true;
   end if;
   v_person := coalesce((select g.created_by from agent g where g.actor_id = p_actor), p_actor);
-  select u.sessions_after into v_after from app_user u where u.actor_id = v_person for key share;
+  perform account_hold(v_person, false);
+  select u.sessions_after into v_after from app_user u where u.actor_id = v_person;
   if v_after is null then
     return true;
   end if;
@@ -146,7 +182,8 @@ begin
   if v_who is null then
     return new;
   end if;
-  select u.sessions_after into v_after from app_user u where u.actor_id = v_who for key share;
+  perform account_hold(v_who, false);
+  select u.sessions_after into v_after from app_user u where u.actor_id = v_who;
   if v_after is null or new.created_at > v_after then
     return new;
   end if;
@@ -186,7 +223,7 @@ begin
   if v_actor is null then
     return;
   end if;
-  perform 1 from app_user u where u.actor_id = v_actor for key share;
+  perform account_hold(v_actor, false);
   return query
     update refresh_session s set revoked_at = now()
     where s.token_hash = p_hash and s.revoked_at is null and s.expires_at > now()
@@ -254,10 +291,11 @@ begin
   if p_actor is null then
     return;
   end if;
-  /* First: every transaction of the holder's still running — a request,
-     a refresh, a sign-in — finishes before anything below reads, and
-     none starts until this one has committed (`auth_still_in`). */
-  perform 1 from app_user u where u.actor_id = p_actor for update;
+  /* First (each caller has already, before writing the row): every
+     transaction of the holder's still running — a request, a refresh, a
+     sign-in — finishes before anything below reads, and none starts until
+     this one has committed (`auth_still_in`). */
+  perform account_hold(p_actor, true);
 
   delete from recovery_code where actor_id = p_actor;
   update refresh_session set revoked_at = coalesce(revoked_at, now()), ended_at = now()
@@ -318,8 +356,8 @@ begin
   return new;
 end $$;
 
-/* 315's, with the shared step; the row held before it is written, so a
-   request of the holder's in flight is waited for, not deadlocked with. */
+/* 315's, with the shared step; the account held before its row is written,
+   so a request of the holder's in flight is waited for, not deadlocked with. */
 create or replace function auth_claim_email(p_actor uuid) returns void
 language plpgsql security definer set search_path = public, pg_temp as $$
 begin
@@ -327,7 +365,7 @@ begin
      and exists (select 1 from instance_applicant where actor_id = p_actor) then
     raise exception 'sign_up_closed';
   end if;
-  perform 1 from app_user where actor_id = p_actor for update;
+  perform account_hold(p_actor, true);
   if exists (select 1 from app_user where actor_id = p_actor
              and (email_verified_at is null or email_by_hand)) then
     update app_user set email_verified_at = now(), email_by_hand = false, password_hash = null,
@@ -345,11 +383,11 @@ declare
   v_unproved boolean;
   v_fresh boolean;
 begin
+  perform account_hold(p_actor, true);
   select password_hash is not null, email_verified_at is null or email_by_hand,
          coalesce(totp_enabled and totp_enabled_at > now() - interval '7 days', false)
   into v_had, v_unproved, v_fresh
-  from app_user where actor_id = p_actor
-  for update;
+  from app_user where actor_id = p_actor;
   update app_user
   set password_hash = p_hash, email_verified_at = coalesce(email_verified_at, now()),
       email_by_hand = false, updated_at = now()
@@ -386,10 +424,10 @@ declare
 begin
   select * into s from instance_setting where id for update;
   if not s.community then raise exception 'not_community'; end if;
-  select actor_id, email_verified_at is null or email_by_hand into v_actor, v_weak
-  from app_user where email = p_email
-  for update;
+  select actor_id into v_actor from app_user where email = p_email;
   if v_actor is null then return null; end if;
+  perform account_hold(v_actor, true);
+  select email_verified_at is null or email_by_hand into v_weak from app_user where actor_id = v_actor;
   if p_email = 'dev@example.com' then raise exception 'dev_account'; end if;
   v_recovery := s.claimed_at is not null and instance_usable_owners() = 0;
   if s.claimed_at is not null and not v_recovery then
@@ -450,6 +488,11 @@ begin
     return query select 'gone'::text, null::uuid, null::citext, null::citext, false;
     return;
   end if;
+  /* An unproved account is about to be put out: its hold first, before
+     the row, as every put-out takes it. */
+  if exists (select 1 from app_user u where u.actor_id = t.actor_id and u.email_verified_at is null) then
+    perform account_hold(t.actor_id, true);
+  end if;
   select u.email, u.email_verified_at is null into v_old, v_unproved
   from app_user u where u.actor_id = t.actor_id
   for update;
@@ -471,6 +514,109 @@ begin
   v_said := auth_email_change(t.actor_id, t.email);
   return query select v_said, t.actor_id, t.email, v_old, v_said = 'changed' and v_unproved;
 end $$;
+
+/* 106's: an old confirmation link confirms an address with no password
+   chosen, which puts the previous holder out (`app_user_proved`) — the hold
+   first, before the row the trigger fires on. Taken the other way round,
+   a request of the holder's that holds the account and then writes its own
+   row deadlocked with it, and the put-out was the one aborted. */
+create or replace function auth_confirm_email(p_actor uuid) returns void
+language plpgsql security definer set search_path = public, pg_temp as $$
+begin
+  if exists (select 1 from app_user where actor_id = p_actor and email_verified_at is null) then
+    perform account_hold(p_actor, true);
+    update app_user set email_verified_at = now(), updated_at = now()
+    where actor_id = p_actor and email_verified_at is null;
+  end if;
+end $$;
+
+/*
+ * 112's, and only over the password that was checked: the route hands the
+ * hash it verified, and a password that changed since — a reset, or the
+ * account put out and its password taken while the new one was hashed — is
+ * not overwritten. -1 for that; the route says the password did not match.
+ */
+drop function auth_change_password(uuid, text, uuid);
+create function auth_change_password(p_actor uuid, p_hash text, p_keep uuid, p_was text) returns int
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare
+  n int;
+begin
+  update app_user set password_hash = p_hash, updated_at = now()
+  where actor_id = p_actor and password_hash is not distinct from p_was;
+  if not found then
+    return -1;
+  end if;
+  update auth_ticket set used_at = now()
+  where actor_id = p_actor and kind = 'reset' and used_at is null;
+  insert into security_event (id, workspace_id, actor_id, kind)
+  select gen_random_uuid(), m.workspace_id, p_actor, 'password_changed'
+  from membership m
+  where m.actor_id = p_actor and m.deleted_at is null and m.joined_at is not null;
+  select auth_revoke_others(p_actor, p_keep) into n;
+  return n;
+end $$;
+revoke all on function auth_change_password(uuid, text, uuid, text) from public;
+grant execute on function auth_change_password(uuid, text, uuid, text) to tracker_auth;
+
+/*
+ * 243's, and only for the secret the code was checked against: one begun
+ * again since — or taken by a put-out and begun by somebody else — is not
+ * the one turned on.
+ */
+drop function auth_totp_enable(uuid);
+create function auth_totp_enable(p_actor uuid, p_secret_enc text) returns text
+language plpgsql security definer set search_path = public, pg_temp as $$
+begin
+  if exists (select 1 from app_user where actor_id = p_actor and totp_enabled) then
+    return 'on';
+  end if;
+  update app_user set totp_enabled = true, totp_enabled_at = now(), totp_begun_at = null, updated_at = now()
+  where actor_id = p_actor and totp_secret_enc is not null and totp_secret_enc = p_secret_enc
+    and not totp_enabled and totp_begun_at > now() - interval '15 minutes';
+  if found then
+    return 'ok';
+  end if;
+  return 'expired';
+end $$;
+revoke all on function auth_totp_enable(uuid, text) from public;
+grant execute on function auth_totp_enable(uuid, text) to tracker_auth;
+
+/*
+ * Whether the account was put out at or after a moment — for a sign-in
+ * whose way in was read before the session it hands out is written: a
+ * provider's callback found the account by its identity, and writes the
+ * ticket the exchange redeems. Under the account's hold, so a put-out in
+ * flight is waited for; raises `28000` when it was. The sign-in role's.
+ */
+create function auth_not_put_out_since(p_actor uuid, p_since timestamptz) returns boolean
+language plpgsql volatile security definer set search_path = public, pg_temp as $$
+begin
+  if p_actor is null or p_since is null then
+    return true;
+  end if;
+  perform account_hold(p_actor, false);
+  if exists (select 1 from app_user u where u.actor_id = p_actor and u.sessions_after >= p_since) then
+    raise exception 'put_out' using errcode = '28000';
+  end if;
+  return true;
+end $$;
+revoke all on function auth_not_put_out_since(uuid, timestamptz) from public;
+grant execute on function auth_not_put_out_since(uuid, timestamptz) to tracker_auth;
+
+/*
+ * The account's hold for a password about to be read, so a put-out in
+ * flight is waited for and the password read is the one after it — the
+ * sign-in role's, for `credentials` (`flows.ts`).
+ */
+create function auth_hold_account(p_actor uuid) returns boolean
+language plpgsql volatile security definer set search_path = public, pg_temp as $$
+begin
+  perform account_hold(p_actor, false);
+  return true;
+end $$;
+revoke all on function auth_hold_account(uuid) from public;
+grant execute on function auth_hold_account(uuid) to tracker_auth;
 
 /* --------------------------------------------------- 2. started again */
 
@@ -625,17 +771,16 @@ grant execute on function agent_webhook_said(uuid) to tracker_app;
 /* ------------------------------------------- 3. an account deleted, in turn */
 
 /*
- * 298's, behind a hold on the account's row: deleting it last, after its
- * sessions, waited for a refresh holding the row while the refresh waited
- * for a session the deletion held. Holding the row first, the deletion
- * waits for the refresh instead. A dry run holds nothing.
+ * 298's, behind the account's hold: a refresh or a request of the
+ * account's in flight finishes first, rather than meeting the deletion
+ * half-way. A dry run holds nothing.
  */
 alter function account_deletion(uuid, boolean) rename to account_deletion_rows;
 create function account_deletion(p_actor uuid, p_dry boolean) returns json
 language plpgsql volatile security definer set search_path = public, pg_temp as $$
 begin
   if not p_dry then
-    perform 1 from app_user u where u.actor_id = p_actor for update;
+    perform account_hold(p_actor, true);
   end if;
   return account_deletion_rows(p_actor, p_dry);
 end $$;

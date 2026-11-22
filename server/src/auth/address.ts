@@ -67,15 +67,19 @@ export async function itIsThem(
   email: string,
   asks: Asks,
   given: { password?: string | undefined; code?: string | undefined },
-): Promise<boolean> {
+): Promise<false | { hash: string | null }> {
+  let hash: string | null = null
   if (asks.password) {
     const [r] = await asAuth((tx) => tx<{ hash: string | null }[]>`select auth_password_hash(${actorId}) as hash`)
     if (!r?.hash || !given.password || !(await verifyPassword(given.password, r.hash))) return false
+    hash = r.hash
   }
   if (asks.code) {
     if (!given.code || !(await secondFactor(actorId, email, given.code))) return false
   }
-  return true
+  /* The hash the password was checked against, for a change that must be
+     made over that one and no other (`auth_change_password`). */
+  return { hash }
 }
 
 /** What six digits from the inbox were sent for — each is no other's yes. */

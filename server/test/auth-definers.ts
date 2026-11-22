@@ -22,6 +22,8 @@ export const AUTH_DEFINERS = [
   'auth_email_ticket',
   'auth_email_ticket_peek',
   'auth_end_session',
+  /* 317: the account's hold for a password read, before a password is read. */
+  'auth_hold_account',
   'auth_identity_forget',
   'auth_identity_link',
   'auth_identity_remove',
@@ -29,6 +31,8 @@ export const AUTH_DEFINERS = [
   'auth_lookup_user',
   /* 315: Join or Leave a workspace joined before the proof. */
   'auth_membership_answer',
+  /* 317: whether an account was put out since a provider's callback found it. */
+  'auth_not_put_out_since',
   'auth_password_hash',
   'auth_recovery_replace',
   'auth_recovery_spend',

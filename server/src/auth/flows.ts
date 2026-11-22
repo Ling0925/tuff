@@ -314,9 +314,15 @@ export async function credentials(input: {
   totp?: string | undefined
 }): Promise<string | 'totp_required' | null> {
   const row = await asAuth(async (tx) => {
-    const [r] = await tx<
-      { actor_id: string; password_hash: string | null; totp_enabled: boolean }[]
-    >`select * from auth_lookup_user(${input.email})`
+    type Found = { actor_id: string; password_hash: string | null; totp_enabled: boolean }
+    const [first] = await tx<Found[]>`select * from auth_lookup_user(${input.email})`
+    if (!first) return first
+    /* Under the account's hold, then read again: a put-out in flight is
+       waited for, so the password read is the one after it — its previous
+       holder's never signs anybody in at the moment it is taken away
+       (migration 317). */
+    await tx`select auth_hold_account(${first.actor_id})`
+    const [r] = await tx<Found[]>`select * from auth_lookup_user(${input.email})`
     return r
   })
 
@@ -769,7 +775,8 @@ export async function enableTotp(actorId: string, code: string): Promise<string[
      begun and left, or begun before beginning asked who it was, is not a
      way to turn the factor on with a code alone (migration 243). */
   const turned = await asAuth(async (tx) => {
-    const [r] = await tx<{ how: 'ok' | 'on' | 'expired' }[]>`select auth_totp_enable(${actorId}) as how`
+    /* Only the secret the code was checked against (migration 317). */
+    const [r] = await tx<{ how: 'ok' | 'on' | 'expired' }[]>`select auth_totp_enable(${actorId}, ${sealed}) as how`
     if (r?.how !== 'ok') return r?.how ?? 'expired'
     await tx`select auth_recovery_replace(${actorId}, ${codes.map((c) => hashToken(c))})`
     return 'ok'

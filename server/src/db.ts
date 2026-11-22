@@ -90,17 +90,42 @@ function limitFor(actorId: string): [string, string] {
 }
 
 /**
- * The session and the token the request came with, for a transaction made
- * for the request's own person; nulls for anybody else's, and outside a
- * request. `auth_still_in` (migration 317) holds the account's row for the
- * transaction and refuses (`28000`, answered 401) when the account's
- * previous holder was put out after that session or token was begun — so a
- * request let in before a put-out and writing after it, however slowly its
- * body came, writes nothing, and one writing first is seen by the put-out.
+ * Who the request is, with the session or the token it came with — asked
+ * of every transaction made inside it, as whomever: `auth_still_in`
+ * (migration 317) holds the account for the transaction and refuses
+ * (`28000`, answered 401) when the account's previous holder was put out
+ * after that session or token was begun. So a request let in before a
+ * put-out writes nothing after it, however slowly its body came and through
+ * whichever connection — the application's, the sign-in role's, as its own
+ * person or as nobody — and one writing first is seen by the put-out.
+ * Nulls outside a request, and for a request with neither (a board's link,
+ * a server-signed token): those ask nothing.
  */
-function stillIn(actorId: string): [string | null, string | null] {
+function stillIn(): [string | null, string | null, string | null] {
   const b = scope.getStore()
-  return b && b.actorId === actorId ? [b.sessionId, b.tokenId] : [null, null]
+  return b && (b.sessionId || b.tokenId) ? [b.actorId, b.sessionId, b.tokenId] : [null, null, null]
+}
+
+/**
+ * Runs `fn` as outside any request: its transactions ask nothing. For the
+ * one request that may put its own account's previous holder out — a new
+ * address confirmed from an unproved account's own session — whose next
+ * statements, the letter that chooses a password among them, are the
+ * put-out's own and not a write let in before it.
+ */
+export function outsideRequest<T>(fn: () => T): T {
+  return scope.exit(fn)
+}
+
+/** The same question, sent first in a transaction that sets nothing else. */
+function asking<T>(pool: Sql, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  const [who, sid, tid] = stillIn()
+  if (!who) return pool.begin(fn) as Promise<T>
+  return pool.begin(async (tx) => {
+    const asked = tx`select auth_still_in(${who}, ${sid}::uuid, ${tid}::uuid)`.execute()
+    const [, out] = await Promise.all([asked, fn(tx)])
+    return out
+  }) as Promise<T>
 }
 
 /**
@@ -118,7 +143,7 @@ function actorOn<T>(pool: Sql, actorId: string, workspaceId: string, fn: (tx: Tx
   /* Read here, not inside: the driver may start the transaction from a
      socket's callback, where the request's store is not. */
   const [tokenActor, tokenProjects] = limitFor(actorId)
-  const [sid, tid] = stillIn(actorId)
+  const [who, sid, tid] = stillIn()
   return pool.begin(async (tx) => {
     /*
      * One statement for both, and not waited for.
@@ -143,7 +168,7 @@ function actorOn<T>(pool: Sql, actorId: string, workspaceId: string, fn: (tx: Tx
                           set_config('app.workspace_id', ${workspaceId}, true),
                           set_config('app.token_actor', ${tokenActor}, true),
                           set_config('app.token_projects', ${tokenProjects}, true),
-                          auth_still_in(${actorId}, ${sid}::uuid, ${tid}::uuid)`.execute()
+                          auth_still_in(${who}::uuid, ${sid}::uuid, ${tid}::uuid)`.execute()
     const [, out] = await Promise.all([set, fn(tx)])
     return out
   }) as Promise<T>
@@ -169,13 +194,13 @@ export async function withActorEverywhere<T>(actorId: string, fn: (tx: Tx) => Pr
 
 function everywhereOn<T>(pool: Sql, actorId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
   const [tokenActor, tokenProjects] = limitFor(actorId)
-  const [sid, tid] = stillIn(actorId)
+  const [who, sid, tid] = stillIn()
   return pool.begin(async (tx) => {
     // Sent ahead of the handler's queries, as `withActor` does, and asking the same.
     const set = tx`select set_config('app.actor_id', ${actorId}, true),
                           set_config('app.token_actor', ${tokenActor}, true),
                           set_config('app.token_projects', ${tokenProjects}, true),
-                          auth_still_in(${actorId}, ${sid}::uuid, ${tid}::uuid)`.execute()
+                          auth_still_in(${who}::uuid, ${sid}::uuid, ${tid}::uuid)`.execute()
     const [, out] = await Promise.all([set, fn(tx)])
     return out
   }) as Promise<T>
@@ -239,7 +264,7 @@ export const authSql = (): Sql => authPool()
 
 /** A sign-in transaction with no actor — `withoutActor`, as `tracker_auth`. */
 export async function asAuth<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
-  return authPool().begin(fn) as Promise<T>
+  return asking(authPool(), fn)
 }
 
 /** A sign-in transaction for an actor in a workspace — `withActor`, as `tracker_auth`. */
@@ -263,14 +288,14 @@ export async function asAuthEverywhere<T>(actorId: string, fn: (tx: Tx) => Promi
  * refresh is never asked with a token.
  */
 export async function asAuthThenActor<T>(fn: (tx: Tx, actAs: (actorId: string) => Promise<void>) => Promise<T>): Promise<T> {
-  return authPool().begin(async (tx) => {
+  return asking(authPool(), async (tx) => {
     const actAs = async (actorId: string): Promise<void> => {
       await tx`select set_config('app.actor_id', ${actorId}, true),
                       set_config('app.token_actor', '', true),
                       set_config('app.token_projects', '', true)`
     }
     return fn(tx, actAs)
-  }) as Promise<T>
+  })
 }
 
 /*
@@ -327,7 +352,7 @@ export async function withBoardOnly<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
 
 /** A transaction with no actor: authentication and housekeeping only. */
 export async function withoutActor<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
-  return sql.begin(fn) as Promise<T>
+  return asking(sql, fn)
 }
 
 export async function closeDb(): Promise<void> {
