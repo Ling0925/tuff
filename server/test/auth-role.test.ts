@@ -158,8 +158,11 @@ test('signing in, refreshing, a token and signing out still go through', async (
   const renewed = await post('/auth/refresh', { refresh_token: s.refresh_token })
   assert.equal(renewed.status, 200, await renewed.clone().text())
   const r = (await renewed.json()) as { access_token: string; refresh_token: string }
-  /* The old refresh token is spent. */
-  assert.notEqual((await post('/auth/refresh', { refresh_token: s.refresh_token })).status, 200)
+  /* The old refresh token is spent: asked again at once it answers the same
+     session, not a second one. */
+  const again = await post('/auth/refresh', { refresh_token: s.refresh_token })
+  assert.equal(again.status, 200, await again.clone().text())
+  assert.equal(((await again.json()) as { refresh_token: string }).refresh_token, r.refresh_token)
   const made = await post('/api/tokens', { name: 'probe', ttl_days: 7 }, r.access_token)
   assert.equal(made.status, 201, await made.clone().text())
   const { token } = (await made.json()) as { token: string }

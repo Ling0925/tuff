@@ -206,8 +206,8 @@ repeated across a page; one that is not a cursor this server wrote is
 | POST | `/auth/password/reset` | `{ token, password }` (twelve or more); `410` once used or past its hour (a day for a `chs_` sign-up token); ends every session at once, and confirms the address — the link came to it. When the account had a password, tokens for tools are revoked too. A second factor turned on in the last seven days goes with its recovery codes; an older one stays (migration 242). Every Google and Apple sign-in is unlinked (migration 151). `password_reset` in the security log and a note to the address. **The first password of an address nobody had proved** (the sign-up letter): `{ ok: true }` plus a session in the account's first workspace (`PasswordSet`, `email_link` in the audit log) when the request carries the `tuff_bind` cookie the sign-up set for that account, `{ ok: true }` alone anywhere else; no note to the address |
 | — | every way in | sends `x-device`, the browser's own id for itself (8–64 letters, digits and hyphens), written on the session it makes |
 | POST | `/auth/login` | answers `totp_required` when a second factor is set, after the password check so a wrong password reveals nothing; `403 email_unverified` for the right password on an address not confirmed (an account from before the password came after the proof, or one a link with no address made), and the choose-a-password letter goes to it (five an hour) — confirming takes the old password (migration 212); an account in no workspace is answered a `NowhereSession` when the body says `nowhere: true`, else `403 no_workspace` |
-| POST | `/auth/refresh` | rotates: the old token is spent in the statement that reads it, and comes back in the workspace the session was in, with the device asking written on it. `401 removed` with `error.workspace` `{ id, name }` when the person was removed from that workspace — never a session in another one — so the device clears what it kept of it and says so (`docs/specs/removing-someone.md`); `401 unauthorized` for anything else |
-| POST | `/auth/logout` | ends every session of the browser the refresh token belongs to; their access tokens answer `401` from the next request, not when they run out |
+| POST | `/auth/refresh` | rotates: the old token is spent in the statement that reads it, and comes back in the workspace the session was in, with the device asking written on it. `401 removed` with `error.workspace` `{ id, name }` when the person was removed from that workspace — never a session in another one — so the device clears what it kept of it and says so (`docs/specs/removing-someone.md`); `401 unauthorized` for anything else. **Asked again with a token spent in the last ten seconds**, by the same `x-device` it was spent with (none for none), it answers the session the token was spent for — the same `refresh_token`, a fresh `access_token` for the same session — while that session is live (not spent again, not ended, not run out); so a lost answer is given again and two tabs racing end on one session. After the window, or from another device, or after a sign-out, `401 unauthorized` as before; a late reuse ends nothing else |
+| POST | `/auth/logout` | ends every session of the browser the refresh token belongs to, and of the line it is in (the sign-in and the refreshes traded from it), waiting first for a refresh of the same token in flight so the session it writes ends too (migration 312b); their access tokens answer `401` from the next request, not when they run out |
 | — | every signed-in request | `401` when the session the access token came from was ended — signed out, ended from Account, a password reset or changed — even inside its fifteen minutes |
 | GET | `/auth/invite/:token` | what the link says before anyone types a password |
 | GET | `/.well-known/assetlinks.json` | Digital Asset Links: which addresses the Android app opens and that the site's passwords are its (`handle_all_urls`, `get_login_creds`), with Apple's exclusions as `dynamic_app_link_components`; `[]` until `ANDROID_CERT_SHA256` names a certificate |
@@ -262,6 +262,27 @@ carries a `where`, and neither of those calls has an actor. Signing out left
 the token working, and rotation rotated nothing. One statement also decides
 the race: two requests arriving with the same token get one row between
 them.
+
+**And the session that replaces it is written in the same transaction**
+(migrations 312 and 312b), with `traded_from` naming
+the spent one, so the second of two requests with one token waits on the
+first and then finds what it wrote. `auth_refresh_again(hash, device,
+within)`, the sign-in role's alone, answers that successor for a token
+spent within `within` — never more than ten seconds, whatever the caller
+says — when it is live, the same person's, in the same workspace, and the
+spent session and its successor both carry the device asking. The
+successor's refresh token is made, not drawn: an HMAC of the spent token
+and the successor's id under a key derived from `JWT_SECRET`
+(`refresh-successor`), so it can be made again for the same request
+without the token being kept anywhere; one written before 312 does not
+match what is made and is not handed back.
+
+**Spent sessions are swept** by the worker's `refresh_session_sweep(limit)`
+(the worker's role's alone, at most five thousand rows a call): a row a
+week after it was spent, or a week after it ran out — one ended while
+live waits for its end, for `auth_removed_by` — and never a device's
+newest row, which `auth_device_known` asks for. The week and the cap are
+the function's, not the caller's.
 
 Soft delete with a window **and then a real one**. Only the first half
 existed, so "deleted" meant "kept forever and hidden", which is the answer no
@@ -2527,7 +2548,7 @@ actor it sets, an operator's or a server owner's included.
 `auth_email_ticket_peek`, `auth_end_session`, `auth_identity_forget`,
 `auth_identity_link`, `auth_identity_remove`, `auth_lookup_user`,
 `auth_password_hash`, `auth_recovery_replace`, `auth_recovery_spend`,
-`auth_revoke_others`, `auth_revoke_session`, `auth_set_password`,
+`auth_refresh_again`, `auth_revoke_others`, `auth_revoke_session`, `auth_set_password`,
 `auth_spend_refresh`, `auth_ticket_binding`, `auth_ticket_make`,
 `auth_ticket_make_bound`, `auth_ticket_peek`, `auth_ticket_recent`,
 `auth_ticket_spend`, `auth_ticket_start`, `auth_ticket_started`,

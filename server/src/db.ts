@@ -224,6 +224,27 @@ export async function asAuthEverywhere<T>(actorId: string, fn: (tx: Tx) => Promi
   return everywhereOn(authPool(), actorId, fn)
 }
 
+/**
+ * A sign-in transaction that learns whose it is from its first statement:
+ * a refresh, which finds the person by spending their token, and must write
+ * the session that replaces it in the same transaction — so a second
+ * request with the same token waits on the first and then finds what it
+ * wrote. It starts as nobody, as `asAuth`;
+ * `actAs(actorId)` makes the rest of it that person's in no one workspace,
+ * as `asAuthEverywhere` would have from the start. No token's limit: a
+ * refresh is never asked with a token.
+ */
+export async function asAuthThenActor<T>(fn: (tx: Tx, actAs: (actorId: string) => Promise<void>) => Promise<T>): Promise<T> {
+  return authPool().begin(async (tx) => {
+    const actAs = async (actorId: string): Promise<void> => {
+      await tx`select set_config('app.actor_id', ${actorId}, true),
+                      set_config('app.token_actor', '', true),
+                      set_config('app.token_projects', '', true)`
+    }
+    return fn(tx, actAs)
+  }) as Promise<T>
+}
+
 /*
  * Boards by link have a pool of their own.
  * A few connections, so that however many boards are asked of at

@@ -26,6 +26,8 @@ export const AUTH_DEFINERS = [
   'auth_password_hash',
   'auth_recovery_replace',
   'auth_recovery_spend',
+  /* 312: a refresh asked again. */
+  'auth_refresh_again',
   'auth_revoke_others',
   'auth_revoke_session',
   'auth_set_password',

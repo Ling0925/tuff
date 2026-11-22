@@ -1,9 +1,10 @@
 import { randomBytes } from 'node:crypto'
 import { v7 as uuidv7 } from 'uuid'
-import { asAuth, asAuthActor, asAuthEverywhere, withActor, withActorEverywhere } from '../db.js'
+import { asAuth, asAuthActor, asAuthEverywhere, asAuthThenActor, type Tx, withActor, withActorEverywhere } from '../db.js'
 import { edition } from '../edition.js'
 import { orClosed } from '../instance.js'
 import { hashPassword, verifyPassword, hashToken, generateToken } from './crypto.js'
+import { keyFor, mac, same } from './keys.js'
 import { tellInviter } from '../notify.js'
 import { issueAccessToken, issueNowhereToken, ACCESS_TTL_SECONDS, REFRESH_TTL_DAYS } from './tokens.js'
 import { generateRecoveryCodes, generateSecret, open, otpauthUrl, seal, totpStep } from './totp.js'
@@ -30,15 +31,11 @@ export async function startNowhereSession(actorId: string, meta: Meta): Promise<
   /* As the person, on the sign-in connection: `sess_write` is the sign-in
      role's alone and takes a session only for the actor of its transaction
      (migrations 306, 308). */
-  await asAuthEverywhere(
-    actorId,
-    (tx) => tx`
-      insert into refresh_session (id, actor_id, workspace_id, token_hash, user_agent, ip, device, expires_at, family)
-      values (${sid}, ${actorId}, null, ${hashToken(refreshToken)},
-              ${meta.userAgent ?? null}, ${meta.ip ?? null}, ${meta.device ?? null},
-              now() + ${`${REFRESH_TTL_DAYS} days`}::interval,
-              coalesce(auth_family_of(${actorId}, ${meta.from ?? null}::uuid), ${sid}::uuid))`,
-  )
+  await asAuthEverywhere(actorId, (tx) => writeSession(tx, { sid, actorId, workspaceId: null, refreshToken, meta, tradedFrom: null }))
+  return nowhereAnswer(actorId, sid, refreshToken)
+}
+
+async function nowhereAnswer(actorId: string, sid: string, refreshToken: string): Promise<NowhereSession> {
   return {
     access_token: await issueNowhereToken({ sub: actorId, sid }),
     refresh_token: refreshToken,
@@ -47,6 +44,36 @@ export async function startNowhereSession(actorId: string, meta: Meta): Promise<
     workspace_id: null,
     nowhere: true,
   }
+}
+
+async function sessionAnswer(actorId: string, workspaceId: string, sid: string, refreshToken: string): Promise<Session> {
+  return {
+    access_token: await issueAccessToken({ sub: actorId, workspace_id: workspaceId, sid }),
+    refresh_token: refreshToken,
+    expires_in: ACCESS_TTL_SECONDS,
+    actor_id: actorId,
+    workspace_id: workspaceId,
+  }
+}
+
+/**
+ * The row a session is, in a transaction on the sign-in connection whose
+ * actor is `actorId` — the insert policy asks both. Its line is the one
+ * `meta.from` is in, or its own. `tradedFrom` is the session whose refresh
+ * token was spent for this one in the same transaction, and nothing else:
+ * a refresh asked again finds its answer by it.
+ */
+async function writeSession(
+  tx: Tx,
+  s: { sid: string; actorId: string; workspaceId: string | null; refreshToken: string; meta: Meta; tradedFrom: string | null },
+): Promise<void> {
+  await tx`
+    insert into refresh_session (id, actor_id, workspace_id, token_hash, user_agent, ip, device, expires_at, family, traded_from)
+    values (${s.sid}, ${s.actorId}, ${s.workspaceId}, ${hashToken(s.refreshToken)},
+            ${s.meta.userAgent ?? null}, ${s.meta.ip ?? null}, ${s.meta.device ?? null},
+            now() + ${`${REFRESH_TTL_DAYS} days`}::interval,
+            coalesce(auth_family_of(${s.actorId}, ${s.meta.from ?? null}::uuid), ${s.sid}::uuid),
+            ${s.tradedFrom}::uuid)`
 }
 
 /** Who is signing in from where: the address, the browser's name, and
@@ -80,12 +107,7 @@ export async function startSession(actorId: string, workspaceId: string, meta: M
   const sid = uuidv7()
   /* As the person, on the sign-in connection, as above. */
   await asAuthEverywhere(actorId, async (tx) => {
-    await tx`
-      insert into refresh_session (id, actor_id, workspace_id, token_hash, user_agent, ip, device, expires_at, family)
-      values (${sid}, ${actorId}, ${workspaceId}, ${hashToken(refreshToken)},
-              ${meta.userAgent ?? null}, ${meta.ip ?? null}, ${meta.device ?? null},
-              now() + ${`${REFRESH_TTL_DAYS} days`}::interval,
-              coalesce(auth_family_of(${actorId}, ${meta.from ?? null}::uuid), ${sid}::uuid))`
+    await writeSession(tx, { sid, actorId, workspaceId, refreshToken, meta, tradedFrom: null })
     if (signIn) {
       await tx`
         insert into security_event (id, workspace_id, actor_id, kind, ip, user_agent, meta)
@@ -93,13 +115,7 @@ export async function startSession(actorId: string, workspaceId: string, meta: M
                 ${tx.json({ method: signIn } as never)})`
     }
   })
-  return {
-    access_token: await issueAccessToken({ sub: actorId, workspace_id: workspaceId, sid }),
-    refresh_token: refreshToken,
-    expires_in: ACCESS_TTL_SECONDS,
-    actor_id: actorId,
-    workspace_id: workspaceId,
-  }
+  return sessionAnswer(actorId, workspaceId, sid, refreshToken)
 }
 
 /**
@@ -387,17 +403,38 @@ async function removedBy(token: string): Promise<Removed | null> {
   return r ? { removed: { id: r.workspace_id, name: r.workspace_name } } : null
 }
 
-async function removedFrom(actorId: string, workspaceId: string): Promise<Removed | null> {
-  const [r] = await asAuth(
-    (tx) => tx<{ name: string | null }[]>`
-    select auth_removed_from(${actorId}, ${workspaceId}) as name`,
-  )
+async function removedFrom(tx: Tx, actorId: string, workspaceId: string): Promise<Removed | null> {
+  const [r] = await tx<{ name: string | null }[]>`select auth_removed_from(${actorId}, ${workspaceId}) as name`
   return r?.name ? { removed: { id: workspaceId, name: r.name } } : null
 }
 
 /**
+ * How long a refresh token spent a moment ago is answered with the session
+ * it was spent for. The database takes no
+ * more than ten seconds whatever this says (`auth_refresh_again`); tests
+ * shorten it, and never wait.
+ */
+export const refreshGrace = { seconds: 10 }
+
+/**
+ * A refresh's successor token, made from the token spent for it and the
+ * successor's id rather than at random, so the same request asked again
+ * can be answered with the same token: the server keeps only its hash.
+ * Nobody without the spent token and the server's key can make it. The id
+ * is no secret — it is the `sid` in every access token of that session
+ * and the id of its line in Signed in — so it only ties the token to its
+ * row; the key is what has to stay secret, and it is `JWT_SECRET`'s,
+ * whose leak signs access tokens outright.
+ */
+function successorToken(spent: string, sid: string): string {
+  return `rft_${mac(keyFor('refresh-successor'), `${sid}.${spent}`, 'base64url')}`
+}
+
+/**
  * Rotation: the old refresh token is revoked in the same transaction that
- * issues the new one. A leaked token works until the first refresh, not forever.
+ * issues the new one. A leaked token works until the first refresh, not
+ * forever — and, asked again within a few seconds, the first refresh's
+ * answer is given again rather than a second one or a refusal.
  */
 export async function refresh(
   token: string,
@@ -406,6 +443,10 @@ export async function refresh(
      "Unknown device" from its first refresh on. */
   meta: Meta = {},
 ): Promise<Session | NowhereSession | Removed | null> {
+  const hash = hashToken(token)
+  /* The device the request names, before the traded session's is carried
+     on: asking again is only for the browser the token was spent from. */
+  const asking = meta.device ?? null
   /*
    * Spent, not looked up and then revoked.
    *
@@ -417,14 +458,51 @@ export async function refresh(
    * One statement also closes the race the two-step had: `update …
    * returning` hands the row to exactly one of two requests arriving with
    * the same token.
+   *
+   * And the session that replaces it is written in the same transaction,
+   * which holds the spent row's lock until it commits: a second request
+   * with the same token waits on the first, matches nothing, and then finds
+   * what the first wrote (`again`, below). Spent in one transaction and
+   * replaced in another, a duplicate between the two found neither.
    */
-  const row = await asAuth(async (tx) => {
-    const [r] = await tx<{ session_id: string; actor_id: string; workspace_id: string | null }[]>`
-      select * from auth_spend_refresh(${hashToken(token)})`
-    return r ?? null
+  const traded = await asAuthThenActor(async (tx, actAs) => {
+    const [row] = await tx<{ session_id: string; actor_id: string; workspace_id: string | null }[]>`
+      select * from auth_spend_refresh(${hash})`
+    if (!row) return 'spent' as const
+    return tradeFor(tx, actAs, row, token, meta)
   })
-  if (!row) return removedBy(token)
+  if (traded !== 'spent') return traded
+  return (await again(token, hash, asking)) ?? removedBy(token)
+}
 
+/**
+ * The same answer, asked again: the live session a token spent a moment ago
+ * was spent for, by the same browser, with a fresh access token for it —
+ * `auth_refresh_again`. Null for anything
+ * else, which is refused as a spent token always was.
+ */
+async function again(token: string, hash: string, device: string | null): Promise<Session | NowhereSession | null> {
+  if (!(refreshGrace.seconds > 0)) return null
+  const [n] = await asAuth(
+    (tx) => tx<{ session_id: string; actor_id: string; workspace_id: string | null; token_hash: string }[]>`
+      select * from auth_refresh_again(${hash}, ${device}, ${refreshGrace.seconds}::float8 * interval '1 second')`,
+  )
+  if (!n) return null
+  const made = successorToken(token, n.session_id)
+  /* A successor written before 312, or by an older container mid-deploy,
+     was random: nothing can be made again, and the duplicate is refused. */
+  if (!same(hashToken(made), n.token_hash)) return null
+  return n.workspace_id ? sessionAnswer(n.actor_id, n.workspace_id, n.session_id, made) : nowhereAnswer(n.actor_id, n.session_id, made)
+}
+
+/** What a spent token is traded for, inside the transaction that spent it. */
+async function tradeFor(
+  tx: Tx,
+  actAs: (actorId: string) => Promise<void>,
+  row: { session_id: string; actor_id: string; workspace_id: string | null },
+  token: string,
+  meta: Meta,
+): Promise<Session | NowhereSession | Removed | null> {
   /*
    * The workspace the session was in, not the oldest one this person is in.
    *
@@ -449,10 +527,13 @@ export async function refresh(
    * ended sessions (172) gets this far; one since is refused above.
    */
   if (row.workspace_id) {
-    const out = await removedFrom(row.actor_id, row.workspace_id)
+    const out = await removedFrom(tx, row.actor_id, row.workspace_id)
     if (out) return out
   }
-  const workspaceId = await withActorEverywhere(row.actor_id, async (tx) => {
+  /* As the person from here, as `withActorEverywhere` was: the membership
+     reads and the insert policy both ask who. */
+  await actAs(row.actor_id)
+  const workspaceId = await (async () => {
     if (row.workspace_id) {
       const [still] = await tx<{ workspace_id: string }[]>`
         select workspace_id from membership
@@ -467,25 +548,30 @@ export async function refresh(
       where actor_id = ${row.actor_id} and deleted_at is null and joined_at is not null
       order by (role = 'owner') desc, created_at limit 1`
     return m?.workspace_id ?? null
-  })
+  })()
   /* The browser the traded session belonged to, carried on when the request
      does not say: a session's device is what signing out and ending it from
      Account end together, and a trade that dropped it left the access
      tokens from before it running after the browser was signed out. */
   if (!meta.device) {
-    const [was] = await asAuth((tx) => tx<{ device: string | null }[]>`select auth_device_of(${row.actor_id}, ${row.session_id}) as device`)
+    const [was] = await tx<{ device: string | null }[]>`select auth_device_of(${row.actor_id}, ${row.session_id}) as device`
     if (was?.device) meta = { ...meta, device: was.device }
   }
+  const sid = uuidv7()
+  const refreshToken = successorToken(token, sid)
+  const next = { sid, actorId: row.actor_id, refreshToken, meta: { ...meta, from: row.session_id }, tradedFrom: row.session_id }
   /* A session in no workspace, still in none: renewed as it was. One that
      was in a workspace and now finds none is not turned into one. */
   if (!workspaceId && !row.workspace_id) {
-    const [alive] = await asAuth((tx) => tx<{ name: string }[]>`select name from auth_nowhere(${row.actor_id})`)
+    const [alive] = await tx<{ name: string }[]>`select name from auth_nowhere(${row.actor_id})`
     if (!alive) return null
-    return startNowhereSession(row.actor_id, { ...meta, from: row.session_id })
+    await writeSession(tx, { ...next, workspaceId: null })
+    return nowhereAnswer(row.actor_id, sid, refreshToken)
   }
   if (!workspaceId) return null
   /* A refresh rotating, every quarter of an hour: nobody signed in. */
-  return startSession(row.actor_id, workspaceId, { ...meta, from: row.session_id }, null)
+  await writeSession(tx, { ...next, workspaceId })
+  return sessionAnswer(row.actor_id, workspaceId, sid, refreshToken)
 }
 
 /**
