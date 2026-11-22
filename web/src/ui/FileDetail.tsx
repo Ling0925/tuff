@@ -26,7 +26,6 @@ import { DOC_TEMPLATE as TEMPLATE } from '../words/docTemplates.js'
 import { readTemplates } from '../data/docTemplates.js'
 import { useCoedit } from '../data/coedit.js'
 import { collaboration } from './editor/collab.js'
-import { SubscribePill } from './Leaving.jsx'
 import { DocAccess, type Audience } from './DocAccess.jsx'
 import { UploadInto } from '../data/upload.js'
 import { VersionHistory, nearVersions, readyVersions } from './VersionHistory.jsx'
@@ -740,13 +739,6 @@ export function FileDetail({
                   }}
                 />
               )}
-              <SubscribePill
-                testId="follow-file"
-                on={Boolean(file.subscribed)}
-                path={`/files/${file.id}`}
-                words={W}
-                onChange={(on) => setFile((f) => (f ? { ...f, subscribed: on } : f))}
-              />
               <Popover
                 shape="bare"
                 width={232}
@@ -778,6 +770,30 @@ export function FileDetail({
                     >
                       <Icon name="link" size={16} className="text-ink-2" />
                       {W.copyLink}
+                    </button>
+                    {/* Whether somebody else's comment is a notification to
+                      you: the reader's own, so in the menu rather than on
+                      the head, where it was a pill as wide as a button.
+                      Optimistic, and put back if
+                      the server says no. */}
+                    <button
+                      data-row
+                      role="switch"
+                      aria-checked={Boolean(file.subscribed)}
+                      data-testid="follow-file"
+                      onClick={() => {
+                        const next = !file.subscribed
+                        setFile((f) => (f ? { ...f, subscribed: next } : f))
+                        void api(`/files/${file.id}/subscription`, { method: next ? 'POST' : 'DELETE' }).catch(() =>
+                          setFile((f) => (f ? { ...f, subscribed: !next } : f)),
+                        )
+                      }}
+                      className="flex w-full items-center gap-3 px-3 text-left text-base text-ink"
+                      style={{ height: 'var(--row-h)' }}
+                    >
+                      <Icon name="bell" size={16} style={{ color: file.subscribed ? 'var(--accent)' : 'var(--ink-2)' }} />
+                      <span className="min-w-px flex-1">{W.subscribe}</span>
+                      <Switch on={Boolean(file.subscribed)} />
                     </button>
                     {/* On the web, for anybody with the link — a written
                       document only, for whoever may edit it; the server
