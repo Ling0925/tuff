@@ -159,7 +159,7 @@ async function purge(): Promise<void> {
   }
   /* Sessions nothing reads any more, a week on: every refresh spends a row
      and writes the next, a hundred a day per open browser, and nothing took
-     the spent ones (migration 312b). In
+     the spent ones (migration 314). In
      batches, again while a batch comes back full, and no more than
      `SWEEP_BATCHES` of them an hour, so a backlog is taken over hours
      rather than in one long run. */

@@ -1,6 +1,6 @@
 /*
  * A session says what it was traded from, first of two files,
- * `312b` is the second.
+ * `314` is the second.
  *
  * `traded_from` on a session: the one whose refresh token was spent to
  * make it, written by the sign-in role's insert in the transaction that

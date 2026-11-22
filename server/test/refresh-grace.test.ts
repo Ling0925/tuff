@@ -7,7 +7,7 @@ import { hashToken } from '../src/auth/crypto.js'
 import { asAuth, asTableOwner, asWorker, closeDb, stamp, uuidv7, withoutActor } from './helpers.js'
 
 /*
- * A refresh asked again — migrations 312 and 312b.
+ * A refresh asked again — migrations 312 and 314.
  *
  * A token spent a moment ago, presented again by the same browser, is
  * answered with the session it was spent for while that session is live;
