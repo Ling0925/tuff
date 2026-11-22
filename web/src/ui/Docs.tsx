@@ -983,11 +983,10 @@ function PinnedCards({
 }) {
   return (
     /* Columns that share the list's width, so the row of pages starts and
-       ends where the list under it does: three across a desktop list, two
-       on a phone. A column is never narrower than the 204 a page was drawn
-       at; an empty column keeps its place, so one page is not stretched
-       across the list. */
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(204px,1fr))] gap-6 pt-1 max-[639px]:grid-cols-2">
+       ends where the list under it does: four across a desktop, by decision — it was as many 204-wide pages as fitted, three on
+       most screens — three on a tablet, two on a phone. An empty column
+       keeps its place, so one page is not stretched across the list. */
+    <div className="grid grid-cols-2 gap-6 pt-1 sm:grid-cols-3 lg:grid-cols-4">
       {rows.map((f) => (
         <PinnedCard key={f.id} f={f} thumbs={thumbs} onPress={onPress} onPin={onPin} />
       ))}
