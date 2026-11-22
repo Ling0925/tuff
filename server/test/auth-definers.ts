@@ -4,6 +4,8 @@
  * `tracker_auth` by name; 311 takes each from `tracker_app`. `docs/api.md`
  * names the same list ("The sign-in role's definers"), and a function
  * added to either side fails `auth-role.test.ts` until it is named.
+ * `auth_invite_delivered` is 313's, granted to the sign-in role
+ * from the start.
  */
 export const AUTH_DEFINERS = [
   'accept_invite',
@@ -22,6 +24,7 @@ export const AUTH_DEFINERS = [
   'auth_identity_forget',
   'auth_identity_link',
   'auth_identity_remove',
+  'auth_invite_delivered',
   'auth_lookup_user',
   'auth_password_hash',
   'auth_recovery_replace',

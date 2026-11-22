@@ -171,20 +171,22 @@ invites.post('/invites', async (c) => {
   if (full) return c.json(fullRefusal('inviter'), 413)
 
   /* Decided here, once, by whoever passed `guard` above — `can()` through
-     `people.invite` — and kept on the row: the database holds such a link
-     to its address when it is followed. */
+     `people.invite` — and kept on the row by the sign-in role (`delivered`,
+     below): the database holds such a link to its address when it is
+     followed. */
   const byHand = Boolean(body.data.email) && handsOver(edition.instance, await mailOn())
   const id = uuidv7()
   const token = generateToken('inv')
   await withActor(ctx.actorId, ctx.workspaceId, async (tx) => {
     await tx`
       insert into invite (id, workspace_id, role, project_ids, email, rights,
-                          token_hash, created_by, expires_at, by_hand)
+                          token_hash, created_by, expires_at)
       values (${id}, ${ctx.workspaceId}, ${body.data.role}::role_kind,
               ${body.data.project_ids}, ${body.data.email ?? null}, ${body.data.rights},
               ${hashToken(token)},
-              ${ctx.actorId}, now() + ${`${body.data.ttl_hours} hours`}::interval, ${byHand})`
+              ${ctx.actorId}, now() + ${`${body.data.ttl_hours} hours`}::interval)`
   })
+  if (byHand) await delivered(id, token, body.data.email!, 'by hand')
   await withoutActor(
     (tx) => tx`
       insert into security_event (id, workspace_id, actor_id, kind, meta)
@@ -200,7 +202,7 @@ invites.post('/invites', async (c) => {
    */
   const mailed =
     body.data.email && !byHand && (await mayMailInvite(ctx, body.data.email))
-      ? await mailInvite(c, ctx, { email: body.data.email, project_ids: body.data.project_ids, ttl_hours: body.data.ttl_hours }, token)
+      ? await mailInvite(c, ctx, { id, email: body.data.email, project_ids: body.data.project_ids, ttl_hours: body.data.ttl_hours }, token)
       : false
 
   /*
@@ -266,6 +268,14 @@ invites.post('/invites/:id/resend', async (c) => {
       select email from invite where id = ${old} and deleted_at is null and used_at is null`,
   )
   if (!to) return c.json({ error: { code: 'not_found' } }, 404)
+  /* Read back from the row, so asked as sending it first asks: only an
+     address `z.email()` takes — ASCII — is mailed or handed over. A row
+     the route did not write may hold anything, and an address that only
+     looks like somebody's must not be mailed a link that proves theirs
+     (migration 313). */
+  if (to.email !== null && !z.email().safeParse(to.email).success) {
+    return c.json({ error: { code: 'invalid', message: 'This invitation’s email address isn’t valid. Revoke it and invite again.' } }, 400)
+  }
   const mails = Boolean(to.email) && !handsOver(edition.instance, await mailOn())
   if (mails && !(await mayMailInvite(ctx, to.email!))) {
     return c.json({ error: { code: 'rate_limited', message: 'Too many invitations sent today. Try again tomorrow.' } }, 429)
@@ -303,12 +313,11 @@ invites.post('/invites/:id/resend', async (c) => {
          so a full workspace sends one again — but not one whose first had
          lapsed and so held nothing. */
       if (await workspaceFull(tx, ctx.workspaceId)) throw new FullAgain()
-      const byHand = Boolean(row.email) && handsOver(edition.instance, await mailOn())
       await tx`
         insert into invite (id, workspace_id, role, project_ids, email, rights,
-                            token_hash, created_by, expires_at, by_hand)
+                            token_hash, created_by, expires_at)
         values (${id}, ${ctx.workspaceId}, ${row.role}::role_kind, ${row.project_ids}, ${row.email}, ${row.rights},
-                ${hashToken(token)}, ${ctx.actorId}, now() + ${`${row.ttl_hours} hours`}::interval, ${byHand})`
+                ${hashToken(token)}, ${ctx.actorId}, now() + ${`${row.ttl_hours} hours`}::interval)`
       return row
     })
   } catch (e) {
@@ -319,6 +328,7 @@ invites.post('/invites/:id/resend', async (c) => {
   if (was === 'forbidden')
     return c.json({ error: { code: 'forbidden', message: 'You can only invite people onto projects you are on.' } }, 403)
   const byHand = Boolean(was.email) && handsOver(edition.instance, await mailOn())
+  if (byHand) await delivered(id, token, was.email!, 'by hand')
   await withoutActor(
     (tx) => tx`
       insert into security_event (id, workspace_id, actor_id, kind, meta)
@@ -326,7 +336,7 @@ invites.post('/invites/:id/resend', async (c) => {
               ${tx.json({ invite_id: id, role: was.role, resent_from: old, ...(byHand ? { by_hand: true } : {}) } as never)})`,
   )
   if (was.email && !byHand) {
-    const sent = await mailInvite(c, ctx, { email: was.email, project_ids: was.project_ids, ttl_hours: was.ttl_hours }, token).catch(
+    const sent = await mailInvite(c, ctx, { id, email: was.email, project_ids: was.project_ids, ttl_hours: was.ttl_hours }, token).catch(
       () => false,
     )
     /* Not sent: the old one is put back and the new one stops, so the
@@ -364,14 +374,41 @@ async function mayMailInvite(ctx: AuthContext, email: string): Promise<boolean> 
 }
 
 /**
+ * The server delivered this invitation's link to its address — mailed it,
+ * or handed it to the inviter where there is no mail — written on the row
+ * by the sign-in role, which alone may (migration 313). What following the
+ * link proves about the address is read from this and nothing else: the
+ * application role inserts invitations, so an address on a row it wrote
+ * is only what somebody typed. Bound to the token's hash, which only this
+ * request and the letter hold.
+ */
+async function delivered(id: string, token: string, email: string, how: 'by mail' | 'by hand'): Promise<boolean> {
+  /* Never thrown: by the time a letter is marked it has gone, and failing
+     the request then revoked a link the person already held (sending
+     again) or answered 500 for an invitation that went. Unmarked, the
+     invitation still lets its holder in; it only proves nothing. Said in
+     the log, by id — never the address or the link. */
+  try {
+    const [r] = await asAuth(
+      (tx) => tx<{ ok: boolean }[]>`select auth_invite_delivered(${hashToken(token)}, ${email}::citext, ${how === 'by hand'}) as ok`,
+    )
+    if (r?.ok) return true
+    console.error(`[invites] invitation ${id} was delivered ${how} but could not be marked so: following it will prove nothing`)
+  } catch (e) {
+    console.error(`[invites] invitation ${id} was delivered ${how} but marking it failed: following it will prove nothing`, e)
+  }
+  return false
+}
+
+/**
  * An invitation to an address, mailed there with its link — what sending
  * one and sending one again both do, once `mayMailInvite` has said yes.
- * Whether it went.
+ * Whether it went; once it has, the row says so (`delivered`).
  */
 async function mailInvite(
   c: Context,
   ctx: AuthContext,
-  inv: { email: string; project_ids: string[]; ttl_hours: number },
+  inv: { id: string; email: string; project_ids: string[]; ttl_hours: number },
   token: string,
 ): Promise<boolean> {
   const [who, projects] = await withActor(
@@ -449,7 +486,7 @@ async function mailInvite(
    * from "Tuff" went to Promotions; a short note with one link
    * from a person is what Primary holds.
    */
-  return send({
+  const sent = await send({
     to: inv.email,
     subject: w.subject,
     ...(name ? { fromName: name } : {}),
@@ -461,6 +498,8 @@ async function mailInvite(
       language,
     ),
   })
+  if (sent) await delivered(inv.id, token, inv.email, 'by mail')
+  return sent
 }
 
 /**
@@ -650,8 +689,13 @@ publicInvites.post('/invite/:token/accept', async (c) => {
   await tellInviter(row.workspace_id, row.actor_id)
 
   /*
-   * A new account is confirmed only when the invitation was sent to the
-   * address it was made with; otherwise a letter goes to it, and signing in
+   * A new account is confirmed only when the server delivered the
+   * invitation to the address it was made with — mailed it there, or
+   * handed it over for it where there is no mail (weakly) — which the
+   * sign-in role alone writes on the row (`delivered`, migration 313); an
+   * address on an invitation is otherwise only what its writer typed.
+   * `accept_invite` decided it as the account was written, and this asks
+   * the same. Otherwise a letter goes to the address, and signing in
    * by password waits for it — the holder of a link handed round is let
    * into the workspace now, but the address they typed is not yet known to
    * be theirs.

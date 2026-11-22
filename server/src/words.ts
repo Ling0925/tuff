@@ -342,6 +342,8 @@ export const ERRORS_FR: Record<string, string> = {
   /* An invitation sent again. */
   'Too many invitations sent today. Try again tomorrow.': 'Trop d’invitations envoyées aujourd’hui. Réessayez demain.',
   'Couldn’t send the invitation. Try again.': 'Impossible d’envoyer l’invitation. Réessayez.',
+  'This invitation’s email address isn’t valid. Revoke it and invite again.':
+    'L’adresse e-mail de cette invitation n’est pas valide. Révoquez-la et invitez à nouveau.',
   'You can only invite people onto projects you are on.':
     'Vous ne pouvez inviter des personnes que dans les projets dont vous faites partie.',
   'Use a PNG, JPEG, GIF or WebP image.': 'Utilisez une image PNG, JPEG, GIF ou WebP.',
