@@ -2580,9 +2580,10 @@ the application — and a trigger keeps a revoked token revoked.
 `actor_id = current_actor()` (it was `with check (true)`), and sessions
 are inserted as the person signing in. 308 grants the sign-in role
 INSERT on `api_token` and `refresh_session` and the writes on
-`github_person`, and 311 is the migration that takes them from the
-application; INSERT and UPDATE on `push_subscription` stay the
-application's, above.
+`github_person`, and 311 takes them from the application, with SELECT on
+`github_person`'s sealed `token_enc` and `refresh_enc` (it reads who is
+linked, by `github_id`, `login` and `avatar_url`); INSERT and UPDATE on
+`push_subscription` stay the application's, above.
 
 **And the webhook table's policies keep to the workspace's own webhooks**
 (`agent_id is null` in `wh_read`, `wh_write` and `wh_update`, migration

@@ -587,17 +587,17 @@ if (env.databaseUrlAuth) {
   await guardRls(authSql(), 'app’s sign-in connection', process.env.NODE_ENV === 'production' && edition.rlsFailClosed)
 } else if (process.env.NODE_ENV === 'production' && env.databaseUrlApp !== env.databaseUrl) {
   /* No sign-in connection to be had, and the application is not the owner
-     who could stand in for it. Until migration 311 the application role
-     still holds every sign-in right, so signing in goes on through its
-     connection and this is said, loudly; once 311 is applied nobody could
-     sign in, and the start refuses instead. A
+     who could stand in for it: since migration 311 the application role
+     holds no sign-in right, so nobody could sign in, refresh or sign out. A
+     server that cannot is refused here, saying why, rather than found out
+     from the first person locked out. A
      `DATABASE_URL_APP` with no password — trust, peer, `.pgpass` — lands
-     here. */
+     here, and wants `DATABASE_URL_AUTH`. */
   console.error(
     '\n!!! DATABASE_URL_AUTH is not set, and it cannot be made from DATABASE_URL_APP (that needs the user tracker_app and a password).\n' +
-      '!!! Signing in runs on the application’s connection for now; after the next update it will be refused.\n' +
-      '!!! Set DATABASE_URL_AUTH to the tracker_auth role (docs/self-hosting.md).\n',
+      '!!! Set DATABASE_URL_AUTH to the tracker_auth role (docs/self-hosting.md). Refusing to start.\n',
   )
+  process.exit(1)
 }
 
 /* And never without an address of its own: in production every link it

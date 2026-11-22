@@ -244,7 +244,7 @@ test('a restart with no owner who can sign in names nobody, and says so', async 
   assert.ok(!lines.some((e) => /NO OWNER/.test(e)), lines.join('\n'))
 })
 
-test('the application role cannot make itself an owner', async () => {
+test('neither the application role nor the sign-in role makes itself an owner', async () => {
   asCommunity()
   await unclaimed()
   const old = await script()
@@ -282,7 +282,8 @@ test('the application role cannot make itself an owner', async () => {
   assert.equal(undone.count, 1)
   await asAuth((tx) => tx`select auth_confirm_email(${old.actor_id})`)
   assert.equal(await confirmed(old.actor_id), true)
-  /* Nor does somebody who is not an owner name one, or open sign-up. */
+  /* Nor does somebody who is not an owner name one, or open sign-up — not
+     even through the sign-in role, which holds `instance_add_owner`. */
   const [said] = await asAuthEverywhere(
     old.actor_id,
     (tx) => tx<{ a: string; b: boolean }[]>`

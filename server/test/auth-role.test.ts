@@ -62,11 +62,13 @@ test('docs/api.md names the same definers', () => {
 })
 
 test('the sign-in role holds the session, token and GitHub link writes by name, and inserts only for its own actor', async () => {
-  /* Granted to it directly, not only through its membership — 311 takes them from the application. */
+  /* Granted to it directly, not only through its membership — 311 takes them from the application.
+     The writes: 311 also gives it SELECT on `github_person` by name, which is not asked here. */
   const direct = await asTableOwner()<{ what: string }[]>`
     select c.relname || ' ' || a.privilege_type as what
     from pg_class c, aclexplode(c.relacl) a
     where c.relname in ('refresh_session', 'api_token', 'github_person') and a.grantee = 'tracker_auth'::regrole
+      and a.privilege_type <> 'SELECT'
     union all
     select c.relname || '.' || t.attname || ' ' || a.privilege_type
     from pg_class c join pg_attribute t on t.attrelid = c.oid, aclexplode(t.attacl) a

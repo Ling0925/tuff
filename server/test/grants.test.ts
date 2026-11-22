@@ -48,10 +48,11 @@ test('no definer function is anybody’s to run but the roles it is granted to',
     [],
   )
   // The worker's role, which has no table of its own, reaches no sign-in
-  // function (the application's is phase 2, `auth-role-refused.test.ts`).
-  const [w] = await owner<{ worker: boolean }[]>`
-    select has_function_privilege('tracker_worker', 'auth_lookup_user(citext)', 'execute') as worker`
-  assert.equal(w!.worker, false)
+  // function, and nor does the application's since 308.
+  const [w] = await owner<{ worker: boolean; app: boolean }[]>`
+    select has_function_privilege('tracker_worker', 'auth_lookup_user(citext)', 'execute') as worker,
+           has_function_privilege('tracker_app', 'auth_lookup_user(citext)', 'execute') as app`
+  assert.deepEqual({ ...w }, { worker: false, app: false })
 })
 
 test('a function made from now on is nobody’s until it is granted', async () => {

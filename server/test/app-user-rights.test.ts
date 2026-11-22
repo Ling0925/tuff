@@ -2,7 +2,7 @@ import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { app } from '../src/http/routes.js'
 import type { Tx } from '../src/db.js'
-import { asTableOwner, asWorker, closeDb, makeOwner, uuidv7, withActor, withoutActor } from './helpers.js'
+import { asAuthEverywhere, asTableOwner, asWorker, closeDb, makeOwner, uuidv7, withActor, withoutActor } from './helpers.js'
 
 /*
  * What the application role may write of a person directly — migration
@@ -12,10 +12,10 @@ import { asTableOwner, asWorker, closeDb, makeOwner, uuidv7, withActor, withoutA
  * them (`password.test.ts`, `two-factor.test.ts`, `ways-in.test.ts`,
  * `invites.test.ts`, `address.test.ts`, …) say they still work.
  *
- * Not a boundary against SQL run as the application: the definers it may
- * execute trust the actor id they are handed, and the actor setting is
- * its own to set. `SIGN_IN_DEFINERS` below is the list that follow-up has
- * to take away from it, held here so it cannot grow unnoticed.
+ * The definers that write those tables are the sign-in role's: granted to
+ * it by migration 308 and taken from the application by 311
+ * (`auth-role-refused.test.ts`), so the
+ * application role may run none of them, whatever actor it says it is.
  */
 
 after(closeDb)
@@ -126,56 +126,34 @@ test('the catalogue says the same: six columns, no insert, no open policy', asyn
 
 /*
  * Every definer function that writes a password, a second factor, an
- * address, a provider's identity, a ticket or a recovery code, and that
- * the application role may run. Each trusts the actor id it is handed, so
- * SQL run as the application can still use any of them on anybody: this
- * is the list the follow-up (`tracker_auth`) takes away
- * from `tracker_app`, and `docs/api.md` names it. A function added to it,
- * or granted to the app, fails here until it is named.
+ * address, a provider's identity, a ticket or a recovery code — or a
+ * session, a token, an OAuth code, an agent's OAuth grant or a spent
+ * refresh, an app's start, a GitHub link, the server's mail or its owners,
+ * or an invitation — and that the application role may run: none. They
+ * went to `tracker_auth` in 308 and were taken from `tracker_app` in 311
+ * (`auth-role-refused.test.ts`); a definer that writes one of those tables
+ * and is granted to the application fails here. One is left, on purpose:
+ * `auth_lookup_api_token`, which every request with a token asks, takes
+ * the token's hash — the proof itself — and writes only when it was last
+ * used.
  */
-const SIGN_IN_DEFINERS = [
-  'accept_invite',
-  'auth_change_password',
-  'auth_claim_email',
-  'auth_confirm_email',
-  'auth_confirm_if_invited',
-  'auth_email_cancel',
-  'auth_email_change',
-  'auth_email_ticket',
-  'auth_identity_forget',
-  'auth_identity_link',
-  'auth_identity_remove',
-  'auth_recovery_replace',
-  'auth_recovery_spend',
-  'auth_set_password',
-  'auth_ticket_make',
-  'auth_ticket_make_bound',
-  'auth_ticket_spend',
-  'auth_ticket_start',
-  'auth_totp_begin',
-  'auth_totp_disable',
-  'auth_totp_enable',
-  'auth_totp_spend',
-  'digest_off',
-  'instance_setup_owner',
-  'register_owner',
-]
-
-test('the sign-in definers the application may run are exactly the ones named', async () => {
+test('the application may run no definer that writes a sign-in table', async () => {
   const rows = await asTableOwner()<{ name: string }[]>`
     select distinct p.proname::text as name from pg_proc p
     where p.pronamespace = 'public'::regnamespace and p.prosecdef and p.prorettype <> 'trigger'::regtype
-      and p.prosrc ~* '(insert\\s+into|update|delete\\s+from)\\s+(public\\.)?(app_user|auth_identity|auth_ticket|recovery_code)\\M'
+      and p.prosrc ~* '(insert\\s+into|update|delete\\s+from)\\s+(public\\.)?(app_user|auth_identity|auth_ticket|recovery_code|refresh_session|api_token|oauth_code|oauth_agent_grant|oauth_refresh_spent|auth_app_start|github_person|instance_mail|instance_owner|invite)\\M'
       and has_function_privilege('tracker_app', p.oid, 'execute')
     order by 1`
   assert.deepEqual(
     rows.map((r) => r.name),
-    SIGN_IN_DEFINERS,
+    ['auth_lookup_api_token'],
   )
 })
 
 test('a token is revoked and nothing else, and stays revoked', async () => {
-  assert.deepEqual(await writable('tracker_app', 'api_token', 'UPDATE'), ['revoked_at'])
+  /* By the sign-in role, since 308; the application role writes nothing of it since 311. */
+  assert.deepEqual(await writable('tracker_app', 'api_token', 'UPDATE'), [])
+  assert.deepEqual(await writable('tracker_auth', 'api_token', 'UPDATE'), ['revoked_at'])
   const { ctx } = await makeOwner()
   /* A fresh probe every time: one of the fixture's tokens may be revoked already. */
   const id = (
@@ -185,13 +163,16 @@ test('a token is revoked and nothing else, and stays revoked', async () => {
       returning id`
   )[0]!.id
   await assert.rejects(
-    withActor(ctx.actorId, (tx) => tx`update api_token set token_hash = 'planted', actor_id = ${ctx.actorId} where id = ${id}`),
+    asAuthEverywhere(ctx.actorId, (tx) => tx`update api_token set token_hash = 'planted', actor_id = ${ctx.actorId} where id = ${id}`),
     refused,
   )
-  const revoked = await withActor(ctx.actorId, (tx) => tx`update api_token set revoked_at = now() where id = ${id} and revoked_at is null`)
+  const revoked = await asAuthEverywhere(
+    ctx.actorId,
+    (tx) => tx`update api_token set revoked_at = now() where id = ${id} and revoked_at is null`,
+  )
   assert.equal(revoked.count, 1)
   await assert.rejects(
-    withActor(ctx.actorId, (tx) => tx`update api_token set revoked_at = null where id = ${id}`),
+    asAuthEverywhere(ctx.actorId, (tx) => tx`update api_token set revoked_at = null where id = ${id}`),
     refused,
   )
 })
@@ -204,8 +185,11 @@ test('a session is inserted only for the actor of its transaction', async () => 
     insert into refresh_session (id, actor_id, workspace_id, token_hash, expires_at, family)
     values (${uuidv7()}, ${actor}, null, ${`planted-${uuidv7()}`}, now() + interval '1 day', ${uuidv7()})`
   const rls = (e: unknown) => /row-level security/.test(String((e as Error).message))
-  await assert.rejects(withoutActor(insert(other.ctx.actorId)), rls)
-  await assert.rejects(withActor(me.ctx.actorId, insert(other.ctx.actorId)), rls)
+  /* The application role inserts none at all since 311; the sign-in role
+     only for the actor of its transaction. */
+  await assert.rejects(withoutActor(insert(other.ctx.actorId)), refused)
+  await assert.rejects(withActor(me.ctx.actorId, insert(me.ctx.actorId)), refused)
+  await assert.rejects(asAuthEverywhere(me.ctx.actorId, insert(other.ctx.actorId)), rls)
   /* Signing in still makes one: `makeOwner` signed in, and so does this. */
   const [u] = await asTableOwner()<{ email: string }[]>`select email::text as email from app_user where actor_id = ${me.ctx.actorId}`
   const r = await app.request('/auth/login', {
