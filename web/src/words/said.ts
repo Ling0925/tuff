@@ -82,6 +82,8 @@ export const DONE = say<Record<string, string>>({
   'conversation.import': ['imported Slack history into', 'a importé l’historique Slack dans'],
   'list.progress': ['updated a list’s progress', 'a mis à jour l’avancement d’une liste'],
   'list.delete': ['deleted a list', 'a supprimé une liste'],
+  /* Who takes a list's new tasks. */
+  'list.agent': ['changed which agent takes a list’s new tasks', 'a modifié l’agent qui prend les nouvelles tâches d’une liste'],
   'task.import': ['imported tasks from a spreadsheet', 'a importé des tâches depuis un tableur'],
   'time.log': ['logged time', 'a saisi du temps'],
   'time.remove': ['removed logged time', 'a supprimé du temps saisi'],

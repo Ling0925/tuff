@@ -80,6 +80,27 @@ export async function assigneesBelong(
 }
 
 /**
+ * The agent a list gives a task to that arrives in it with nobody on it.
+ * Null when the list names none, finishes
+ * work, or names an agent that has since left the project or been
+ * disconnected (kept on the list and ignored, so its settings can say so);
+ * and null for what is nobody's — GitHub, an import, a board's guest, a
+ * feedback page — which wakes no agent either (`agents.md`). The agent is
+ * asked what anybody given a task is asked (`assigneesBelong`); whoever
+ * made or moved the task was asked their own right by the caller.
+ */
+export async function listTaker(tx: Tx, ctx: AuthContext, projectId: string, listId: string | null | undefined): Promise<string | null> {
+  if (!listId) return null
+  if (ctx.viaGithub || ctx.viaImport || ctx.board || ctx.feedbackPage) return null
+  const [l] = await tx<{ agent_id: string }[]>`
+    select l.agent_id from task_list l
+    join agent g on g.actor_id = l.agent_id and g.workspace_id = l.workspace_id and g.deleted_at is null
+    where l.id = ${listId} and l.project_id = ${projectId} and l.deleted_at is null and not l.finishes`
+  if (!l) return null
+  return (await assigneesBelong(tx, ctx, projectId, [l.agent_id])) ? l.agent_id : null
+}
+
+/**
  * Who a write puts on the task. `assignee_ids` is
  * the whole list, in order, and replaces what was there. `assignee_id` is
  * what the apps already in people's hands send: one person, which is the
@@ -628,6 +649,13 @@ tasks.post('/projects/:projectId/tasks', async (c) => {
       const fromOutside = ctx.viaMcp || Boolean(ctx.viaGithub) || ctx.feedbackPage === true
       const firstList = (fromOutside && intake) || lists.find((l) => !l.intake) || lists[0]
       const into_list = into ? into.list_id : (body.data.list_id ?? firstList?.id ?? null)
+      /* Made with nobody on it in a list an agent takes: given to that
+         agent, as the person's own assignment.
+         Never a subtask, which is a step of its task. */
+      if (!parent && assignees.length === 0) {
+        const taker = await listTaker(tx, ctx, projectId, into_list)
+        if (taker) assignees.push(taker)
+      }
 
       /*
        * The edge of the column it is going into, not of the project.
@@ -1267,7 +1295,20 @@ tasks.patch('/tasks/:id', async (c) => {
       }
       /* Only the people new to it are asked about: somebody who has left the
        project since stays on until they are taken off. */
-      const assignees = assigneesOf(body.data)
+      let assignees = assigneesOf(body.data)
+      /* Moved with nobody on it into a list an agent takes, the request not
+         saying who: given to that agent, as the mover's own assignment.
+         A move that says who is that answer. */
+      if (
+        assignees === undefined &&
+        row.parent_id === null &&
+        row.assignee_ids.length === 0 &&
+        body.data.list_id &&
+        body.data.list_id !== row.list_id
+      ) {
+        const taker = await listTaker(tx, ctx, row.project_id, body.data.list_id)
+        if (taker) assignees = [taker]
+      }
       const added = (assignees ?? []).filter((x) => !row.assignee_ids.includes(x))
       const removed = assignees ? row.assignee_ids.filter((x) => !assignees.includes(x)) : []
       if (added.length && !(await assigneesBelong(tx, ctx, row.project_id, added))) {
@@ -2860,6 +2901,13 @@ tasks.get('/projects/:projectId/lists', async (c) => {
        * over the index that already exists for the board.
        */
       tx`select l.id, l.name, l.sort_key, l.progress, l.finishes, l.icon, l.color, l.narrow, l.intake,
+              l.agent_id,
+              /* Its agent left the project or was disconnected: kept, and
+                 said, and given nothing. */
+              (l.agent_id is not null and not exists (
+                select 1 from agent g
+                join project_member pm on pm.actor_id = g.actor_id and pm.project_id = l.project_id and pm.deleted_at is null
+                where g.actor_id = l.agent_id and g.deleted_at is null)) as agent_gone,
               count(t.id)::int as tasks
        from task_list l
        left join task t on t.list_id = l.id and t.deleted_at is null
@@ -2997,6 +3045,9 @@ tasks.patch('/lists/:id', async (c) => {
       /* Where it goes in the project's order: after this list, or first
          when null. */
       after: z.uuid().nullable().optional(),
+      /* The agent that takes its new tasks, null for nobody — absent leaves
+         it alone. */
+      agent_id: z.uuid().nullable().optional(),
     })
     .safeParse(await c.req.json().catch(() => ({})))
   if (!body.success) return c.json({ error: { code: 'invalid' } }, 400)
@@ -3012,10 +3063,25 @@ tasks.patch('/lists/:id', async (c) => {
      * The screen hid the control, which is not the same as the server
      * refusing it.
      */
-    const [list] = await tx<{ project_id: string }[]>`
-      select project_id from task_list where id = ${id} and deleted_at is null`
+    const [list] = await tx<{ project_id: string; finishes: boolean; agent_id: string | null }[]>`
+      select project_id, finishes, agent_id from task_list where id = ${id} and deleted_at is null`
     if (!list) return 'missing' as const
     if (!allowIn(ctx, 'task.create', list.project_id)) return 'forbidden' as const
+    /*
+     * Who takes its new tasks: a person's press, by whoever may arrange
+     * the lists (`list.agent`), and only an agent on this project now, on
+     * a list that does not finish work.
+     */
+    const naming = body.data.agent_id
+    if (naming !== undefined) {
+      if (!allowIn(ctx, 'list.agent', list.project_id)) return 'forbidden' as const
+      if (naming !== null) {
+        if (body.data.finishes ?? list.finishes) return 'finishes' as const
+        const [agent] = await tx`
+          select 1 from agent where actor_id = ${naming} and workspace_id = ${ctx.workspaceId} and deleted_at is null`
+        if (!agent || !(await assigneesBelong(tx, ctx, list.project_id, [naming]))) return 'not_agent' as const
+      }
+    }
 
     const rows = await tx<{ project_id: string }[]>`
       update task_list set
@@ -3024,7 +3090,12 @@ tasks.patch('/lists/:id', async (c) => {
         color = case when ${body.data.color !== undefined} then ${body.data.color ?? null}
                      else color end,
         progress = coalesce(${body.data.progress ?? null}, progress),
-        finishes = coalesce(${body.data.finishes ?? null}, finishes)
+        finishes = coalesce(${body.data.finishes ?? null}, finishes),
+        -- A list made to finish work takes no agent: it is let go in the
+        -- same write. Otherwise absent leaves it, null takes it off.
+        agent_id = case when ${body.data.finishes === true} then null
+                        when ${naming !== undefined} then ${naming ?? null}::uuid
+                        else agent_id end
       where id = ${id} and deleted_at is null
       returning project_id`
     if (!rows.length) return 'missing' as const
@@ -3054,6 +3125,9 @@ tasks.patch('/lists/:id', async (c) => {
         where list_id = ${id} and deleted_at is null
           and completed_at is ${body.data.finishes ? tx`null` : tx`not null`}`
     }
+    if (naming !== undefined && naming !== list.agent_id) {
+      await record(tx, ctx, 'list.agent', { projectId: rows[0]!.project_id, meta: { list_id: id, agent_id: naming } })
+    }
     if (body.data.progress !== undefined && body.data.progress !== null) {
       await record(tx, ctx, 'list.progress', {
         projectId: rows[0]!.project_id,
@@ -3063,6 +3137,10 @@ tasks.patch('/lists/:id', async (c) => {
     return 'ok' as const
   })
   if (done === 'forbidden') return c.json(forbidden, 403)
+  if (done === 'finishes') {
+    return c.json({ error: { code: 'invalid', message: 'A list that finishes tasks can’t have an agent.' } }, 400)
+  }
+  if (done === 'not_agent') return c.json({ error: { code: 'invalid', message: 'Choose an agent on this project.' } }, 400)
   return done === 'ok' ? c.json({ ok: true }) : c.json(missing, 404)
 })
 

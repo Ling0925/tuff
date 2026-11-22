@@ -57,6 +57,10 @@ export type List = {
   /** How many are in it, counted by the server: a list is not taken away
       without saying where that many tasks go. */
   tasks: number
+  /** The agent that takes its new tasks, and whether it has left the
+      project since. */
+  agent_id?: string | null
+  agent_gone?: boolean
 }
 
 /* The four, named where the tabs are named — `web/src/words/tools.ts`. This
@@ -556,6 +560,9 @@ export function ProjectSettings({
                       others={lists.filter((o) => o.id !== l.id)}
                       may={mayLists && !l.id.startsWith('pending:')}
                       mayDrop={mayDropLists && !l.id.startsWith('pending:')}
+                      agents={members.filter((m) => m.agent)}
+                      everyone={people}
+                      mayAgent={can.includes('list.agent') && !l.id.startsWith('pending:')}
                       onChanged={loadLists}
                     />
                   </div>

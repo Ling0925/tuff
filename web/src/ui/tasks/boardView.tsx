@@ -7,6 +7,7 @@ import { SORT_SAID } from './model.jsx'
 import { ViewPanel } from './view.jsx'
 import { BoardCard, ColumnFade, BoardBar } from './board.jsx'
 import { ListBar } from './listBar.jsx'
+import { ListTaker } from './listTaker.jsx'
 import { Unread } from './unread.jsx'
 import { type TasksProps } from '../Tasks.jsx'
 import { type TaskData } from './useTaskData.js'
@@ -359,6 +360,8 @@ export function boardView({
                               read yet. */}
                           {(byColumn.get(l.id)?.length ?? 0) + unread(l.id)}
                         </span>
+                        {/* The agent that takes its new tasks. */}
+                        <ListTaker list={l} people={people} />
                         {/*
                   The way to add one, beside the name of the list it goes in.
 

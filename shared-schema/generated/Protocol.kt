@@ -2377,6 +2377,12 @@ data class LinksBack (
 
 @Serializable
 data class ListInProject (
+    @SerialName("agent_gone")
+    val agentGone: Boolean? = null,
+
+    @SerialName("agent_id")
+    val agentID: String? = null,
+
     val color: String? = null,
     val finishes: Boolean? = null,
     val icon: String? = null,
@@ -4383,6 +4389,9 @@ data class TaskInList (
 
 @Serializable
 data class TaskList (
+    @SerialName("agent_id")
+    val agentID: String? = null,
+
     @SerialName("author_id")
     val authorID: String,
 

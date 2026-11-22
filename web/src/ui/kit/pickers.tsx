@@ -52,8 +52,15 @@ export function WhoPick({
   size = 24,
   working: guessed = null,
   task,
+  single = false,
+  label,
 }: {
   people: PersonInWorkspace[]
+  /** One at most: a pick is the whole answer and closes the menu — a
+      list's agent. */
+  single?: boolean
+  /** What the button is called, where it is not a task's assignee. */
+  label?: string
   /** The agent working on it now, ringed while it works. */
   working?: string | null
   /** The task this is the face of: an agent given it that says it is at it
@@ -79,6 +86,7 @@ export function WhoPick({
   const working = (status && on.includes(status.agent_id) ? people.find((p) => p.actor_id === status.agent_id)?.name : null) ?? guessed
   /* Several tasks at once have no list to add to: a pick is the answer. */
   const one = value === undefined
+  const whole = one || single
   /* A person pressed: on or off the list, which stays open to pick the
      next; Nobody, or anyone for several tasks, is the whole answer. */
   const pick = (id: string | null) => {
@@ -86,7 +94,7 @@ export function WhoPick({
       setAt(null)
       return onPick([])
     }
-    if (one) {
+    if (whole) {
       setAt(null)
       return onPick([id])
     }
@@ -133,8 +141,8 @@ export function WhoPick({
       <button
         ref={face}
         data-who={on.join(',')}
-        aria-label={working ? `${W.assigneeOf(said)} · ${W.agentWorking(working)}` : W.assigneeOf(said)}
-        title={working ? W.agentWorking(working) : undefined}
+        aria-label={label ?? (working ? `${W.assigneeOf(said)} · ${W.agentWorking(working)}` : W.assigneeOf(said))}
+        title={label ?? (working ? W.agentWorking(working) : undefined)}
         aria-haspopup="menu"
         aria-expanded={at !== null}
         disabled={disabled}
@@ -265,7 +273,7 @@ export function WhoPick({
               {rows.map((p, i) => (
                 <button
                   key={p?.actor_id ?? 'nobody'}
-                  role="menuitemcheckbox"
+                  role={single ? 'menuitemradio' : 'menuitemcheckbox'}
                   data-row
                   data-who-pick={p?.actor_id ?? 'nobody'}
                   aria-checked={p ? on.includes(p.actor_id) : !one && on.length === 0}

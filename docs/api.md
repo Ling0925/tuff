@@ -50,6 +50,9 @@ the owner): deleting somebody else's row in Docs. Your own needs none.
 `file.share` is who a written document is for — publishing a draft and
 choosing its people: its author, and whoever may edit somebody else's
 document (`content.edit.any`); never an agent, never through a token.
+`list.agent` is naming the agent that takes a list's new tasks: whoever
+holds `task.create` there, in person — never an agent, never through a
+token.
 `content.create` still covers posts and documents.
 
 Three attempts came before this — a client role, then a guest flag, then an
@@ -1246,10 +1249,10 @@ oldest first, the same bounds; `400 invalid` for a cursor that is not one,
 | POST | `/api/tasks/:id/duplicate` | `task.create`; a copy of the plan, under the original; answers `TaskDuplicated` — `{ id, tasks }`, the copy and its parts as rows of the project's list |
 | POST | `/api/tasks/:id/copy` | into a project of this workspace, this one included — `{ project_id, list_id?, dry? }` → `201 TaskCopied` (`200`, `id` and `number` null, for `dry`). The original readable (row-level security: 404 otherwise, a limited token's projects included) and `task.create` where it goes. See "Copying a task" below |
 | PATCH | `/api/steps/:id` | `{ done }`, the boolean shape the checklist had; answers `StepChanged` — `{ ok, task, rewaits }`, the part as a row of the project's list and, when it changed state, the tasks it blocks as `TaskChanged` gives them |
-| GET POST | `/api/projects/:id/lists` | POST needs `task.create`; GET carries `tasks`, how many are in each, and `intake`, whether it is the project's triage |
+| GET POST | `/api/projects/:id/lists` | POST needs `task.create`; GET carries `tasks`, how many are in each, `intake`, whether it is the project's triage, and `agent_id` and `agent_gone` — the agent that takes its new tasks, and whether it has since left the project or been disconnected (see "A list an agent takes") |
 | POST | `/api/projects/:id/import/tasks` | `task.create` there, never through a token; `{ tasks: [{ title, body?, list_id?, assignee?, due_on?, priority?, labels?, key? }] }` (two hundred at most, sixteen megabytes) → `{ written }`; `413 too_large`, nothing written, when its bodies as documents come to more than ten times the words sent and a megabyte, or twenty megabytes; `422 too_complex`, nothing written, when a body is one the server could not read in half a second, and `503 busy` (with `Retry-After`), nothing read or written, when too much is waiting to be read already; the web app sends a page refused `413` again in halves. A list not this project's goes to the first list after Triage; `assignee` is a person on the project or the owner, by email or a name only one has, else said in the body, and nobody is added; a hundred new labels a page; one `task.import` line in the feed. 120 pages an hour a person. The csv import spec |
 | PUT | `/api/projects/:id/triage` | `project.tools` there, never through a token; `{ on }` → `{ list_id }`. On, a list named Triage at the head of the project, marked `intake` (one a project, migration 161); off, its tasks go to the first list after it and it goes. With one, `POST /projects/:id/tasks` with no list puts a task made through a token — an agent's, GitHub's — in it, and anybody else's in the first list after it; a message made a task goes to it. The triage spec |
-| PATCH | `/api/lists/:id` | `task.create`, including the progress position; `after` (a list id, or `null` for first) moves it in the project's order |
+| PATCH | `/api/lists/:id` | `task.create`, including the progress position; `after` (a list id, or `null` for first) moves it in the project's order; `agent_id` (an agent on the project, or `null` for nobody; absent leaves it) needs `list.agent` — in person, never an agent or a token (`403`); an id that is not an agent on the project, or a list that finishes work, is `400 invalid`. `finishes: true` lets the agent go in the same write. Logs `list.agent` with `{ list_id, agent_id }` |
 | DELETE | `/api/lists/:id?into=` | `task.delete`; `into` is a list id or `nowhere`, and is required while it holds tasks |
 | GET POST | `/api/projects/:id/files` | GET answers `FilesInProject` — `{ files, next_cursor, kinds }`. Asked with `limit` (1–500, default 100) or `cursor`, a page: pinned first (the latest pin at the top), then the latest change (`updated_at`), then `id`, cursor paged by the last row's pin, change and id (opaque; `400 invalid` for anything else), only the page's pictures signed, index `file_listed` (migration 303); `kinds`, on a first page only, names which of `docs`, `images`, `uploads`, `links` hold anything the reader may see, whoever's. Asked with neither, every row, pinned first and then the newest added, with `next_cursor: null` — the whole list the apps installed before pages read, outside the response budget, kept until they page. Both take `kind=docs\|images\|uploads\|links` (a written document; an upload that is a picture; any other upload; a link — a folder is in none), `whose=mine\|others` (what the reader added, or somebody else did) and `q=` (the name, a link's address, who put it there, or the room, task or announcement it was first put in, as the row names it); a kind or whose outside those is `400 invalid`. POST with `audience: "author"` makes a written document a draft only its author sees — what the web sends for every document it makes; left out (or `"project"`), it is the project's, as before. A draft asked for through a token or by an agent, an import, GitHub, a board or a feedback page is `403` (`file.share`), and for a link or a folder `400`; uploads, links and folders are always the project's. GET lists only the rows the reader may read (`o_read`) and carries each one's `audience`. POST may start from a template — `template`: `brief`, `meeting`, `spec` or `report` (`DocTemplate`), or the id of a document saved as one that the asker can read (`404 not_found` otherwise, as for none). With one, `name` may be left out and the template's is taken; a `body` sent beside it is written after the template's blocks; `{date}` and `{project}` in its words and name are filled in — the day where its maker is, in their language, and this project's name. A built-in one is written in its maker's language. The doc templates spec |
 | GET | `/api/doc-templates` | `SavedTemplates` — `{ templates: [{ id, name, project_id, project_name, template_at }] }`: the documents saved as templates in projects the asker can read (the file's own policy), newest first, a hundred at most |
@@ -1527,6 +1530,29 @@ remembered by the client on the machine it was done on, and that answer
 wins. True for the Canceled a new project starts with (`STARTING_LISTS`),
 false for every list made since and every list that existed before it
 (`072`). Carried into a copy made as a template, with the mark and colour.
+
+### A list an agent takes
+
+**`task_list.agent_id`** (migration 307), nullable, names one agent of the
+project that takes the list's new tasks. A
+top-level task made in the list with nobody on it (`POST
+/api/projects/:id/tasks`, or a message made a task), or moved into it with
+nobody on it by a `PATCH /api/tasks/:id` that names another `list_id` and
+does not itself say `assignee_ids` or `assignee_id`, is given to that agent
+as if the person had chosen it: the same `notify`, so `agent.assigned` by
+webhook and the task in `my_tasks`; the chain is the maker's or mover's (0
+for a person); the feed's `task.update` says `given_to`. A task that has
+somebody is never given; a subtask, a copy, a duplicate and the next of a
+repeating task are not either, nor tasks moved by removing a list or
+turning Triage off, nor anything GitHub, an import, a board or a feedback
+page made or moved.
+
+The agent is asked what anybody given a task is — on the project now, not
+disconnected — at that moment. Gone, it is kept on the list and given
+nothing, and `GET /api/projects/:id/lists` answers `agent_gone: true`. A
+trigger (`task_list_agent_is_an_agent`) refuses any id that is not a live
+agent of the list's workspace. Both fields are optional in the schema
+(`ListInProject`, `TaskList`), so an answer from before them still decodes.
 
 ### Cycles
 

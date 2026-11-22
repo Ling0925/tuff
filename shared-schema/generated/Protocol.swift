@@ -3254,6 +3254,8 @@ public enum API {
 
     // MARK: - ListInProject
     public struct ListInProject: Codable, Sendable {
+        public let agentGone: Bool?
+        public let agentID: String?
         public let color: String?
         public let finishes: Bool?
         public let icon: String?
@@ -3265,12 +3267,16 @@ public enum API {
         public let tasks: Count?
 
         public enum CodingKeys: String, CodingKey {
+            case agentGone = "agent_gone"
+            case agentID = "agent_id"
             case color, finishes, icon, id, intake, name, narrow
             case sortKey = "sort_key"
             case tasks
         }
 
-        public init(color: String?, finishes: Bool?, icon: String?, id: String, intake: Bool?, name: String, narrow: Bool?, sortKey: String?, tasks: Count?) {
+        public init(agentGone: Bool?, agentID: String?, color: String?, finishes: Bool?, icon: String?, id: String, intake: Bool?, name: String, narrow: Bool?, sortKey: String?, tasks: Count?) {
+            self.agentGone = agentGone
+            self.agentID = agentID
             self.color = color
             self.finishes = finishes
             self.icon = icon
@@ -6108,6 +6114,7 @@ public enum API {
 
     // MARK: - TaskList
     public struct TaskList: Codable, Sendable {
+        public let agentID: String?
         public let authorID: String
         public let color: Color?
         public let createdAt: String
@@ -6125,6 +6132,7 @@ public enum API {
         public let workspaceID: String
 
         public enum CodingKeys: String, CodingKey {
+            case agentID = "agent_id"
             case authorID = "author_id"
             case color
             case createdAt = "created_at"
@@ -6136,7 +6144,8 @@ public enum API {
             case workspaceID = "workspace_id"
         }
 
-        public init(authorID: String, color: Color?, createdAt: String, deletedAt: String?, finishes: Bool, icon: Icon, id: String, intake: Bool?, name: String, narrow: Bool, progress: Double?, projectID: String, sortKey: String, updatedAt: String, workspaceID: String) {
+        public init(agentID: String?, authorID: String, color: Color?, createdAt: String, deletedAt: String?, finishes: Bool, icon: Icon, id: String, intake: Bool?, name: String, narrow: Bool, progress: Double?, projectID: String, sortKey: String, updatedAt: String, workspaceID: String) {
+            self.agentID = agentID
             self.authorID = authorID
             self.color = color
             self.createdAt = createdAt

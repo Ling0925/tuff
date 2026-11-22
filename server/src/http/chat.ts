@@ -17,6 +17,7 @@ import { put, remove } from '../storage.js'
 import { fits, roomFor } from '../ceilings.js'
 import { pageSize, timeCursor } from './limits.js'
 import { used } from './used.js'
+import { listTaker } from './tasks.js'
 
 type Vars = { ctx: AuthContext }
 export const chat = new Hono<{ Variables: Vars }>()
@@ -1862,11 +1863,24 @@ chat.post('/messages/:id/promote', async (c) => {
         where project_id = ${projectId} and deleted_at is null
           and parent_id is null and list_id is not distinct from ${listId}
         order by sort_key asc limit 1`
+      /* Into a list an agent takes, given to that agent, as a task made
+         with nobody on it is. */
+      const taker = await listTaker(tx, ctx, projectId, listId)
       await tx`
-        insert into task (id, workspace_id, project_id, author_id, list_id, title, body, sort_key)
+        insert into task (id, workspace_id, project_id, author_id, list_id, title, body, sort_key, assignee_ids)
         values (${newId}, ${ctx.workspaceId}, ${projectId}, ${ctx.actorId}, ${listId},
                 ${body.data.title}, ${tx.json(said as never)},
-                ${generateKeyBetween(null, edge?.sort_key ?? null)})`
+                ${generateKeyBetween(null, edge?.sort_key ?? null)}, ${taker ? [taker] : []}::uuid[])`
+      if (taker) {
+        const who = await doer(tx, ctx.actorId)
+        await notify(tx, ctx, {
+          objectType: 'task',
+          objectId: newId,
+          assignees: [taker],
+          watchers: false,
+          whatFor: { assigned: (l) => LINES(l).gaveYou(who(l)) },
+        })
+      }
     } else {
       await tx`
         insert into post (id, workspace_id, project_id, author_id, title, body, published_at)

@@ -4,6 +4,7 @@ import { EmptyState, Fluid, Hairline } from '../kit.jsx'
 import { Icon } from '../glyphs.jsx'
 import { EMPTY_TASKS, ViewPanel } from './view.jsx'
 import { ListBar } from './listBar.jsx'
+import { ListTaker } from './listTaker.jsx'
 import { Unread } from './unread.jsx'
 import { type TasksProps } from '../Tasks.jsx'
 import { type TaskData } from './useTaskData.js'
@@ -374,6 +375,8 @@ export function listView({
                               <span className="-ml-2 tabular-nums text-ink-3">
                                 {band.rows.length + (group === 'list' ? unread(band.key) : 0)}
                               </span>
+                              {/* The agent that takes its new tasks. */}
+                              {group === 'list' && <ListTaker list={lists.find((l) => l.id === band.key)} people={people} />}
                             </button>
                             {/*
                           Making one where it belongs. The band already says

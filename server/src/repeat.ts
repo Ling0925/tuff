@@ -5,7 +5,7 @@ import type { Tx } from './db.js'
 import type { AuthContext } from './auth/context.js'
 import { todayFor } from './day.js'
 import { record } from './http/activity.js'
-import { linkMentionedObjects } from './notify.js'
+import { LINES, doer, linkMentionedObjects, notify } from './notify.js'
 
 /**
  * A task that repeats: the next one made when it is done, and taken back
@@ -196,6 +196,32 @@ export async function makeNext(tx: Tx, ctx: AuthContext, t: Finished): Promise<s
   const watchers = await onProject(watching.map((w) => w.actor_id))
   for (const a of watchers) {
     await tx`select follow_for(${ctx.workspaceId}, 'task'::object_kind, ${id}, ${a})`
+  }
+
+  /* An agent on it is given the next one as a person's assignment wakes it
+     — `agent.assigned` by webhook, the note `my_mentions` reads — through
+     the one path every assignment takes, so an agent can be a weekly job.
+     Only the agents: people hear of
+     the next one from its date's reminder, not from a note every Friday.
+     The hand-off is whoever finished it: a person's is 0; an agent that
+     finished its own is not woken by it (nobody is told of their own act,
+     and an agent that finished and was woken at once would run through a
+     daily series in a minute); one agent finishing another's is counted as
+     any hand-off between agents. */
+  const agentsOn = keep(t.assignee_ids)
+  if (agentsOn.length) {
+    const agents = await tx<{ actor_id: string }[]>`
+      select actor_id from agent where actor_id = any(${agentsOn}::uuid[]) and deleted_at is null`
+    if (agents.length) {
+      const who = await doer(tx, ctx.actorId)
+      await notify(tx, ctx, {
+        objectType: 'task',
+        objectId: id,
+        assignees: agents.map((a) => a.actor_id),
+        watchers: false,
+        whatFor: { assigned: (l) => LINES(l).gaveYou(who(l)) },
+      })
+    }
   }
 
   /* The rule goes on with the next one; the finished one keeps the way back. */

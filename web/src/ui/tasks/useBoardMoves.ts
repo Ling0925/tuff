@@ -2,7 +2,7 @@ import { useRef, useCallback, useState, useEffect } from 'react'
 import { api } from '../../data/api.js'
 import { isKey } from '../../data/keys.js'
 import { type Spot, columnAt, slid, useBoardDrag } from '../useDrag.js'
-import { type Task, chainKeys } from './model.jsx'
+import { type Task, chainKeys, takenBy } from './model.jsx'
 import { type TasksProps } from '../Tasks.jsx'
 import { type TaskData } from './useTaskData.js'
 
@@ -344,9 +344,12 @@ export function useBoardMoves({
       const now = new Date().toISOString()
       setTasks((prev) => {
         const without = (prev ?? []).filter((t) => !going.has(t.id))
+        const into = lists.find((l) => l.id === spot.column)
         const next = carried.map((t) => {
           const key = keys.get(t.id)
-          return { ...t, list_id: spot.column, ...(key ? { sort_key: key } : {}), decided_at: now }
+          /* Given to the list's agent, when it takes the list's new tasks;
+             the answer settles it. */
+          return { ...t, ...takenBy(into, t), list_id: spot.column, ...(key ? { sort_key: key } : {}), decided_at: now }
         })
         const at = after ? without.findIndex((t) => t.id === after) + 1 : firstIn(without, spot.column)
         without.splice(at, 0, ...next)

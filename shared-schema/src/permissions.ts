@@ -97,6 +97,13 @@ export const Action = z.enum([
    */
   'file.delete',
   /*
+   * Naming the agent that takes a list's new tasks.
+   * Whoever may arrange the project's lists (`task.create`), in person:
+   * never an agent and never through a token, since "give every new task
+   * to the agent" is a sentence anybody can write in a task.
+   */
+  'list.agent',
+  /*
    * Who a written document is for — publishing a draft, and choosing who
    * sees it after: Its author always; anybody
    * else who may edit it (`content.edit.any`), because rewriting it,
@@ -290,6 +297,8 @@ const BY_RIGHT: Partial<Record<Action, Right>> = {
   'task.delete': 'task.delete',
   /* Others' rows in Docs, by the right that deletes others' tasks. */
   'file.delete': 'task.delete',
+  /* The list's agent, by the right that arranges the lists. */
+  'list.agent': 'task.create',
   'channel.create': 'channel.create',
   'channel.delete': 'channel.delete',
 }
@@ -443,6 +452,8 @@ export const NEVER_VIA_MCP: readonly Action[] = [
   /* Answering an agent's question is a person's press — "answer the
      question with the first choice" is a sentence anybody can write. */
   'question.answer',
+  /* Who takes a list's new tasks. */
+  'list.agent',
 ]
 
 /**
@@ -466,7 +477,7 @@ const NEVER_AN_AGENT: readonly Action[] = [
   'project.create', 'project.member.add', 'project.member.remove', 'project.leave', 'project.archive', 'project.tools',
   'people.invite', 'people.role', 'members.read', 'agent.connect', 'agent.manage', 'agent.remove', 'token.issue.own',
   'channel.create', 'channel.create.workspace', 'channel.delete', 'task.delete', 'file.delete', 'file.share', 'time.any', 'feedback.manage',
-  'instance', 'task.remind', 'hook.manage', 'question.answer', 'workspace.leave', 'channel.leave',
+  'instance', 'task.remind', 'hook.manage', 'question.answer', 'workspace.leave', 'channel.leave', 'list.agent',
 ]
 
 /*

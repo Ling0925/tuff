@@ -949,6 +949,18 @@
         },
         "narrow": {
           "type": "boolean"
+        },
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -2451,6 +2463,7 @@
                   "channel.create",
                   "channel.delete",
                   "file.delete",
+                  "list.agent",
                   "file.share",
                   "channel.create.workspace",
                   "channel.leave",
@@ -4444,6 +4457,21 @@
           "type": "boolean"
         },
         "intake": {
+          "type": "boolean"
+        },
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "agent_gone": {
           "type": "boolean"
         },
         "tasks": {
@@ -11363,6 +11391,7 @@
     "channel.create",
     "channel.delete",
     "file.delete",
+    "list.agent",
     "file.share",
     "channel.create.workspace",
     "channel.leave",
@@ -11408,7 +11437,8 @@
     "instance",
     "feedback.manage",
     "hook.manage",
-    "question.answer"
+    "question.answer",
+    "list.agent"
   ],
   "x-default-settings": {
     "who_creates_projects": "members",

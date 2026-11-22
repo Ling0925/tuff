@@ -650,6 +650,10 @@ export const ListInProject = z.object({
   narrow: z.boolean().optional(),
   /** Whether it is the project's triage. */
   intake: z.boolean().optional(),
+  /** The agent that takes its new tasks, or null. */
+  agent_id: Uuid.nullable().optional(),
+  /** That agent is off the project or disconnected, so the list gives nothing. */
+  agent_gone: z.boolean().optional(),
   /** How many tasks are in it. */
   tasks: Count.optional(),
 })

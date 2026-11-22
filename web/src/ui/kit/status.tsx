@@ -168,6 +168,9 @@ export type Placed = {
   icon: string
   /** What its mark is drawn in, or null for the mark's own — `Dot`. */
   color?: string | null
+  /** The agent that takes its new tasks. */
+  agent_id?: string | null
+  agent_gone?: boolean
 }
 
 export function Status({

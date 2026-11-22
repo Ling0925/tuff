@@ -29,6 +29,20 @@ export const PROJECT_SETTINGS = say({
     'The stages a task moves through. A task moved into the list with the Finished icon is marked done.',
     'Les étapes par lesquelles passe une tâche. Une tâche déplacée dans la liste à l’icône Terminée est marquée comme terminée.',
   ],
+  /* The agent that takes a list's new tasks. */
+  listAgentOf: [
+    (list: string) => `Agent that takes new tasks in ${list}`,
+    (list: string) => `Agent qui prend les nouvelles tâches de ${list}`,
+  ],
+  listAgentSaid: [
+    (name: string) => `New tasks here with no one assigned go to ${name}.`,
+    (name: string) => `Les nouvelles tâches de cette liste sans responsable sont attribuées à ${name}.`,
+  ],
+  listAgentGone: [
+    (name: string) => `${name} isn’t on this project anymore, so new tasks here aren’t assigned to anyone.`,
+    (name: string) => `${name} ne fait plus partie de ce projet : les nouvelles tâches de cette liste ne sont attribuées à personne.`,
+  ],
+  theAgent: ['The agent', 'L’agent'],
   labelsHint: [
     'What kind of work a task is. Each project has its own labels, and new projects start with Bug, Feature and Improvement.',
     'Le type de travail d’une tâche. Chaque projet a ses propres étiquettes, et un nouveau projet commence avec Bug, Fonctionnalité et Amélioration.',

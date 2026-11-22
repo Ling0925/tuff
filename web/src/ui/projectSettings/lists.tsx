@@ -2,8 +2,21 @@ import { useState, useEffect, Fragment, useRef } from 'react'
 import { MORE, PROJECT } from '../../data/words.js'
 import { PROJECT_SETTINGS as W } from '../../words/projectSettings.js'
 import { api } from '../../data/api.js'
-import { type Label, LIST_TINTS, tintOf, RowActions, TINT_SAID, Dot, LIST_MARKS, Dialog, Button, Choice, notALogin } from '../kit.jsx'
-import { type List } from '../ProjectSettings.jsx'
+import {
+  type Label,
+  LIST_TINTS,
+  tintOf,
+  RowActions,
+  TINT_SAID,
+  Dot,
+  LIST_MARKS,
+  Dialog,
+  Button,
+  Choice,
+  notALogin,
+  WhoPick,
+} from '../kit.jsx'
+import { type List, type Person } from '../ProjectSettings.jsx'
 
 /**
  * One list: its name, its mark, and the way to take it away.
@@ -279,6 +292,9 @@ export function ListRow({
   others,
   may,
   mayDrop,
+  agents = [],
+  everyone = [],
+  mayAgent = false,
   onChanged,
 }: {
   list: List
@@ -287,6 +303,13 @@ export function ListRow({
   may: boolean
   /** `task.delete`: arranging the lists and removing one are two rights. */
   mayDrop: boolean
+  /** The agents on this project, any of which may take the list's new
+      tasks. */
+  agents?: Person[]
+  /** Everybody in the workspace, for the name of an agent that has left. */
+  everyone?: Person[]
+  /** `list.agent`: naming it, in person. */
+  mayAgent?: boolean
   onChanged: () => Promise<void>
 }) {
   const [name, setName] = useState(list.name)
@@ -298,6 +321,13 @@ export function ListRow({
   useEffect(() => setName(list.name), [list.name])
 
   const dest = into ?? others[0]?.id ?? 'nowhere'
+  /* Who takes its new tasks, shown at once when picked; the answer
+     settles it. A list that finishes work takes nobody. */
+  const [taker, setTaker] = useState<string | null>(list.agent_id ?? null)
+  useEffect(() => setTaker(list.agent_id ?? null), [list.agent_id])
+  const takerIs = taker ? (agents.find((a) => a.actor_id === taker) ?? everyone.find((a) => a.actor_id === taker) ?? null) : null
+  const gone = Boolean(taker && taker === list.agent_id && list.agent_gone)
+  const offersAgent = !list.finishes && (agents.length > 0 || taker !== null)
 
   async function patch(body: Record<string, unknown>) {
     await api(`/lists/${list.id}`, { method: 'PATCH', body: JSON.stringify(body) })
@@ -363,6 +393,28 @@ export function ListRow({
             await patch({ name: next })
           }}
         />
+        {/* The agent that takes its new tasks: its face, or the blank
+            one a task's assignee has, pressed for the project's agents. */}
+        {offersAgent && (
+          <span data-list-agent={taker ?? ''} className="flex shrink-0 items-center" style={gone ? { opacity: 0.5 } : undefined}>
+            <WhoPick
+              single
+              people={takerIs && !agents.some((a) => a.actor_id === takerIs.actor_id) ? [...agents, takerIs] : agents}
+              value={taker ? [taker] : []}
+              said={list.name}
+              label={W.listAgentOf(list.name)}
+              size={20}
+              disabled={!mayAgent}
+              onPick={(to) => {
+                const next = to[to.length - 1] ?? null
+                if (next === taker) return
+                const was = taker
+                setTaker(next)
+                void patch({ agent_id: next }).catch(() => setTaker(was))
+              }}
+            />
+          </span>
+        )}
         {mayDrop && (
           <RowActions>
             <button
@@ -379,6 +431,12 @@ export function ListRow({
           </RowActions>
         )}
       </div>
+
+      {offersAgent && taker && (
+        <p data-list-agent-said className={`pl-10 text-sm ${gone ? 'text-danger' : 'text-ink-3'}`}>
+          {gone ? W.listAgentGone(takerIs?.name ?? W.theAgent) : W.listAgentSaid(takerIs?.name ?? W.theAgent)}
+        </p>
+      )}
 
       {marking && (
         <div className="flex flex-wrap items-center gap-2">

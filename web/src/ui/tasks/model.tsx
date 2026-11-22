@@ -214,6 +214,25 @@ export type List = {
   narrow?: boolean
   /** The project's triage. */
   intake?: boolean
+  /** The agent that takes its new tasks, and whether it has left the
+      project. */
+  agent_id?: string | null
+  agent_gone?: boolean
+}
+
+/**
+ * Who a task moved into this list is given to, said before the server
+ * answers: the list's agent, for a task with nobody on it coming from
+ * another list. The server decides; its
+ * answer settles the row.
+ */
+export function takenBy(
+  into: List | undefined,
+  t: { list_id: string | null; assignee_ids?: string[]; parent_id?: string | null },
+): Partial<Task> {
+  if (!into?.agent_id || into.agent_gone || into.finishes) return {}
+  if (t.list_id === into.id || t.parent_id || (t.assignee_ids ?? []).length > 0) return {}
+  return given([into.agent_id])
 }
 
 export function days(since: string): number {

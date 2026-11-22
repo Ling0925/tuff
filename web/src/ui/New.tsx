@@ -804,6 +804,13 @@ function TaskMaker({ what, d, setD, onClose, onMade, onMore }: MakerProps<Extrac
      server puts it — said, rather than an empty status the task never has. */
   const status = d.list || (lists.find((l) => !l.intake) ?? lists[0])?.id || null
   const named = W.theNewTask
+  /* Nobody chosen, in a list an agent takes: the agent is who it goes to,
+     said in the quiet ink. */
+  const into = lists.find((l) => l.id === status)
+  const takes =
+    d.assignees.length === 0 && into?.agent_id && !into.agent_gone && !into.finishes
+      ? people.find((p) => p.actor_id === into.agent_id)
+      : undefined
 
   return (
     <Writing
@@ -850,7 +857,7 @@ function TaskMaker({ what, d, setD, onClose, onMade, onMore }: MakerProps<Extrac
         <Fact chip={chips} icon="person" label={MORE.assigned} testId="new-assignee">
           <WhoPick people={people} value={d.assignees} said={named} size={20} onPick={(to) => set({ assignees: to })} />
           <span className="truncate" style={{ color: d.assignees.length ? 'var(--ink)' : 'var(--ink-3)' }}>
-            {namesOf(people, d.assignees) || (chips ? MORE.assigned : W.noOne)}
+            {namesOf(people, d.assignees) || takes?.name || (chips ? MORE.assigned : W.noOne)}
           </span>
         </Fact>
         <Fact chip={chips} icon="tag" label={FACTS.labels} testId="new-labels">

@@ -346,6 +346,13 @@ export const TaskList = z.object({
    * a new project starts with.
    */
   narrow: z.boolean(),
+  /**
+   * The agent of its project that takes its new tasks, or null.
+   * A task made in it, or moved into it, with
+   * nobody on it is given to this agent. Optional, so an answer from before
+   * it still reads.
+   */
+  agent_id: Uuid.nullable().optional(),
 })
 
 /** A document is a file that is edited in place, so there is one entity. */

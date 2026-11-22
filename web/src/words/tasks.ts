@@ -44,6 +44,8 @@ export const TASKS = say({
   /* A column on the board. */
   expand: [(name: string) => `Expand ${name}`, (name: string) => `Développer la colonne ${name}`],
   collapse: [(name: string) => `Collapse ${name}`, (name: string) => `Réduire la colonne ${name}`],
+  /* The face beside a list an agent takes. */
+  takesHere: [(name: string) => `${name} takes new tasks here`, (name: string) => `${name} prend les nouvelles tâches de cette liste`],
 
   noTasks: ['No tasks yet', 'Aucune tâche pour l’instant'],
   noTasksBody: ['Create a task for anything someone needs to do.', 'Créez une tâche pour tout ce que quelqu’un doit faire.'],

@@ -6,7 +6,7 @@ import { useWide, usePhone, holdUntilMoved, type Priority, whoOf } from '../kit.
 import { seen } from '../TaskDetail.jsx'
 import { recall, remember } from '../../data/memory.js'
 import { numbered } from '../../data/route.js'
-import { type Task, type List, inOrder } from './model.jsx'
+import { type Task, type List, inOrder, takenBy } from './model.jsx'
 import { readPanel, PANEL_KEY, readShows, type Shows, showsKey, readFolds, readShut, OPEN_KEY, SHUT_KEY } from './view.jsx'
 import { type TasksProps } from '../Tasks.jsx'
 
@@ -776,6 +776,8 @@ export function useTaskData({
     void patch(
       t.id,
       {
+        /* Given to the list's agent, when it takes the list's new tasks. */
+        ...takenBy(into, t),
         list_id: listId,
         // The server's trigger writes this from the list; the screen says the
         // same thing now so the row does not change its mind a tick later.
