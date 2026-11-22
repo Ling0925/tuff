@@ -225,6 +225,11 @@ function Chip({ node, editor }: NodeViewProps) {
           >
             {done && <Icon name="check" size={12} />}
           </button>
+          {/* Glued to the handle: a line could break between the tick's box
+              and the words after it, and left the tick alone at the end of
+              one line on an empty tint, its task starting on the next. A
+              word joiner forbids that break and takes no room. */}
+          {'\u2060'}
           {/* A span, not a button: a button is one box and its words cannot
               wrap with the sentence; these do, as the line they replaced. */}
           <span
@@ -245,7 +250,9 @@ function Chip({ node, editor }: NodeViewProps) {
             title={title}
             className="task-chip-open"
           >
-            <span className="task-chip-handle">{a.making ? W.makingTask : handle}</span>{' '}
+            {/* The handle and the title's first word kept on one line: a
+                non-breaking space, so "" never ends a line alone. */}
+            <span className="task-chip-handle">{a.making ? W.makingTask : handle}</span>{'\u00a0'}
             <span className="task-chip-title" data-comment={threads || undefined}>
               {words}
             </span>
