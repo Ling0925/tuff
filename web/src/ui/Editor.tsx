@@ -23,7 +23,8 @@ import { Autolink } from './autolink.js'
 import * as sending from '../data/sending.js'
 import { EDITOR as W } from '../words/editor.js'
 import { type Block, BLOCKS, PhoneDock, TextBar, Mark } from './editor/bars.jsx'
-import { Attachment, CodeColours } from './editor/attachment.jsx'
+import { Attachment } from './editor/attachment.jsx'
+import { CodeBlock } from './editor/codeBlock.jsx'
 import { Callout } from './editor/callout.jsx'
 import { Toggle, ToggleKeys } from './editor/toggle.js'
 import { Wraps } from './editor/wraps.js'
@@ -219,6 +220,10 @@ export function Editor({
   words.current = onWords
   const shelf = useRef<HTMLDivElement | null>(null)
   const [, redraw] = useState(0)
+  /* The bodies this editor handed up in the last moment, as JSON — see
+     the effect that writes `value` in. Forgotten after a second, so a body
+     put back from outside later is still written in. */
+  const handedUp = useRef<string[]>([])
 
   const editor = useEditor({
     editable,
@@ -231,7 +236,11 @@ export function Editor({
         /* Written together, undo is the shared state's: ProseMirror's own
            would take back somebody else's words. */
         ...(collab ? { undoRedo: false as const } : {}),
+        /* Its own, below: the kit's code block with a language, wrapped
+           or numbered lines and a bar. */
+        codeBlock: false,
       }),
+      CodeBlock,
       Attachment,
       /* What a body names inline, kept through an edit even where nobody
          can type a new one. */
@@ -239,7 +248,6 @@ export function Editor({
       /* Alive in a body: where the task stands now. */
       TaskChip,
       DocRef,
-      CodeColours,
       /* An address stored as words, drawn as the link it is. */
       Autolink,
       /* Not resizable: a column is as wide as the table divides it, and a
@@ -437,7 +445,14 @@ export function Editor({
       },
     },
     onUpdate: ({ editor: e, transaction }) => {
-      onChange(settled(e.getJSON()))
+      const out = settled(e.getJSON())
+      const json = JSON.stringify(out)
+      handedUp.current.push(json)
+      if (handedUp.current.length > 8) handedUp.current.shift()
+      setTimeout(() => {
+        handedUp.current = handedUp.current.filter((j) => j !== json)
+      }, 1000)
+      onChange(out)
       /* A change made by a control rather than a key — a picture resized,
          taken out, or arrived — is saved as it is made. */
       if (transaction.getMeta('settle')) onSettle?.(settled(e.getJSON()))
@@ -892,7 +907,20 @@ export function Editor({
        never had — or a send in flight would read as the server's copy
        being different, and be written over. */
     const here = JSON.stringify(settled(editor.getJSON()))
-    if (here === JSON.stringify(value)) return
+    const there = JSON.stringify(value)
+    if (here === there) return
+    /*
+     * Nor a body this editor handed up itself, coming back late.
+     *
+     * Two edits in one moment — the `/code` taken out, then the code block
+     * made — and a node view drawn by React for the second flushes React
+     * at once, while ProseMirror is still drawing it: the screen around
+     * renders with the body as it was after the first, and this effect
+     * wrote that over the second. The block went, and its first letter
+     * landed in a paragraph. What the editor said a moment ago is never
+     * news to it.
+     */
+    if (handedUp.current.includes(there)) return
     editor.commands.setContent(value as never, { emitUpdate: false })
   }, [editor, value, collab])
 

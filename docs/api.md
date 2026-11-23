@@ -1410,6 +1410,20 @@ Marks and blocks are StarterKit's: bold, italic, strike, underline, code,
 code block, headings, both lists, quote, rule, hard break and link. Links are
 `http` and `https` only, checked where the value is taken.
 
+**A code block** carries its language and how it is drawn:
+
+```json
+{ "type": "codeBlock", "attrs": { "language": "typescript", "wrap": true, "lineNumbers": true },
+  "content": [{ "type": "text", "text": "const a = 1" }] }
+```
+
+`language` is what a Markdown fence says (```` ```ts ````), or null for none;
+a client reads any name it knows for the language and shows the rest as
+written. `wrap` (long lines wrapped at the block's edge, not scrolled) and
+`lineNumbers` (a number beside each line) are optional booleans, false when
+absent. Markdown written out carries the language and not the two
+booleans; a block an agent leaves unchanged through `update_doc` keeps them.
+
 **A callout and a toggle** are blocks too. A
 callout holds blocks under an emoji, in one of five tones; anything else in
 `tone` is read as `grey`:

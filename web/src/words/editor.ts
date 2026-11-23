@@ -10,7 +10,6 @@ export const EDITOR = say({
   remove: ['Remove', 'Retirer'],
   openName: [(name: string) => `Open ${name}`, (name: string) => `Ouvrir ${name}`],
   open: ['Open', 'Ouvrir'],
-  removeCodeBlock: ['Remove code block', 'Retirer le bloc de code'],
 
   /* Files held over the screen a body is on — `docs/specs/drop-files.md`. */
   dropIntoPost: ['Drop to add to the announcement', 'Déposez pour ajouter à l’annonce'],

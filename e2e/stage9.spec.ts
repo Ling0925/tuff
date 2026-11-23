@@ -5207,16 +5207,16 @@ test('a code block offers no text marks, and is taken out whole', async ({ page 
   // Escape selects the whole block, and Backspace takes it out.
   await body.locator('pre').click()
   await page.keyboard.press('Escape')
-  await expect(body.locator('pre.ProseMirror-selectednode')).toHaveCount(1)
+  await expect(body.locator('.ProseMirror-selectednode pre')).toHaveCount(1)
   await page.keyboard.press('Backspace')
   await expect(body.locator('pre')).toHaveCount(0)
 
-  // And the bin in its corner does the same for the pointer.
+  // And the bin on its bar does the same for the pointer.
   await page.keyboard.type('/code')
   await page.keyboard.press('Enter')
   await page.keyboard.type('x = 1')
   await body.locator('pre').hover()
-  await body.locator('pre [data-code-remove]').click()
+  await body.locator('[data-code-block] [data-code-remove]').click()
   await expect(body.locator('pre')).toHaveCount(0)
 })
 

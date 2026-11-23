@@ -1,13 +1,9 @@
 import { useState, useEffect, useRef, useLayoutEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { Node, mergeAttributes, ReactNodeViewRenderer, type NodeViewProps, NodeViewWrapper, Extension } from '@tiptap/react'
-import { PluginKey, Plugin } from '@tiptap/pm/state'
-import { DecorationSet, Decoration, type EditorView } from '@tiptap/pm/view'
-import { type Node as Prose } from '@tiptap/pm/model'
+import { Node, mergeAttributes, ReactNodeViewRenderer, type NodeViewProps, NodeViewWrapper } from '@tiptap/react'
 import { Icon } from '../glyphs.jsx'
 import { glanceable, Glance, Lightbox, PrivatePicture } from '../Doc.jsx'
 import { isGone } from '../../data/api.js'
-import { tokens } from '../../data/highlight.js'
 import { knownLinks, type Links, fileLinks, sizeOf } from '../../data/files.js'
 import * as sending from '../../data/sending.js'
 import { fileLine } from '../../data/bytes.js'
@@ -534,70 +530,3 @@ function AttachmentView({ node, selected: picked, getPos, editor }: NodeViewProp
     </NodeViewWrapper>
   )
 }
-
-/**
- * Code coloured as it is written.
- *
- * Decorations rather than marks: the colour is not something somebody wrote
- * and must not be stored, copied or sent — it is drawn from the text every
- * time, by the same pass `Doc` uses to read it. `data/highlight.ts`.
- */
-const colours = new PluginKey<DecorationSet>('code-colours')
-
-function paint(doc: Prose): DecorationSet {
-  const marks: Decoration[] = []
-  doc.descendants((node, pos) => {
-    if (node.type.name !== 'codeBlock') return true
-    for (const t of tokens(node.textContent)) {
-      marks.push(Decoration.inline(pos + 1 + t.from, pos + 1 + t.to, { class: `tok-${t.tone}` }))
-    }
-    marks.push(Decoration.widget(pos + 1, removeCode, { side: -1, ignoreSelection: true, key: `code-remove-${pos}` }))
-    return false
-  })
-  return DecorationSet.create(doc, marks)
-}
-
-/**
- * The bin in a code block's corner, on the pointer.
- *
- * A code block could not be got hold of to take out: a press puts the caret
- * in its text, and Backspace there deletes characters. This takes the whole
- * block in one press; Escape inside it selects it, for the keyboard.
- */
-function removeCode(view: EditorView, getPos: () => number | undefined): HTMLElement {
-  const b = document.createElement('button')
-  b.type = 'button'
-  b.contentEditable = 'false'
-  b.setAttribute('data-code-remove', '')
-  b.setAttribute('aria-label', W.removeCodeBlock)
-  b.title = W.remove
-  b.innerHTML =
-    '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true"><path d="M3.5 6h17M9 6V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V6m3 0v13.5A1.5 1.5 0 0 1 16.5 21h-9A1.5 1.5 0 0 1 6 19.5V6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 10.5v6M14 10.5v6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>'
-  b.addEventListener('mousedown', (e) => e.preventDefault())
-  b.addEventListener('click', (e) => {
-    e.preventDefault()
-    const at = getPos()
-    if (at === undefined || !view.editable) return
-    const $at = view.state.doc.resolve(at)
-    const tr = view.state.tr.delete($at.before(), $at.after()).setMeta('settle', true)
-    view.dispatch(tr)
-    view.focus()
-  })
-  return b
-}
-
-export const CodeColours = Extension.create({
-  name: 'codeColours',
-  addProseMirrorPlugins() {
-    return [
-      new Plugin({
-        key: colours,
-        state: {
-          init: (_, { doc }) => paint(doc),
-          apply: (tr, old) => (tr.docChanged ? paint(tr.doc) : old),
-        },
-        props: { decorations: (state) => colours.getState(state) },
-      }),
-    ]
-  },
-})
