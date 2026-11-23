@@ -118,8 +118,10 @@ async function aRepository(project: string, task: string, actorId: string, works
               values (${workspaceId}, ${project}, ${link}, ${task}, 3)`
   await owner`insert into github_comment (workspace_id, project_id, comment_id, github_id, seen_body)
               values (${workspaceId}, ${project}, ${comment.id}, ${n()}, 'Said')`
-  await owner`insert into github_out (id, workspace_id, project_id, kind, object_id, actor_id)
-              values (${uuidv7()}, ${workspaceId}, ${project}, 'task', ${task}, ${actorId})`
+  /* Sent already: the queue is the whole database's, and a row waiting in
+     it is claimed by whichever GitHub test drains it next. */
+  await owner`insert into github_out (id, workspace_id, project_id, kind, object_id, actor_id, done_at)
+              values (${uuidv7()}, ${workspaceId}, ${project}, 'task', ${task}, ${actorId}, now())`
   return { install }
 }
 
@@ -250,11 +252,11 @@ test('the clear-out takes a project with a repository, linked or unlinked, past 
 /*
  * What `purge_project_rows` deletes by name. Every foreign key in the
  * database that points at one of these — or at anything that goes with one
- * of them by cascade — either goes with its row by itself (cascade, set
- * null, set default) or comes from a table on this list. A table added
- * later that names a project, a task or a comment with a plain foreign key
- * fails here, rather than making projects that cannot be deleted, which is
- * what the GitHub tables did for a year.
+ * of them by cascade — either goes with its row by itself (cascade, or set
+ * null on a column that may be null) or is one of REVIEWED below. A table
+ * or a key added later that names a project, a task or a comment with a
+ * plain foreign key fails here, rather than making projects that cannot be
+ * deleted, which is what the GitHub tables did for a year.
  */
 const PURGED = [
   'github_pull_task',
@@ -284,10 +286,58 @@ const PURGED = [
   'project',
 ]
 
+/*
+ * The plain foreign keys from a PURGED table into what goes, each read
+ * against the function's `where`: the rows that can point at what goes are
+ * among the rows it deletes, in the same statement or an earlier one.
+ * Being on PURGED is not enough by itself — a `message.task_id` would come
+ * from a purged table and still hold, since messages go by their room — so
+ * a new key fails until somebody reads it and adds it here.
+ */
+const REVIEWED = [
+  // By `project_id = p`, or by the project's rooms, tasks, comments or links.
+  'activity_event_project_id_fkey',
+  'comment_project_id_fkey',
+  'conversation_project_id_fkey',
+  'cycle_project_id_fkey',
+  'file_project_id_fkey',
+  'label_project_id_fkey',
+  'post_project_id_fkey',
+  'project_member_project_id_fkey',
+  'task_list_project_id_fkey',
+  'task_project_id_fkey',
+  'time_entry_project_id_fkey',
+  'github_comment_project_id_fkey',
+  'github_issue_project_id_fkey',
+  'github_link_project_id_fkey',
+  'github_out_project_id_fkey',
+  'github_pull_project_id_fkey',
+  'github_pull_task_project_id_fkey',
+  'conversation_member_conversation_id_fkey',
+  'file_conversation_id_fkey',
+  'message_conversation_id_fkey',
+  'task_label_task_id_fkey',
+  'github_comment_comment_id_fkey',
+  'github_issue_link_id_fkey',
+  'github_pull_link_id_fkey',
+  // Within one table and one project, gone in one statement: a reply with
+  // what it answers, a part with its task, a file with its folder or document.
+  'comment_parent_id_fkey',
+  'message_parent_id_fkey',
+  'task_parent_id_fkey',
+  'file_folder_id_fkey',
+  'file_held_by_a_document',
+  // A task's own list and cycle, which are its project's.
+  'task_cycle_id_fkey',
+  'task_list_id_fkey',
+]
+
 test('every foreign key into what a purge deletes is deleted by it or goes by itself', async () => {
-  const fks = await owner<{ tbl: string; ref: string; del: string; name: string }[]>`
+  const fks = await owner<{ tbl: string; ref: string; del: string; name: string; not_null: boolean }[]>`
     select c.conrelid::regclass::text as tbl, c.confrelid::regclass::text as ref,
-           c.confdeltype as del, c.conname as name
+           c.confdeltype as del, c.conname as name,
+           exists (select 1 from pg_attribute a
+                   where a.attrelid = c.conrelid and a.attnum = any(c.conkey) and a.attnotnull) as not_null
     from pg_constraint c
     where c.contype = 'f' and c.connamespace = 'public'::regnamespace`
   assert.ok(
@@ -306,11 +356,25 @@ test('every foreign key into what a purge deletes is deleted by it or goes by it
       }
     }
   }
-  const holding = fks
-    .filter((f) => gone.has(f.ref) && !PURGED.includes(f.tbl) && !['c', 'n', 'd'].includes(f.del))
+  const into = fks.filter((f) => gone.has(f.ref))
+  const holding = into
+    .filter((f) => f.del !== 'c' && f.del !== 'n' && !(PURGED.includes(f.tbl) && REVIEWED.includes(f.name)))
     .map((f) => `${f.tbl} → ${f.ref} (${f.name})`)
     .sort()
-  assert.deepEqual(holding, [], 'add the table to purge_project_rows (and PURGED), or make its key cascade')
+  assert.deepEqual(
+    holding,
+    [],
+    'delete its rows in purge_project_rows and add it to REVIEWED (and its table to PURGED), or make the key cascade',
+  )
+  // Set null on a column that may not be null fails the delete as surely.
+  const cannotBeNull = into
+    .filter((f) => f.del === 'n' && f.not_null)
+    .map((f) => `${f.tbl} → ${f.ref} (${f.name})`)
+    .sort()
+  assert.deepEqual(cannotBeNull, [], '`on delete set null` on a not-null column')
+  // And nothing on REVIEWED is stale: each is still a plain key into what goes.
+  const stale = REVIEWED.filter((n) => !into.some((f) => f.name === n && f.del !== 'c' && f.del !== 'n'))
+  assert.deepEqual(stale, [], 'on REVIEWED but no longer a plain key into what a purge deletes')
 
   // And the list is what the function does.
   const [fn] = await owner<{ src: string }[]>`select prosrc as src from pg_proc where proname = 'purge_project_rows'`

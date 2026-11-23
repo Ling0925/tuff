@@ -978,7 +978,7 @@ and null at `0.0.0`. Null once an owner dismisses it
 | GET | `/api/projects` | membership; cursor paged; each row carries `can` for that project, and `sample` |
 | POST | `/api/projects` | `project.create`; `template?: launch \| client \| sprint` makes its first tasks too — on the maker, the first in Todo and the rest in Backlog, subscribed — its document, and its mark; one feed line, the project's. `mark_icon?`, `mark_tint?` set the mark it is made with, over the template's. The plans are `PROJECT_TEMPLATES` in `shared-schema` |
 | POST | `/api/projects/sample` | `project.create`, never through a token; a sample to look around in — `201` made, or `200` and the workspace's existing one with the asker put on it. One per workspace. Nothing in it is on anybody, it is left out of `/api/my/tasks`, and making it writes no feed lines, notifications or subscriptions |
-| DELETE | `/api/projects/:id/sample` | on the project, never through a token; the sample out for good at once — `404` for a project that is not one |
+| DELETE | `/api/projects/:id/sample` | on the project, never through a token; the sample out for good at once, through `purge_project_rows` like Delete for good (`drop_sample`) — `404` for a project that is not one. A sample never has a repository to take with it: `PUT /api/projects/:id/github` refuses one |
 | GET | `/api/projects/:id` | membership; returns `can` — what the caller may do **in this project**, which `/api/me` cannot answer — and `for_agents`, the project's instructions for agents: `{ id, number, name }` of the one written document marked so, or `null` (absent from a server before migration 310) |
 | PATCH | `/api/projects/:id` | membership; `project.tools` to change the tools |
 | POST | `/api/projects/:id/archive` | `project.archive` |
@@ -1083,13 +1083,18 @@ it, either cascades or sets null, or comes from a table
 `server/test/purge.test.ts`, so a new table naming a project with a plain
 foreign key fails the tests rather than making projects nobody can delete.
 
+Delete sample (`DELETE /api/projects/:id/sample`, `drop_sample`) is the
+function's third caller, on a live sample, which is never given a
+repository.
+
 The thirty-day clear-out does the same, through the same function, to a
 project in the bin past its days. It used to delete the project row
 alone, which its tasks held on to — and meeting a row it could not remove,
 `purge_deleted` gave up on every other table as well. A project that
 cannot go is passed over with a database warning, and the run goes on to
-the next; the worker prints those warnings (it used to discard every
-notice).
+the next; the worker prints warnings (it used to discard every notice).
+What it says every hour regardless — rows past their days that something
+live still names — is a notice since 318, and not printed.
 
 ### Watching a task
 
@@ -2852,8 +2857,9 @@ post: the guard is a query, not a lock.
   delivered**. Nothing threw. The deliveries simply sat there.
 - **It runs the clear-out**, hourly, on rows soft-deleted longer than
   `PURGE_AFTER_DAYS` (30 by default). What it passes over — a project that
-  could not go, rows something live still names — it says as a database
-  warning, which the worker prints as `worker: purge: …`.
+  could not go — it says as a database warning, which the worker prints
+  as `worker: purge: …`; rows something live still names are a
+  notice, said every hour and not printed.
 - **It removes the bytes of what is gone.** A file's row, deleted by
   anything, queues its keys in `storage_orphan` (a trigger, so nothing that
   deletes a file can forget); the same pass takes up to 200 from
@@ -3191,7 +3197,7 @@ repository**: the worker carries an access token signed for them with
 | DELETE | `/api/github/install` | `audit.read`; forgets it here, and every project's link with it. The app stays installed on GitHub |
 | GET | `/api/github/repos` | the owner, or whoever may change some project's settings; never through a token. `{ repos: [{ id, name, private, project_id }] }` — what the installation was given, and which project each is linked to |
 | GET | `/api/projects/:id/github` | `{ link: { repo_id, repo_name, issues, linked_by, linked_by_name } \| null }` |
-| PUT | `/api/projects/:id/github` | `project.tools` there, and — for anybody but the owner — their own linked GitHub must be able to read the repository (`403` otherwise); `{ repo_id, issues?, confirm? }`. One repository a project and one project a repository (`409`). A public repository with `issues` needs `confirm` to be its full name |
+| PUT | `/api/projects/:id/github` | `project.tools` there, and — for anybody but the owner — their own linked GitHub must be able to read the repository (`403` otherwise); `{ repo_id, issues?, confirm? }`. One repository a project and one project a repository (`409`). A public repository with `issues` needs `confirm` to be its full name. Never a sample project — `409 sample`: anybody on it deletes it for good in one press, which would take the link; the web does not offer it there |
 | DELETE | `/api/projects/:id/github` | `project.tools` there; unlinks it |
 | GET | `/api/github/me` | `{ configured, linked: { login, avatar_url } \| null }` — the person's own GitHub account |
 | POST | `/api/github/me/start` | `{ url }` on GitHub to authorise the app as yourself, with a signed `state` (fifteen minutes) |

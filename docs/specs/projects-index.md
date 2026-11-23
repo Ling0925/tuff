@@ -76,9 +76,18 @@ row by itself (`on delete cascade` or `set null`) nor is on the list of
 what `purge_project_rows` deletes. A new table that names a project has
 to say which it is.
 
+The same function is behind **Delete sample**, which takes a live sample
+at once for anybody on it. A sample is
+never given a repository, so that press never takes a link somebody set
+up.
+
 A project that cannot go is still passed over rather than stopping the
 run — the clear-out takes the next one — and the worker now prints the
-database's warning about it, which it used to throw away.
+database's warning about it, which it used to throw away. What the
+clear-out says every hour whatever happens — rows past their days that
+something live still names, an unlinked repository of a live project
+among them — is a notice, and stays out of the log, so the warning is
+not buried under it.
 
 ## A project has a name and no description
 

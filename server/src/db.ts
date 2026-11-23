@@ -217,10 +217,11 @@ function everywhereOn<T>(pool: Sql, actorId: string, fn: (tx: Tx) => Promise<T>)
  * those calls are refused — said once, loudly, rather than found out from
  * a sync that quietly stopped.
  *
- * A warning from the database is printed. The clear-out says with one what
- * it passed over — a project that could not go, rows something live still
- * names — and goes on to the next; thrown away with the notices, a project
- * nobody could delete was skipped every hour and nobody heard.
+ * A warning from the database is printed, a notice is not. The clear-out
+ * says with a warning that a project could not go, and goes on to the
+ * next; thrown away with the notices, a project nobody could delete was
+ * skipped every hour and nobody heard. What it says every hour
+ * whatever happens — rows something live still names — is a notice (318).
  */
 let worker: Sql | null = null
 const workerNotice = (n: { severity?: string; message?: string }): void => {
