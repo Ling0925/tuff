@@ -1310,7 +1310,7 @@ oldest first, the same bounds; `400 invalid` for a cursor that is not one,
 | Method | Path | Action |
 | --- | --- | --- |
 | GET POST | `/api/projects/:id/posts` | `content.create` to write; GET answers each post whole — its `body` — with `reply_count` and not the replies; newest first, then by id, `next_cursor` `<moment in UTC>_<id>` (a bare moment from before reads to the end of its millisecond; anything else `400 invalid`) |
-| GET PATCH DELETE | `/api/posts/:id` | PATCH and DELETE: author, or `content.edit.said` (owner, `edit.any`, `manage` — not the workspace's edit switch); PATCH of somebody else's post never through a token, DELETE never through a token at all (`403`) |
+| GET PATCH DELETE | `/api/posts/:id` | PATCH and DELETE: author, or `content.edit.said` (owner, `edit.any`, `manage` — not the workspace's edit switch), or — on a post an agent wrote — whoever connected that agent (`agent.created_by`) while on the post's project, the agent live in this workspace (not disconnected, `agent.deleted_at`; not stopped, `agent.stopped_at`); PATCH of somebody else's post never through a token, DELETE never through a token at all (`403`). GET's `post` carries `author_agent` (an agent wrote it), `may_edit` (what PATCH would answer) and `may_delete` (what DELETE would answer) — the web offers Edit on somebody else's only where `author_agent` and `may_edit` are both true. The posts spec |
 | POST | `/api/posts/:id/restore` | → `{ ok }`; puts a deleted announcement back with its replies — the toast's **Undo**. Whoever deleted it (`post.deleted_by`, migration 263) or whoever holds `content.edit.said` — not its author as such (`403` otherwise, and through a token); `404` when it is not deleted, already cleared out, its project deleted, or not the asker's to see. Logs `post.restore` with `meta.title`. DELETE records `deleted_by`. The undo spec |
 | POST | `/api/posts/:id/comments` | `content.create` |
 | GET | `/api/{tasks,posts,files}/:id/comments?before=` | the comments a read did not carry, before `comments_earlier`; `CommentsPage` |
@@ -3721,6 +3721,9 @@ the security audit spec has the why of each.
   wrote, and `403` to a member who is neither its author, the owner nor
   holding `edit.any` or `manage` on its project, whatever the workspace's
   edit switch says: emptying an announcement is deleting it by another door.
+  On a post an agent wrote, whoever connected the agent also may, in
+  person and on the project, while the agent is neither disconnected nor
+  stopped — never through a token, the agent's included.
 - `PATCH /api/comments/:id` — `403` through a token on a comment somebody
   else wrote, the owner's token and an agent holding `edit.any` included:
   rewriting a comment into nothing is deleting it, which no token does.

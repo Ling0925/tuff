@@ -286,6 +286,29 @@ test('the switch does not reach what somebody said', () => {
   assert.equal(can('content.edit.said', base('member', { rights: ['edit.any'] })), true)
 })
 
+test('an agent’s words are its connector’s to change — on the project, in person', () => {
+  /*
+   * "Changing one": said only by an
+   * announcement's endpoints, when its author is a live agent the asker
+   * connected. The same standing as changing one's own, and never through
+   * a token or by an agent.
+   */
+  const theirs = { isAuthor: false, connectedIt: true }
+  assert.equal(can('content.edit.said', base('member', theirs)), true)
+  assert.equal(can('content.edit.said', base('member', { isAuthor: false })), false)
+  assert.equal(can('content.edit.said', base('member', { ...theirs, inProject: false })), false)
+  assert.equal(can('content.edit.said', base('member', { ...theirs, viaMcp: true, plan: 'team' })), false)
+  assert.equal(can('content.edit.said', base('member', { ...theirs, agent: true })), false)
+  // GitHub or an import writing as the connector is a tool, not their press.
+  assert.equal(can('content.edit.said', base('member', { ...theirs, viaTool: true })), false)
+  assert.equal(can('content.edit.said', base('member', { ...theirs, tokenLimited: true, outsideToken: true })), false)
+  // An unproved address is a member's, and a member's this is.
+  assert.equal(can('content.edit.said', base('owner', { ...theirs, unproved: true })), true)
+  // The switch is still not what decides it.
+  const settings = { ...DEFAULT_SETTINGS, edit_others_content: 'own_only' as const }
+  assert.equal(can('content.edit.said', base('member', { ...theirs, settings })), true)
+})
+
 test('a member outside a project has no rights inside it', () => {
   for (const action of ['content.create', 'project.member.add', 'time.own'] as Action[]) {
     assert.equal(can(action, base('member', { inProject: false })), false, action)

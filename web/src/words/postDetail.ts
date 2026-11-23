@@ -19,6 +19,10 @@ export const POST_DETAIL = say({
   couldNotCopy: ['Couldn’t copy link', 'Impossible de copier le lien'],
   copyLink: ['Copy link', 'Copier le lien'],
   deletePost: ['Delete announcement', 'Supprimer l’annonce'],
+  /* On an agent's announcement, to whoever may change it — its title and
+     words open until Done. */
+  editPost: ['Edit announcement', 'Modifier l’annonce'],
+  doneEditing: ['Done', 'Terminé'],
   deleteTheirs: [
     (who: string) => `Delete ${who}’s announcement for everyone? You can undo this right after.`,
     (who: string) => `Supprimer l’annonce de ${who} pour tout le monde ? Vous pourrez annuler juste après.`,

@@ -4685,6 +4685,7 @@ public enum API {
 
     // MARK: - PostClass
     public struct PostClass: Codable, Sendable {
+        public let authorAgent: Bool?
         public let authorAvatarURL: String?
         public let authorID: String?
         public let authorName: String?
@@ -4692,6 +4693,7 @@ public enum API {
         public let category: String?
         public let createdAt: String
         public let id: String
+        public let mayDelete, mayEdit: Bool?
         public let number: Int?
         public let projectID: String?
         public let publishedAt: String?
@@ -4702,12 +4704,16 @@ public enum API {
         public let updatedAt: String?
 
         public enum CodingKeys: String, CodingKey {
+            case authorAgent = "author_agent"
             case authorAvatarURL = "author_avatar_url"
             case authorID = "author_id"
             case authorName = "author_name"
             case body, category
             case createdAt = "created_at"
-            case id, number
+            case id
+            case mayDelete = "may_delete"
+            case mayEdit = "may_edit"
+            case number
             case projectID = "project_id"
             case publishedAt = "published_at"
             case replyCount = "reply_count"
@@ -4715,7 +4721,8 @@ public enum API {
             case updatedAt = "updated_at"
         }
 
-        public init(authorAvatarURL: String?, authorID: String?, authorName: String?, body: [String: JSONAny]?, category: String?, createdAt: String, id: String, number: Int?, projectID: String?, publishedAt: String?, replyCount: Count?, schedule: String?, subscribed: Bool?, title: String, updatedAt: String?) {
+        public init(authorAgent: Bool?, authorAvatarURL: String?, authorID: String?, authorName: String?, body: [String: JSONAny]?, category: String?, createdAt: String, id: String, mayDelete: Bool?, mayEdit: Bool?, number: Int?, projectID: String?, publishedAt: String?, replyCount: Count?, schedule: String?, subscribed: Bool?, title: String, updatedAt: String?) {
+            self.authorAgent = authorAgent
             self.authorAvatarURL = authorAvatarURL
             self.authorID = authorID
             self.authorName = authorName
@@ -4723,6 +4730,8 @@ public enum API {
             self.category = category
             self.createdAt = createdAt
             self.id = id
+            self.mayDelete = mayDelete
+            self.mayEdit = mayEdit
             self.number = number
             self.projectID = projectID
             self.publishedAt = publishedAt

@@ -3398,6 +3398,9 @@ data class PostRead (
 
 @Serializable
 data class PostClass (
+    @SerialName("author_agent")
+    val authorAgent: Boolean? = null,
+
     @SerialName("author_avatar_url")
     val authorAvatarURL: String? = null,
 
@@ -3414,6 +3417,13 @@ data class PostClass (
     val createdAt: String,
 
     val id: String,
+
+    @SerialName("may_delete")
+    val mayDelete: Boolean? = null,
+
+    @SerialName("may_edit")
+    val mayEdit: Boolean? = null,
+
     val number: Long? = null,
 
     @SerialName("project_id")

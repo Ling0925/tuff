@@ -1390,7 +1390,19 @@ export const PostPage = z.object({
 /** `GET /api/posts/:id`: the announcement and its replies. */
 export const PostRead = z.object({
   /** And whether the reader follows it. */
-  post: PostInProject.extend({ subscribed: z.boolean().optional() }),
+  post: PostInProject.extend({
+    subscribed: z.boolean().optional(),
+    /** Whether an agent wrote it — the screen offers Edit on an agent's to
+        whoever may change it, on a person's to its author alone. */
+    author_agent: z.boolean().optional(),
+    /** Whether the reader may change it, as `PATCH` asks: its author, the
+        owner, whoever runs the project, and an agent's connector while on
+        the project — somebody else's never through a token. */
+    may_edit: z.boolean().optional(),
+    /** Whether the reader may take it away, as `DELETE` asks: the same
+        people, and never through a token at all. */
+    may_delete: z.boolean().optional(),
+  }),
   comments: z.array(CommentOnObject).optional(),
   /** Where the comments this answer did not carry start: the newest 200, and no more than 4 MB of them, are here; `GET …/comments?before=` with this answers the ones before. Null when all are here. */
   comments_earlier: z.string().nullable().optional(),

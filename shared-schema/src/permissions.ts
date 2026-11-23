@@ -351,6 +351,15 @@ export type PermissionInput = {
   rights?: readonly string[]
   /** Whether the call arrived through MCP rather than from a person typing. */
   viaMcp?: boolean
+  /**
+   * Whether the call came through anything but a person's own press: a
+   * token of any kind (`viaMcp`), a change GitHub caused, or an import
+   * writing as somebody. Set by the server after whatever a handler says,
+   * so no handler turns a tool back into a person. Read where "never
+   * through a token" has to hold for every kind of one — so far, an
+   * agent's words changed by its connector.
+   */
+  viaTool?: boolean
   /** The plan the workspace is on, where the edition has plans. Unsaid
       holds nothing back: a caller that does not know asks nothing about
       agents. */
@@ -373,7 +382,8 @@ export type PermissionInput = {
   mayConnectAgents?: boolean
   /** Whether the one asking is an agent. */
   agent?: boolean
-  /** Whether the one asking connected the agent in question — `agent.manage`. */
+  /** Whether the one asking connected the agent in question — `agent.manage`;
+      for `content.edit.said`, the live agent that wrote the words. */
   connectedIt?: boolean
   /** Whether the deployment trusts this person to run the product. */
   operator?: boolean
@@ -704,9 +714,26 @@ export function can(action: Action, input: PermissionInput): boolean {
 
   if (action === 'content.edit.any' || action === 'content.edit.said') {
     if (role === 'owner' || has(input, 'edit.any') || has(input, 'manage')) return true
+    /*
+     * An agent's words are its connector's to change, as their own are —
+     * on the project, in person: never through a token and never by an
+     * agent, nor by GitHub or an import acting as somebody (`viaTool`),
+     * since "rewrite what your agent said" is a sentence anybody can write
+     * in a task. Said only by an announcement's endpoints, which pass
+     * `connectedIt` when its author is a live agent the asker connected;
+     * a comment's and a message's do not.
+     */
+    if (action === 'content.edit.said') {
+      return (
+        input.connectedIt === true &&
+        input.agent !== true &&
+        input.viaMcp !== true &&
+        input.viaTool !== true &&
+        can('content.edit.own', { ...input, isAuthor: true })
+      )
+    }
     // The switch is about documents. Somebody else's words are theirs
     // whatever it says.
-    if (action === 'content.edit.said') return false
     return role === 'member' && settings.edit_others_content === 'documents_too'
   }
 

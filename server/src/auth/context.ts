@@ -385,6 +385,9 @@ export function allow(ctx: AuthContext, action: z.infer<typeof Action>, about: P
        board's link back into a member. */
     board: ctx.board === true,
     feedbackPage: ctx.feedbackPage === true,
+    /* Nor a tool a person: a token, GitHub, an import — whatever the
+       handler passed. */
+    viaTool: ctx.viaMcp || ctx.viaGithub === true || Boolean(ctx.viaImport),
     /* And nothing a handler says makes an unproved address a proved one. */
     unproved: ctx.unproved === true,
     byHand: ctx.byHand === true,

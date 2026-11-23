@@ -26,6 +26,11 @@ type Full = {
   created_at: string
   /** Whether **you** follow it. */
   subscribed?: boolean
+  /** Whether an agent wrote it. */
+  author_agent?: boolean
+  /** What the server's PATCH and DELETE would answer. */
+  may_edit?: boolean
+  may_delete?: boolean
 }
 
 /**
@@ -97,6 +102,28 @@ export function PostDetail({
   const [asking, setAsking] = useState(false)
   /* "Link copied", for a moment, beside the menu it came from. */
   const [copied, setCopied] = useState<string | null>(null)
+  /* An agent's announcement opened for changing by Edit — somebody else's
+     words are never a field open for a keystroke until somebody asks. */
+  const [editing, setEditing] = useState(false)
+  const title = useRef<HTMLInputElement | null>(null)
+  /*
+   * The title being written, apart from the announcement's: set when the
+   * field takes the caret and let go once what it held is saved, or was
+   * not changed. Until then the field shows it, and a read that lands
+   * meanwhile — one asked before the save, say — does not put the old
+   * title back under the caret. It wrote into `post` as it was typed, and
+   * leaving it compared the field with itself: a new title was never sent,
+   * one's own included, from the day the screen was made.
+   */
+  const [draftTitle, setDraftTitle] = useState<string | null>(null)
+  /* What the field held when it took the caret: leaving it saves only a
+     change made since. Kept over a save that failed, so leaving it again
+     tries again. */
+  const titleWas = useRef<string | null>(null)
+  /* The body as the server last answered it, to leave unsaid a body
+     nobody changed — Edit, a click into the words, Done was a change
+     announced to everybody and every webhook. */
+  const keptBody = useRef<string | null>(JSON.stringify(recall<PostRead>(`post:${postId}`)?.post.body ?? null))
 
   /* Whether what is in the field is the person's and not the server's. The
      document screen has the long version of this argument; the short one is
@@ -117,6 +144,7 @@ export function PostDetail({
     setPost(r.post)
     setComments(r.comments)
     if (touched.current) return
+    keptBody.current = JSON.stringify(r.post.body ?? null)
     setText(r.post.body ?? null)
   }, [postId])
 
@@ -129,7 +157,12 @@ export function PostDetail({
 
   /** The body, for files let go around it. */
   const into = useRef<EditorHandle | null>(null)
-  const drop = useDropFiles(Boolean(post && canWrite && post.author_id === meId), (files) => into.current?.files?.(files))
+  const drop = useDropFiles(Boolean(post && openFor(post, meId, canWrite, editing)), (files) => into.current?.files?.(files))
+  /* Opened by Edit, the title takes the caret — after the render that
+     lets it. */
+  useEffect(() => {
+    if (editing) title.current?.focus()
+  }, [editing])
 
   if (gone) {
     return (
@@ -164,26 +197,31 @@ export function PostDetail({
       },
     )
   }
-  /* One's own only. The server lets whoever runs the project change
-     somebody else's too (`content.edit.said`, `mayEditSaid`), and the
-     screen still does not offer it: a field open on somebody else's words
-     is an edit nobody meant. Narrower than the server, never wider. */
-  const editable = canWrite && mine
-  const deletable = editable || canDeleteAny
+  /* One's own, open as it always was; an agent's, behind Edit, to
+     whoever the server says may change it — its connector, whoever runs
+     the project or holds `edit.any` on it, the owner (`may_edit`). Another person's, never: the
+     server lets whoever runs the project change it, and a field open on
+     somebody else's words is an edit nobody meant. Narrower than the
+     server, never wider. */
+  const offered = !mine && post.author_agent === true && post.may_edit === true
+  const editable = openFor(post, meId, canWrite, editing)
+  const deletable = post.may_delete ?? ((canWrite && mine) || canDeleteAny)
 
   /* Given the value, never read from state — the handler closes over the
      render it was made in, and leaving a field in the same tick as the last
      keystroke then compares against text that is one render old, decides
      nothing changed and writes nothing. No request, no error, no sign. */
-  async function patch(part: Record<string, unknown>) {
-    if (!post) return
+  async function patch(part: Record<string, unknown>): Promise<boolean> {
+    if (!post) return false
     try {
       await api(`/posts/${post.id}`, { method: 'PATCH', body: JSON.stringify(part) })
       setUnsaved(false)
       touched.current = false
       onChanged()
+      return true
     } catch {
       setUnsaved(true)
+      return false
     }
   }
 
@@ -202,6 +240,23 @@ export function PostDetail({
             </span>
           )}
           <span className="ml-auto flex items-center gap-2">
+            {offered && editing && (
+              <button
+                type="button"
+                data-testid="post-done"
+                /* Pressed, the field it leaves saves first — as leaving it
+                   anywhere else does. */
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  ;(document.activeElement as HTMLElement | null)?.blur?.()
+                  setEditing(false)
+                }}
+                className="inline-flex h-8 items-center rounded-full px-3 text-sm font-medium"
+                style={{ background: 'var(--track-on)', boxShadow: 'var(--control-shadow)', color: 'var(--ink)' }}
+              >
+                {W.doneEditing}
+              </button>
+            )}
             {copied && (
               <span className="text-sm text-ink-3" role="status">
                 {copied}
@@ -246,6 +301,21 @@ export function PostDetail({
                     <Icon name="link" size={16} className="text-ink-2" />
                     {W.copyLink}
                   </button>
+                  {offered && !editing && !asking && (
+                    <button
+                      data-row
+                      data-testid="edit-post"
+                      onClick={() => {
+                        close()
+                        setEditing(true)
+                      }}
+                      className="flex w-full items-center gap-3 px-3 text-left text-base text-ink"
+                      style={{ height: 'var(--row-h)' }}
+                    >
+                      <Icon name="compose" size={16} className="text-ink-2" />
+                      {W.editPost}
+                    </button>
+                  )}
                   {deletable && asking && (
                     /* Somebody else's announcement is not taken away on one
                        press: it says whose it is and that it goes for
@@ -318,20 +388,40 @@ export function PostDetail({
             {/* The size a task's and a document's title is. */}
             <input
               {...notALogin}
+              ref={title}
               data-testid="post-title"
               className="mt-4 w-full bg-transparent text-xl leading-[1.3] font-medium outline-none text-ink"
-              value={post.title}
+              value={draftTitle ?? post.title}
               disabled={!editable}
-              onChange={(e) => setPost({ ...post, title: e.target.value })}
+              onFocus={(e) => {
+                if (draftTitle !== null) return
+                titleWas.current = e.target.value
+                setDraftTitle(e.target.value)
+              }}
+              onChange={(e) => setDraftTitle(e.target.value)}
               onBlur={(e) => {
                 const title = e.target.value.trim()
-                if (!title || title === post.title.trim()) return
-                void patch({ title })
+                if (!title || title === titleWas.current?.trim()) {
+                  setDraftTitle(null)
+                  return
+                }
+                void patch({ title }).then((ok) => {
+                  if (!ok) return
+                  setPost((p) => (p ? { ...p, title } : p))
+                  titleWas.current = title
+                  /* Typed on while it was saving: what is in the field now
+                     is not what was sent, and stays to be saved on leaving. */
+                  setDraftTitle((d) => (d?.trim() === title ? null : d))
+                })
               }}
             />
 
             <div className="mt-3">
               <Editor
+                /* Made with whether it takes keys, and kept so: Edit and
+                   Done make it again, open or shut, as a document's is
+                   made again when it starts being written together. */
+                key={editable ? 'open' : 'shut'}
                 testId="post-body"
                 handle={into}
                 value={text}
@@ -345,9 +435,19 @@ export function PostDetail({
                 // On leaving the body rather than on every keystroke.
                 onSettle={(next) => {
                   if (!post) return
+                  const said = JSON.stringify(next)
+                  /* Nothing typed since it was saved, or back to what the
+                     server has: no change, and nothing is said about one. */
+                  if (!touched.current || said === keptBody.current) {
+                    touched.current = false
+                    return
+                  }
                   touched.current = false
                   setPost({ ...post, body: next })
-                  void patch({ body: next })
+                  void patch({ body: next }).then((ok) => {
+                    if (ok) keptBody.current = said
+                    else touched.current = true
+                  })
                 }}
               />
             </div>
@@ -375,6 +475,15 @@ export function PostDetail({
       </div>
     </div>
   )
+}
+
+/* Whether the title and the words take a keystroke: one's own, as the
+   server allows; an agent's, once Edit was pressed and the server said
+   this reader may (`may_edit`). Unsaid — a read from before the field
+   existed — one's own stays open, as it was. */
+function openFor(post: Full, meId: string, canWrite: boolean, editing: boolean): boolean {
+  if (post.author_id === meId) return canWrite && post.may_edit !== false
+  return editing && post.author_agent === true && post.may_edit === true
 }
 
 const Back = ({ onClose }: { onClose: () => void }) => (

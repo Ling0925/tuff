@@ -9,9 +9,11 @@ import { record } from './activity.js'
 import { LINES, claimFiles, doer, linkMentionedObjects, notify, veilDocrefs } from '../notify.js'
 import {
   addComment,
+  agentsConnector,
   commentCursor,
   commentsIn,
   follow,
+  mayEditAgentsAnnouncement,
   forbidden,
   isInProject,
   listComments,
@@ -24,6 +26,30 @@ import { pageSize, timeCursor } from './limits.js'
 
 type Vars = { ctx: AuthContext }
 export const posts = new Hono<{ Variables: Vars }>()
+
+/*
+ * Who may change an announcement, and take it away — the read's `may_edit`
+ * and `may_delete`, PATCH and DELETE all ask this. The posts spec and "Taking one away".
+ *
+ * The narrower rule (`mayEditSaid`): its author; the owner and whoever runs
+ * the project — not every member the workspace's edit switch lets change
+ * others' documents, since rewriting an announcement, or emptying it, is
+ * taking away what somebody said to everybody and leaving their name on
+ * it; and, for an announcement an agent wrote, whoever connected that
+ * agent, while they are on the project and the agent is live (`connector`,
+ * from `agentsConnector`).
+ *
+ * Somebody else's never through a token — an agent or a person's tool —
+ * nor by GitHub or an import acting as somebody, as deleting one is not:
+ * emptying it is the same act. One's own stays a
+ * token's to change, which is what `update_post` is for.
+ */
+function mayChange(ctx: AuthContext, authorId: string, projectId: string, connector: string | null): boolean {
+  /* Somebody else's never through a tool of any kind — a token, GitHub,
+     an import writing as somebody. */
+  if (authorId !== ctx.actorId && (ctx.viaMcp || ctx.viaGithub || ctx.viaImport)) return false
+  return mayEditSaid(ctx, authorId, projectId) || mayEditAgentsAnnouncement(ctx, connector, projectId)
+}
 
 const Body = z.object({
   title: z.string().min(1).max(300),
@@ -136,17 +162,31 @@ posts.get('/posts/:id', async (c) => {
              /* Whether the reader follows it. */
              exists (select 1 from subscription s
                      where s.object_type = 'post' and s.object_id = p.id
-                       and s.actor_id = current_actor() and s.deleted_at is null) as subscribed
+                       and s.actor_id = current_actor() and s.deleted_at is null) as subscribed,
+             /* Whether an agent wrote it: the screen offers Edit on an
+                agent's to whoever may change it, and on a person's to its
+                author alone. */
+             exists (select 1 from agent g where g.actor_id = p.author_id
+                     and g.workspace_id = p.workspace_id) as author_agent
       from post p join actor a on a.id = p.author_id
       where p.id = ${id} and p.deleted_at is null`
-    return p
+    if (!p) return null
+    return { ...p, connector: await agentsConnector(tx, ctx, p.author_id) }
   })
   if (!row) return c.json(missing, 404)
   // `said` is the search index's, not the contract's — the body is here.
-  const { said: _said, ...post } = row as Record<string, unknown>
+  const { said: _said, connector, ...post } = row as Record<string, unknown> & { connector: string | null }
+  const author = String(post.author_id)
+  const projectId = String(post.project_id)
   const said = await listComments(ctx, 'post', id)
   return c.json({
-    post: facedAs(post, 'author_avatar', 'author_avatar_url'),
+    post: {
+      ...facedAs(post, 'author_avatar', 'author_avatar_url'),
+      /* What PATCH and DELETE would answer, asked of the same rule — the
+         screen hides what these say no to, and the server still decides. */
+      may_edit: mayChange(ctx, author, projectId, connector),
+      may_delete: mayChange(ctx, author, projectId, connector) && !ctx.viaMcp,
+    },
     comments: said.comments,
     /* Where the comments not carried here start. */
     comments_earlier: said.earlier,
@@ -192,16 +232,7 @@ posts.patch('/posts/:id', async (c) => {
     const [row] = await tx<{ author_id: string; project_id: string }[]>`
       select author_id, project_id from post where id = ${id} and deleted_at is null`
     if (!row) return 'missing' as const
-    /* The narrower rule, as taking one away is: its author, the owner and
-       whoever runs the project (`mayEditSaid`) — not every member the
-       workspace's edit switch lets change others' documents. Rewriting an
-       announcement, or emptying it, is taking away what somebody said to
-       everybody and leaving their name on it. */
-    if (!mayEditSaid(ctx, row.author_id, row.project_id)) return 'forbidden' as const
-    /* Somebody else's, never through a token — an agent or a person's
-       tool — as deleting one is not: emptying it is the same act. One's
-       own stays a token's to change, which is what `update_post` is for. */
-    if (ctx.viaMcp && row.author_id !== ctx.actorId) return 'forbidden' as const
+    if (!mayChange(ctx, row.author_id, row.project_id, await agentsConnector(tx, ctx, row.author_id))) return 'forbidden' as const
 
     await tx`
       update post set
@@ -230,14 +261,12 @@ posts.delete('/posts/:id', async (c) => {
     const [row] = await tx<{ author_id: string; project_id: string; title: string }[]>`
       select author_id, project_id, title from post where id = ${id} and deleted_at is null`
     if (!row) return 'missing' as const
-    /* Its author, or whoever runs the project and the owner — not every
-       member the workspace's edit switch lets touch others' documents. An
-       announcement is somebody saying something to everybody; taking it
-       away is the narrower right, as rewriting what somebody said is
-       (`mayEditSaid`). */
-    if (!mayEditSaid(ctx, row.author_id, row.project_id)) return 'forbidden' as const
-    /* Never through a token, as a task is not: removing is one of the
-       things a tool acting for somebody does not do. */
+    /* The same people who may change it (`mayChange`): emptying it is
+       deleting it, and a right to delete held back from somebody who may
+       empty it would read as protection and be none. */
+    if (!mayChange(ctx, row.author_id, row.project_id, await agentsConnector(tx, ctx, row.author_id))) return 'forbidden' as const
+    /* Never through a token, one's own included, as a task is not:
+       removing is one of the things a tool acting for somebody does not do. */
     if (ctx.viaMcp) return 'forbidden' as const
     /* Soft: the row stays until the clear-out takes it, and remembers who
        did it — Undo is theirs, or whoever may take anybody's away. */

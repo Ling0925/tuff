@@ -10650,6 +10650,15 @@
             },
             "subscribed": {
               "type": "boolean"
+            },
+            "author_agent": {
+              "type": "boolean"
+            },
+            "may_edit": {
+              "type": "boolean"
+            },
+            "may_delete": {
+              "type": "boolean"
             }
           },
           "required": [
