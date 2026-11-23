@@ -298,6 +298,7 @@ export const ERRORS_FR: Record<string, string> = {
   'Only whoever installed the app on GitHub can connect it.':
     'Seule la personne qui a installé l’application sur GitHub peut la connecter.',
   'That repository is linked to another project.': 'Ce dépôt est lié à un autre projet.',
+  'A sample project can’t be linked to a repository.': 'Un projet d’exemple ne peut pas être lié à un dépôt.',
   'Somebody you chose isn’t on this project.': 'Une des personnes choisies ne fait pas partie de ce projet.',
   'That sprint belongs to another project.': 'Ce sprint appartient à un autre projet.',
   'A task can’t wait on itself.': 'Une tâche ne peut pas s’attendre elle-même.',

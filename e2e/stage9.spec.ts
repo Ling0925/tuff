@@ -1523,8 +1523,14 @@ test('a task can be watched and let go of, and it is yours alone', async ({ page
      it remembered and then takes the fresh one, so under load the first
      paint can still say what the cache said. */
   await expect(watch).toHaveText('Subscribed', { timeout: 20_000 })
+  /* The press is drawn at once and written behind it; a reload before the
+     write has answered cancels it in the browser, and the server never
+     hears it. So the reload waits for the answer, as a person's would by
+     being slower than a test. */
+  const lettingGo = page.waitForResponse((r) => r.url().endsWith('/subscription') && r.request().method() === 'DELETE')
   await watch.click()
   await expect(watch).toHaveText('Subscribe')
+  await lettingGo
 
   /* And it holds, rather than being a word on a screen. */
   await page.reload()
@@ -1534,8 +1540,10 @@ test('a task can be watched and let go of, and it is yours alone', async ({ page
   /* Back again: the row was given up on rather than removed, and the unique
      index is partial on that, so coming back has to revive it rather than
      insert a second one the index would refuse. */
+  const coming = page.waitForResponse((r) => r.url().endsWith('/subscription') && r.request().method() === 'POST')
   await page.getByTestId('watch-task').click()
   await expect(page.getByTestId('watch-task')).toHaveText('Subscribed')
+  await coming
   await page.reload()
   // The panel stays open across the reload: this device remembers it.
   await expect(page.getByTestId('watch-task')).toHaveText('Subscribed', { timeout: 20_000 })
