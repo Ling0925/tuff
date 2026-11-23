@@ -7,21 +7,25 @@ import { LOCALE, dayMonth, now, say } from '../data/words.js'
  * vendredis". Short and plain, the way Google Calendar and Todoist say it.
  */
 export const REPEAT = say({
-  repeat: ['Repeat', 'Répéter'],
-  never: ['Doesn’t repeat', 'Ne se répète pas'],
-  repeatOf: [(what: string) => `Repeat for ${what}`, (what: string) => `Répétition de ${what}`],
+  repeat: ['Repeat', 'Répéter', '重复'],
+  never: ['Doesn’t repeat', 'Ne se répète pas', '不重复'],
+  repeatOf: [(what: string) => `Repeat for ${what}`, (what: string) => `Répétition de ${what}`, (what: string) => `${what} 的重复`],
   /* The stepper's lead: "Every 2 weeks", "Toutes les 2 semaines". */
-  every: [(_unit: Repeat['every']) => 'Every', (unit: Repeat['every']) => (unit === 'week' ? 'Toutes les' : 'Tous les')],
-  fewer: ['Fewer', 'Moins'],
-  more: ['More', 'Plus'],
-  days: ['Days', 'Jours'],
-  weeks: ['Weeks', 'Semaines'],
-  months: ['Months', 'Mois'],
-  years: ['Years', 'Ans'],
-  onDay: [(d: number) => `On the ${ordinal(d)}`, (d: number) => `Le ${d === 1 ? '1er' : d}`],
-  lastDay: ['Last day', 'Dernier jour'],
-  onDate: [(date: string) => `On ${date}`, (date: string) => `Le ${date}`],
-  fromDone: ['Count from when it’s done', 'À compter de la fin'],
+  every: [
+    (_unit: Repeat['every']) => 'Every',
+    (unit: Repeat['every']) => (unit === 'week' ? 'Toutes les' : 'Tous les'),
+    (_unit: Repeat['every']) => '每',
+  ],
+  fewer: ['Fewer', 'Moins', '更少'],
+  more: ['More', 'Plus', '更多'],
+  days: ['Days', 'Jours', '天'],
+  weeks: ['Weeks', 'Semaines', '周'],
+  months: ['Months', 'Mois', '月'],
+  years: ['Years', 'Ans', '年'],
+  onDay: [(d: number) => `On the ${ordinal(d)}`, (d: number) => `Le ${d === 1 ? '1er' : d}`, (d: number) => `在 ${d} 日`],
+  lastDay: ['Last day', 'Dernier jour', '最后一天'],
+  onDate: [(date: string) => `On ${date}`, (date: string) => `Le ${date}`, (date: string) => `在 ${date}`],
+  fromDone: ['Count from when it’s done', 'À compter de la fin', '从完成时开始计算'],
 })
 
 /** 1st, 2nd, 3rd, 4th … 11th, 12th, 13th, 21st. */

@@ -7,7 +7,7 @@ import { PROJECT_TEMPLATES } from '@tracker/shared-schema'
 import { app } from '../src/http/routes.js'
 import { outbox } from '../src/mail.js'
 import { issueApiToken, registerUser } from '../src/auth/flows.js'
-import { ERRORS_FR, ERRORS_FR_LIKE, frenchError } from '../src/words.js'
+import { ERRORS_FR, ERRORS_FR_LIKE, frenchError, ERRORS_ZH, zhError } from '../src/words.js'
 import { edition } from '../src/edition.js'
 import { LABELS_FR, LISTS_FR, SAMPLE, SAMPLE_FR, TEMPLATES_FR } from '../src/templates.js'
 import { addPerson, bearerFor, closeDb, makeOwner, makeProject, stamp, uuidv7, withActor } from './helpers.js'
@@ -79,7 +79,14 @@ function bodyOf(text: string, name: string): string | null {
  * middleware that answers in French, a report to the operators, and a push
  * service's envelope.
  */
-const NOT_WORDS = new Set(['string', '(e as Error).message', 'frenchError(message)', 'message.slice(0, 8000)', ''])
+const NOT_WORDS = new Set([
+  'string',
+  '(e as Error).message',
+  'frenchError(message)',
+  "tongue === 'zh' ? zhError(message) : frenchError(message)",
+  'message.slice(0, 8000)',
+  '',
+])
 
 /** Everything `{ error: { message } }` can carry, as the code writes it. */
 function messages(): { where: string; message: string }[] {
@@ -158,6 +165,19 @@ test('every message an error can carry has its French', () => {
   )
 })
 
+test('every message an error can carry has its Chinese', () => {
+  const found = messages()
+  assert.ok(found.length > 100, `only ${found.length} messages found`)
+  const unheard = found.filter(({ message }) => zhError(message) === message)
+  assert.deepEqual(unheard, [])
+  for (const message of refusals()) assert.notEqual(zhError(message), message, `the database's "${message}"`)
+  assert.equal(zhError('That file is too big. Files can be up to 0.5 MB.'), '文件过大。文件最大 0.5 MB。')
+  for (const message of Object.keys(ERRORS_ZH)) {
+    const said = ERRORS_ZH[message]!
+    assert.ok(said.trim() === said && said.length > 0, `${message}: no stray spaces, and never empty`)
+  }
+})
+
 test('the French is written to the rules of the web’s', () => {
   /* The core's, and the edition's own routes' beside them. */
   const like = [...ERRORS_FR_LIKE, ...edition.errorsFrLike]
@@ -231,6 +251,10 @@ test('an error is in the language the request asks for, and its code is not', as
   const french = await request('/api/me', { ...blank, tongue: 'fr' })
   assert.equal(french.status, 400)
   assert.deepEqual(((await french.json()) as { error: unknown }).error, { code: 'invalid', message: 'Saisissez votre nom.' })
+
+  const chinese = await request('/api/me', { ...blank, tongue: 'zh' })
+  assert.equal(chinese.status, 400)
+  assert.deepEqual(((await chinese.json()) as { error: unknown }).error, { code: 'invalid', message: '请输入你的名字。' })
 
   // Anything else is English, as nothing is.
   const other = await request('/api/me', { ...blank, tongue: 'de' })

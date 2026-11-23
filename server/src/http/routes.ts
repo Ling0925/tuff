@@ -64,7 +64,7 @@ import { otherImport } from './otherImport.js'
 import { csvImport } from './csvImport.js'
 import { comments } from './objects.js'
 import { push } from './push.js'
-import { frenchError, heard } from '../words.js'
+import { frenchError, heard, zhError } from '../words.js'
 import { yourData } from './yourdata.js'
 import { NO_WORKSPACE_YET, nowhere } from './nowhere.js'
 import { oauth, oauthApi } from './oauth.js'
@@ -191,7 +191,8 @@ edition.headers(app)
  */
 app.use('*', async (c, next) => {
   await next()
-  if (c.res.status < 400 || heard(c) !== 'fr') return
+  const tongue = heard(c)
+  if (c.res.status < 400 || (tongue !== 'fr' && tongue !== 'zh')) return
   if (!c.res.headers.get('content-type')?.includes('application/json')) return
   const body = (await c.res
     .clone()
@@ -201,10 +202,13 @@ app.use('*', async (c, next) => {
   if (typeof message !== 'string') return
   const headers = new Headers(c.res.headers)
   headers.delete('content-length')
-  c.res = new Response(JSON.stringify({ ...body, error: { ...body!.error, message: frenchError(message) } }), {
-    status: c.res.status,
-    headers,
-  })
+  c.res = new Response(
+    JSON.stringify({ ...body, error: { ...body!.error, message: tongue === 'zh' ? zhError(message) : frenchError(message) } }),
+    {
+      status: c.res.status,
+      headers,
+    },
+  )
 })
 
 /*
@@ -779,7 +783,7 @@ app.patch('/api/me', async (c) => {
     .object({
       title: z.string().max(80).nullable().optional(),
       name: z.string().max(200).optional(),
-      language: z.enum(['en', 'fr']).nullable().optional(),
+      language: z.enum(['en', 'fr', 'zh']).nullable().optional(),
     })
     .safeParse(await c.req.json().catch(() => ({})))
   if (!body.success) return c.json({ error: { code: 'invalid' } }, 400)

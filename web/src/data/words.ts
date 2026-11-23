@@ -43,7 +43,7 @@
  * they are shown to anybody who would notice.
  */
 
-export type Tongue = 'en' | 'es' | 'fr'
+export type Tongue = 'en' | 'es' | 'fr' | 'zh'
 
 const KEY = 'tongue'
 
@@ -59,7 +59,7 @@ export type Chosen = Tongue | 'system'
 export function readTongue(): Chosen {
   try {
     const v = localStorage.getItem(KEY)
-    return v === 'en' || v === 'es' || v === 'fr' ? v : 'system'
+    return v === 'en' || v === 'es' || v === 'fr' || v === 'zh' ? v : 'system'
   } catch {
     return 'system'
   }
@@ -76,7 +76,7 @@ export function readTongue(): Chosen {
 export function fromSystem(): Tongue {
   try {
     const said = (navigator.language || 'en').slice(0, 2).toLowerCase()
-    return said === 'es' || said === 'fr' ? said : 'en'
+    return said === 'es' || said === 'fr' || said === 'zh' ? said : 'en'
   } catch {
     return 'en'
   }
@@ -95,8 +95,8 @@ export function fromSystem(): Tongue {
  * from the machine, and taking a language out of it is how one is held
  * back from people who never asked for it.
  */
-const SPOKEN: readonly Tongue[] = ['en', 'fr']
-const HEARD: readonly Tongue[] = ['en', 'fr']
+const SPOKEN: readonly Tongue[] = ['en', 'fr', 'zh']
+const HEARD: readonly Tongue[] = ['en', 'fr', 'zh']
 
 /** The public site's pages in English: the landing, Help, the comparisons, the legal pages, what changed. */
 const SITE_PAGE = /^\/(welcome|pricing|about|compare|alternatives|for|help|privacy|terms|refunds|changelog)(\/|$)/
@@ -239,6 +239,15 @@ const BARS = {
     sidebarWidth: 'Largeur de la barre latérale',
     toolsWidth: 'Largeur des outils',
   },
+  zh: {
+    search: '搜索',
+    send: '发送',
+    reply: '回复',
+    close: '关闭',
+    openTheNavigation: '打开导航',
+    sidebarWidth: '侧边栏宽度',
+    toolsWidth: '工具宽度',
+  },
 } as const
 
 /** The column down the side, and the screens it reaches. */
@@ -272,6 +281,16 @@ const PLACESES = {
     findOrMakeOne: 'Trouver ou créer une étiquette',
     findSomebody: 'Trouver quelqu’un',
     findASprint: 'Trouver un sprint',
+  },
+  zh: {
+    myTasks: '我的任务',
+    members: '成员与代理',
+    project: '项目',
+    startAConversation: '发起对话',
+    goAnywhere: '搜索，或前往项目或页面',
+    findOrMakeOne: '查找或创建标签',
+    findSomebody: '查找成员',
+    findASprint: '查找迭代',
   },
 } as const
 
@@ -352,6 +371,31 @@ const MAKES = {
     message: 'Message',
     cycleExample: 'Ajouter un sprint',
   },
+  zh: {
+    newTask: '新建任务',
+    newProject: '新建项目',
+    newPost: '新建公告',
+    newDocument: '新建文档',
+    newFolder: '新建文件夹',
+    newToken: '新建令牌',
+    newWebhook: '新建 Webhook',
+    addTask: '添加任务',
+    addLink: '添加链接',
+    addAList: '添加列表',
+    addALabel: '添加标签',
+    addSomebody: '添加成员',
+    attachAFile: '附加文件',
+    callItWhatItIs: '给它起个名字',
+    whatIsItAbout: '这是关于什么的？',
+    whatIsThisAbout: '这是关于什么的？',
+    whatIsItFor: '它是用来做什么的？',
+    whatGoesInIt: '里面放什么？',
+    nameForTheCopy: '副本名称',
+    subTaskTitle: '子任务标题',
+    writeItHere: '写在这里。',
+    message: '消息',
+    cycleExample: '添加迭代',
+  },
 } as const
 
 /** A task's own facts — the rows in the panel beside it. */
@@ -389,6 +433,17 @@ const FACTSES = {
     addADescription: 'Ajouter une description',
     addDescription: 'Ajouter une description…',
   },
+  zh: {
+    assignee: '负责人',
+    priority: '优先级',
+    labels: '标签',
+    due: '到期',
+    starts: '开始',
+    cycle: '迭代',
+    role: '角色',
+    addADescription: '添加描述',
+    addDescription: '添加描述…',
+  },
 } as const
 
 /** What a project is called and what it looks like. */
@@ -410,6 +465,12 @@ const PROJECTS = {
     itsColour: 'Couleur',
     copyThisProject: 'Copier ce projet',
     workspaceName: 'Nom de l’espace de travail',
+  },
+  zh: {
+    itsMark: '图标',
+    itsColour: '颜色',
+    copyThisProject: '复制此项目',
+    workspaceName: '工作区名称',
   },
 } as const
 
@@ -460,6 +521,21 @@ const WRITINGS = {
     source: 'Source',
     addBlock: 'Ajouter un bloc',
   },
+  zh: {
+    bold: '粗体',
+    italic: '斜体',
+    underline: '下划线',
+    strike: '删除线',
+    code: '代码',
+    link: '链接',
+    quote: '引用',
+    heading: '标题',
+    subheading: '副标题',
+    bulleted: '项目符号',
+    numbered: '编号',
+    source: '源码',
+    addBlock: '添加块',
+  },
 } as const
 
 /** The two things done to anything: change it, or throw it away. */
@@ -467,6 +543,7 @@ const ACTSES = {
   en: { edit: 'Edit', delete: 'Delete', duplicate: 'Duplicate', undo: 'Undo', view: 'View', list: 'List', close: 'Close' },
   es: { edit: 'Editar', delete: 'Eliminar', duplicate: 'Duplicar', undo: 'Deshacer', view: 'Vista', list: 'Lista', close: 'Cerrar' },
   fr: { edit: 'Modifier', delete: 'Supprimer', duplicate: 'Dupliquer', undo: 'Annuler', view: 'Vue', list: 'Liste', close: 'Fermer' },
+  zh: { edit: '编辑', delete: '删除', duplicate: '复制', undo: '撤销', view: '查看', list: '列表', close: '关闭' },
 } as const
 
 /**
@@ -584,6 +661,42 @@ const HEADINGS = {
     none: 'Aucune',
     noCycle: 'Sans sprint',
     importing: 'Importer',
+  },
+  zh: {
+    tasks: '任务',
+    activity: '动态',
+    settings: '设置',
+    tools: '工具',
+    lists: '列表',
+    cycles: '迭代',
+    comments: '评论',
+    replies: '回复',
+    projects: '项目',
+    everyProject: '所有项目',
+    notifications: '通知',
+    tokens: '令牌',
+    webhooks: 'Webhooks',
+    hours: '工时',
+    bin: '回收站',
+    archived: '已归档',
+    mentionedIn: '提及于',
+    whoIsOnIt: '成员',
+    theProject: '项目',
+    useAsATemplate: '用作模板',
+    archiveAndDelete: '归档与删除',
+    securityLog: '审计日志',
+    signedIn: '已登录设备',
+    signIn: '登录',
+    signOut: '退出登录',
+    newWorkspace: '新建工作区',
+    invitationsOut: '待处理邀请',
+    onThem: '未完成任务',
+    messageSomebody: '发消息给某人',
+    quietFrom: '免打扰开始',
+    nobody: '无人',
+    none: '无',
+    noCycle: '无迭代',
+    importing: '导入',
   },
 } as const
 
@@ -746,6 +859,56 @@ const MOREY = {
     newTaskTip: 'Nouvelle tâche — c',
     make: 'Créer',
   },
+  zh: {
+    addCycle: '添加迭代',
+    addSubTask: '添加子任务',
+    addSomebody: '添加成员',
+    allFiles: '所有文件',
+    allOfIt: '全部',
+    archive: '归档',
+    assign: '指派',
+    assigned: '已指派',
+    backToTheLetter: '移除照片',
+    backToTheChannel: '返回频道',
+    backToTheMark: '移除图片',
+    backToTheProject: '返回项目',
+    cancel: '取消',
+    clear: '清除',
+    create: '创建',
+    deleteTask: '删除任务',
+    duplicateTask: '复制任务',
+    subscribe: '订阅',
+    subscribed: '已订阅',
+    history: '历史',
+    language: '语言',
+    logTime: '记录工时',
+    makeALink: '创建链接',
+    makeATask: '创建任务',
+    markAllRead: '全部标为已读',
+    newChannel: '新建频道',
+    openTheFile: '打开文件',
+    save: '保存',
+    putItBack: '取消归档',
+    remove: '移除',
+    removeTheList: '移除列表',
+    reset: '重置',
+    seeTheProjects: '查看你的项目',
+    setUp: '设置',
+    showMeOne: '发送测试',
+    status: '状态',
+    upload: '上传',
+    watching: '关注中',
+    yourPicture: '你的照片',
+    profile: '个人资料',
+    subTasks: '子任务',
+    twoFactor: '双重验证',
+    loading: '加载中…',
+    pickAPerson: '选择成员…',
+    onlyHere: '仅在此设备。',
+    searchTip: '搜索 — ⌘K',
+    newTaskTip: '新建任务 — c',
+    make: '创建',
+  },
 } as const
 
 /**
@@ -885,6 +1048,46 @@ const SAYSES = {
     chat: 'Discussion',
     time: 'Temps',
   },
+  zh: {
+    nothingHereYet: '这里还没有内容。',
+    nobodyByThatName: '没有找到成员。',
+    deleted: '已删除',
+    sortedBy: '排序：',
+    nothingPostedYet: '还没有公告。',
+    nothingSaidYet: '还没有消息。',
+    nothingLogged: '还没有记录工时。',
+    nothingWaiting: '没有通知。',
+    nothingYet: '还没有内容。',
+    nothingOpenHere: '这里没有未完成任务。',
+    nothingHappenedHere: '还没有动态。',
+    noProjectsYet: '还没有项目。',
+    noConversations: '没有对话。',
+    noChannelHere: '这里没有频道。',
+    noLabelsYet: '还没有标签。',
+    noneYet: '还没有。',
+    none: '无。',
+    pickSomebody: '选择成员以查看其资料。',
+    whenSomethingNeedsYou: '有需要你处理的事项时，会显示在这里。',
+    projectNotHere: '未找到项目。',
+    mayBeInAnother: '它可能已被删除，或在其他项目中。',
+    mayBeOneYouAreNotOn: '它可能已被删除，或你没有访问权限。',
+    clearedOutAfterThirty: '这里的项目将在 30 天后永久删除。',
+    copyItNow: '请立即复制，之后将不再显示。',
+    singleUse: '仅可使用一次并会过期，之后将不再显示。',
+    couldNotMakeIt: '创建失败，请重试。',
+    addToAuthenticator: '用身份验证器应用扫描此二维码，或在下方添加密钥，然后输入显示的 6 位验证码。',
+    everyDeliverySigned: '每次投递都会签名，签名涵盖时间戳、ID 和正文。',
+    tooBigToSend: '文件过大，无法上传',
+    people: '成员',
+    storage: '存储',
+    browserWouldNotDraw: '浏览器未显示通知。此站点已不再允许通知。',
+    nothingToDrawWith: '请先开启通知。',
+    tellMeAboutChat: '聊天消息也通知我',
+    enterToKeep: '回车保存 · Esc 取消',
+    nothingIsNumber: '这里没有编号为这个的对象',
+    chat: '聊天',
+    time: '时间',
+  },
 } as const
 
 /** The language this page was built in — read once, like everything above. */
@@ -897,7 +1100,7 @@ export const now = tongue()
  * to American English was not asking for "Mar 3" on a screen that says
  * "Sprint" and "Colour".
  */
-export const LOCALE = now === 'fr' ? 'fr-FR' : 'en-GB'
+export const LOCALE = now === 'fr' ? 'fr-FR' : now === 'zh' ? 'zh-CN' : 'en-GB'
 
 /**
  * The locale a time of day is written in. English leaves it to the machine,
@@ -909,6 +1112,7 @@ export const CLOCK: string[] = now === 'fr' ? ['fr-FR'] : []
 const SHORT_MONTHS = {
   en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
   fr: ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'],
+  zh: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'],
 }
 
 /**
@@ -920,7 +1124,7 @@ const SHORT_MONTHS = {
  * reader. The long form has no such quirk and is the locale's own.
  */
 export function dayMonth(d: Date, year = false): string {
-  const months = SHORT_MONTHS[now === 'fr' ? 'fr' : 'en']
+  const months = SHORT_MONTHS[now === 'fr' ? 'fr' : now === 'zh' ? 'zh' : 'en']
   /* The first of the month is "1er" in French. */
   const day = now === 'fr' && d.getDate() === 1 ? '1er' : String(d.getDate())
   return `${day} ${months[d.getMonth()]}${year ? ` ${d.getFullYear()}` : ''}`
@@ -948,10 +1152,13 @@ export function dayMonthLong(d: Date, year = false): string {
  * everything lifted out since lives under `web/src/words/`, a file a
  * screen.
  */
-export function say<T extends Record<string, unknown>>(words: { [K in keyof T]: readonly [T[K], NoInfer<T[K]>] }): T {
+export function say<T extends Record<string, unknown>>(words: { [K in keyof T]: readonly [T[K], NoInfer<T[K]>, NoInfer<T[K]>?] }): T {
   const out = {} as T
-  const at = now === 'fr' ? 1 : 0
-  for (const k in words) out[k] = words[k][at]
+  /* English first, French second, Simplified Chinese third. A line whose
+     Chinese has not been written yet says its English, so a screen is
+     never half in a language nobody speaks. */
+  const at = now === 'fr' ? 1 : now === 'zh' ? 2 : 0
+  for (const k in words) out[k] = words[k][at] ?? words[k][0]
   return out
 }
 
@@ -974,7 +1181,8 @@ export const SAYS = SAYSES[now]
 
 /** What each language calls itself, for the switch. */
 export const TONGUES: { id: Chosen; said: string }[] = [
-  { id: 'system', said: now === 'fr' ? 'Système' : 'System' },
+  { id: 'system', said: now === 'fr' ? 'Système' : now === 'zh' ? '系统' : 'System' },
   { id: 'en', said: 'English' },
   { id: 'fr', said: 'Français' },
+  { id: 'zh', said: '简体中文' },
 ]

@@ -6,7 +6,8 @@ export const BYTES = say({
   units: [
     ['B', 'KB', 'MB', 'GB'],
     ['o', 'Ko', 'Mo', 'Go'],
+    ['B', 'KB', 'MB', 'GB'],
   ],
-  extFile: [(ext: string) => `${ext} file`, (ext: string) => `Fichier ${ext}`],
-  file: ['File', 'Fichier'],
+  extFile: [(ext: string) => `${ext} file`, (ext: string) => `Fichier ${ext}`, (ext: string) => `${ext} 文件`],
+  file: ['File', 'Fichier', '文件'],
 })

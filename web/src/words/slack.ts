@@ -5,6 +5,6 @@ import { say } from '../data/words.js'
  * across, in the language of whoever brings them.
  */
 export const SLACK = say({
-  someone: ['Someone', 'Quelqu’un'],
-  someoneMentioned: ['someone', 'quelqu’un'],
+  someone: ['Someone', 'Quelqu’un', '某人'],
+  someoneMentioned: ['someone', 'quelqu’un', '某人'],
 })

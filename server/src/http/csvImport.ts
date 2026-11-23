@@ -50,8 +50,16 @@ const Row = z.object({
 const NEW_LABELS = 100
 
 const SAID = {
-  from: { en: (k: string) => `Imported from ${k}.`, fr: (k: string) => `Importée depuis ${k}.` },
-  to: { en: (w: string) => `Assigned to ${w}.`, fr: (w: string) => `Attribuée à ${w}.` },
+  from: {
+    en: (k: string) => `Imported from ${k}.`,
+    fr: (k: string) => `Importée depuis ${k}.`,
+    zh: (k: string) => `导入自 ${k}。`,
+  },
+  to: {
+    en: (w: string) => `Assigned to ${w}.`,
+    fr: (w: string) => `Attribuée à ${w}.`,
+    zh: (w: string) => `指派给 ${w}。`,
+  },
 }
 
 csvImport.post('/projects/:projectId/import/tasks', async (c) => {

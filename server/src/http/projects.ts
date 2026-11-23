@@ -20,7 +20,7 @@ import { subscribe } from './objects.js'
 import { faced, linkFor, put } from '../storage.js'
 import { statusByAgent } from '../doing.js'
 import { isMoment, pageSize, spendOn } from './limits.js'
-import { LABELS_FR, SAMPLE, SAMPLE_FR, TEMPLATES_FR, doc, listName, type Label } from '../templates.js'
+import { LABELS_FR, LABELS_ZH, SAMPLE, SAMPLE_FR, TEMPLATES_FR, doc, listName, type Label } from '../templates.js'
 import { languageOf, type Language } from '../words.js'
 
 type Vars = { ctx: AuthContext }
@@ -307,11 +307,12 @@ async function startingLists(tx: Tx, ctx: AuthContext, projectId: string, langua
  * renamed here, in the same transaction, before anybody can see them.
  */
 async function startingLabels(tx: Tx, projectId: string, language: Language): Promise<void> {
-  if (language !== 'fr') return
-  for (const [english, french] of Object.entries(LABELS_FR)) {
-    if (english === french) continue
+  if (language !== 'fr' && language !== 'zh') return
+  const words = language === 'zh' ? LABELS_ZH : LABELS_FR
+  for (const [english, said] of Object.entries(words)) {
+    if (english === said) continue
     await tx`
-      update label set name = ${french}, updated_at = now()
+      update label set name = ${said}, updated_at = now()
       where project_id = ${projectId} and name = ${english} and deleted_at is null`
   }
 }
@@ -373,7 +374,7 @@ projects.post('/projects/sample', async (c) => {
           select id, name from label where project_id = ${id} and deleted_at is null`
         ).map((l) => [l.name, l.id]),
       )
-      const labelled = (l: Label) => labels.get(language === 'fr' ? LABELS_FR[l] : l)
+      const labelled = (l: Label) => labels.get(language === 'fr' ? LABELS_FR[l] : language === 'zh' ? LABELS_ZH[l] : l)
 
       const day = 86_400_000
       const keys = new Map<string, string | null>()

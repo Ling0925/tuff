@@ -16,12 +16,12 @@ import { say } from '../data/words.js'
  * fails here rather than a raw word on a screen.
  */
 export const TOOLS: Record<Tool | 'activity' | 'settings', string> = say({
-  tasks: ['Tasks', 'Tâches'],
-  posts: ['Announcements', 'Annonces'],
-  messages: ['Chat', 'Discussion'],
+  tasks: ['Tasks', 'Tâches', '任务'],
+  posts: ['Announcements', 'Annonces', '公告'],
+  messages: ['Chat', 'Discussion', '聊天'],
   /* Files, not Docs: it holds uploads and links beside the documents —
      `docs/specs/docs.md`. The address is still `/files`. */
-  files: ['Files', 'Fichiers'],
-  activity: ['Activity', 'Activité'],
-  settings: ['Settings', 'Paramètres'],
+  files: ['Files', 'Fichiers', '文件'],
+  activity: ['Activity', 'Activité', '动态'],
+  settings: ['Settings', 'Paramètres', '设置'],
 })

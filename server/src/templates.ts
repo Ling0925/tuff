@@ -214,7 +214,24 @@ export const LABELS_FR: Record<Label, string> = {
   Improvement: 'Amélioration',
 }
 
-export const listName = (name: string, language: Language): string => (language === 'fr' ? (LISTS_FR[name as List] ?? name) : name)
+/** The lists and labels a new project starts with, in Simplified Chinese. */
+export const LISTS_ZH: Record<List, string> = {
+  Backlog: '待办',
+  Todo: '待处理',
+  'In Progress': '进行中',
+  'In Review': '待审核',
+  Done: '已完成',
+  Canceled: '已取消',
+}
+
+export const LABELS_ZH: Record<Label, string> = {
+  Bug: '缺陷',
+  Feature: '功能',
+  Improvement: '改进',
+}
+
+export const listName = (name: string, language: Language): string =>
+  language === 'fr' ? (LISTS_FR[name as List] ?? name) : language === 'zh' ? (LISTS_ZH[name as List] ?? name) : name
 
 /**
  * A template's first tasks and its document in French, keyed by the
