@@ -216,13 +216,21 @@ function everywhereOn<T>(pool: Sql, actorId: string, fn: (tx: Tx) => Promise<T>)
  * Without `DATABASE_URL_WORKER` it is the application's connection, and
  * those calls are refused — said once, loudly, rather than found out from
  * a sync that quietly stopped.
+ *
+ * A warning from the database is printed. The clear-out says with one what
+ * it passed over — a project that could not go, rows something live still
+ * names — and goes on to the next; thrown away with the notices, a project
+ * nobody could delete was skipped every hour and nobody heard.
  */
 let worker: Sql | null = null
+const workerNotice = (n: { severity?: string; message?: string }): void => {
+  if (n.severity === 'WARNING') console.warn(`worker: ${n.message}`)
+}
 export async function asWorker<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
   if (!worker) {
     if (!env.databaseUrlWorker) console.error('DATABASE_URL_WORKER is not set: the worker’s queues and clear-out will be refused')
     worker = env.databaseUrlWorker
-      ? postgres(env.databaseUrlWorker, { max: 4, prepare: true, onnotice: () => {}, connection: { jit: 'off' } })
+      ? postgres(env.databaseUrlWorker, { max: 4, prepare: true, onnotice: workerNotice, connection: { jit: 'off' } })
       : sql
   }
   return worker.begin(fn) as Promise<T>

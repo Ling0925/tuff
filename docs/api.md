@@ -1066,14 +1066,30 @@ anything else, a live project included, so the bin is the one way to it.
 It takes the project and everything it held, children first and whatever
 pointed at them by id (`purge_project_rows`): tasks and their parts, lists,
 cycles, labels, posts, files, rooms and their messages, comments, hours,
-activity, members, watches, notifications, links, sidebar places. It leaves a
+activity, members, watches, notifications, links, sidebar places — and,
+since migration 318, its GitHub rows: `github_pull_task`, `github_comment`,
+`github_issue`, `github_pull`, `github_out` and every `github_link`, an
+unlinked one (`deleted_at` set) included; the workspace's `github_install`
+stays, and nothing is sent to GitHub. Before 318 a project that had ever
+had a repository linked could not go: `DELETE /api/projects/:id/forever`
+answered `400 invalid` (the foreign key, 23503) and the clear-out passed it
+over. The answers are as they were — `200 { ok }`, `403`, `404`. It leaves a
 `project.purged` line in the security log, which outlives the project; the
 feed went with it. `docs/specs/projects-index.md`.
+
+Every foreign key that points at the project, or at a row that goes with
+it, either cascades or sets null, or comes from a table
+`purge_project_rows` deletes by name — asserted against `pg_constraint` by
+`server/test/purge.test.ts`, so a new table naming a project with a plain
+foreign key fails the tests rather than making projects nobody can delete.
 
 The thirty-day clear-out does the same, through the same function, to a
 project in the bin past its days. It used to delete the project row
 alone, which its tasks held on to — and meeting a row it could not remove,
-`purge_deleted` gave up on every other table as well.
+`purge_deleted` gave up on every other table as well. A project that
+cannot go is passed over with a database warning, and the run goes on to
+the next; the worker prints those warnings (it used to discard every
+notice).
 
 ### Watching a task
 
@@ -2835,7 +2851,9 @@ post: the guard is a query, not a lock.
   retries were written, the signing was correct, and **nothing ever
   delivered**. Nothing threw. The deliveries simply sat there.
 - **It runs the clear-out**, hourly, on rows soft-deleted longer than
-  `PURGE_AFTER_DAYS` (30 by default).
+  `PURGE_AFTER_DAYS` (30 by default). What it passes over — a project that
+  could not go, rows something live still names — it says as a database
+  warning, which the worker prints as `worker: purge: …`.
 - **It removes the bytes of what is gone.** A file's row, deleted by
   anything, queues its keys in `storage_orphan` (a trigger, so nothing that
   deletes a file can forget); the same pass takes up to 200 from
@@ -3266,6 +3284,9 @@ their account goes; `github_event`, the
 queue, read and written only through `github_event_put`,
 `github_events_claim`, `github_event_done`, `github_events_clear`,
 `github_route`, `github_install_gone` and `github_repo_gone`.
+A project deleted for good, or by the clear-out, takes its links (unlinked
+ones too), pull requests, issue and comment pairings and what was owed with
+it (`purge_project_rows`, migration 318); nothing is sent to GitHub.
 `origin_kind` gains `github`. A link whose person has left the workspace or the project
 stops (`github_link.stopped_at`, `stopped_why`) — nothing is routed either
 way — and `GET /api/projects/:id/github` answers it with `stopped_at` set;

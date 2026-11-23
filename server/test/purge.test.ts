@@ -76,8 +76,51 @@ async function whatIsLeft(project: string) {
          + (select count(*) from file where project_id = ${project})
          + (select count(*) from comment where project_id = ${project})
          + (select count(*) from activity_event where project_id = ${project})
-         + (select count(*) from project_member where project_id = ${project}) as n`
+         + (select count(*) from project_member where project_id = ${project})
+         + (select count(*) from github_link where project_id = ${project})
+         + (select count(*) from github_pull where project_id = ${project})
+         + (select count(*) from github_pull_task where project_id = ${project})
+         + (select count(*) from github_issue where project_id = ${project})
+         + (select count(*) from github_comment where project_id = ${project})
+         + (select count(*) from github_out where project_id = ${project}) as n`
   return Number(r!.n)
+}
+
+/**
+ * A repository linked to the project, with something in each of GitHub's
+ * tables: a pull request naming its task, the task paired with an issue,
+ * its comment mirrored, a change still owed. Unlinked, the link is stamped
+ * and kept, as `DELETE /api/projects/:id/github` leaves it, and so are the
+ * rows under it. Written as the table owner: what is being tested is the
+ * purge, not how GitHub's webhooks fill these.
+ */
+async function aRepository(project: string, task: string, actorId: string, workspaceId: string, unlinked = false) {
+  const n = () => Math.floor(Math.random() * 1e12)
+  const [link, pull] = [uuidv7(), uuidv7()]
+  const [comment] = await owner<{ id: string }[]>`select id from comment where object_id = ${task} limit 1`
+  assert.ok(comment, 'the task has a comment to mirror')
+  // One installation a workspace.
+  const [had] = await owner<{ id: string }[]>`
+    select id from github_install where workspace_id = ${workspaceId} and deleted_at is null`
+  const install = had?.id ?? uuidv7()
+  if (!had) {
+    await owner`insert into github_install (id, workspace_id, installation_id, account_login, account_type, installed_by)
+                values (${install}, ${workspaceId}, ${n()}, 'acme', 'Organization', ${actorId})`
+  }
+  await owner`insert into github_link (id, workspace_id, project_id, install_id, repo_id, repo_name, private, issues, linked_by, deleted_at)
+              values (${link}, ${workspaceId}, ${project}, ${install}, ${n()}, 'acme/web', true, true, ${actorId},
+                      ${unlinked ? new Date() : null})`
+  await owner`insert into github_pull (id, workspace_id, project_id, link_id, number, title, url, state)
+              values (${pull}, ${workspaceId}, ${project}, ${link}, 7, 'Fix it', 'https://github.com/acme/web/pull/7', 'open')`
+  await owner`insert into github_pull_task (workspace_id, project_id, pull_id, task_id, closes)
+              values (${workspaceId}, ${project}, ${pull}, ${task}, true)`
+  await owner`insert into github_issue (workspace_id, project_id, link_id, task_id, number)
+              values (${workspaceId}, ${project}, ${link}, ${task}, 3)`
+  await owner`insert into github_comment (workspace_id, project_id, comment_id, github_id, seen_body)
+              values (${workspaceId}, ${project}, ${comment.id}, ${n()}, 'Said')`
+  await owner`insert into github_out (id, workspace_id, project_id, kind, object_id, actor_id)
+              values (${uuidv7()}, ${workspaceId}, ${project}, 'task', ${task}, ${actorId})`
+  return { install }
 }
 
 test('a project in the bin goes for good, with everything it held — by the owner alone', async () => {
@@ -155,6 +198,124 @@ test('the clear-out takes a project past its days whole, and goes on to the rest
   // The worker's half: the key comes off the queue for removal.
   const keys = await asWorker((tx) => tx<{ key: string }[]>`select storage_orphans(1000000) as key`)
   assert.ok(keys.some((k) => k.key === key))
+})
+
+/*
+ * The GitHub tables came after `purge_project_rows` and were never
+ * added to it, and unlinking stamps the link rather than removing it: a
+ * project that had a repository once answered `400 invalid` to Delete for
+ * good, and the clear-out passed it over every hour.
+ */
+test('a project with a repository, linked or unlinked, goes for good — and the installation stays', async () => {
+  const { ctx, workspaceId, token } = await makeOwner()
+  for (const unlinked of [false, true]) {
+    const { project, task } = await aFullProject(token, ctx.actorId, workspaceId)
+    const { install } = await aRepository(project, task, ctx.actorId, workspaceId, unlinked)
+    assert.equal((await asked(token, `/projects/${project}`, 'DELETE')).status, 200)
+
+    const done = await asked(token, `/projects/${project}/forever`, 'DELETE')
+    assert.equal(done.status, 200, unlinked ? 'an unlinked repository' : 'a linked repository')
+    assert.equal(await whatIsLeft(project), 0)
+    // The installation is the workspace's, not the project's.
+    const [still] = await owner`select id from github_install where id = ${install}`
+    assert.ok(still, 'the GitHub installation is kept')
+  }
+})
+
+test('the clear-out takes a project with a repository, linked or unlinked, past its days', async () => {
+  const { ctx, workspaceId, token } = await makeOwner()
+  const projects: string[] = []
+  for (const unlinked of [false, true]) {
+    const { project, task } = await aFullProject(token, ctx.actorId, workspaceId)
+    await aRepository(project, task, ctx.actorId, workspaceId, unlinked)
+    assert.equal((await asked(token, `/projects/${project}`, 'DELETE')).status, 200)
+    await owner`update project set deleted_at = now() - interval '10 years 7 days' where id = ${project}`
+    projects.push(project)
+  }
+  // And one beside them with a repository and no reason to go.
+  const live = await aFullProject(token, ctx.actorId, workspaceId)
+  await aRepository(live.project, live.task, ctx.actorId, workspaceId)
+
+  await asWorker((tx) => tx`select purge_deleted(3653)`)
+
+  for (const project of projects) assert.equal(await whatIsLeft(project), 0)
+  const [kept] = await owner<{ n: number }[]>`
+    select (select count(*) from github_link where project_id = ${live.project})
+         + (select count(*) from github_issue where project_id = ${live.project})
+         + (select count(*) from github_comment where project_id = ${live.project})
+         + (select count(*) from github_out where project_id = ${live.project}) as n`
+  assert.equal(Number(kept!.n), 4, 'a live project’s GitHub rows are untouched')
+})
+
+/*
+ * What `purge_project_rows` deletes by name. Every foreign key in the
+ * database that points at one of these — or at anything that goes with one
+ * of them by cascade — either goes with its row by itself (cascade, set
+ * null, set default) or comes from a table on this list. A table added
+ * later that names a project, a task or a comment with a plain foreign key
+ * fails here, rather than making projects that cannot be deleted, which is
+ * what the GitHub tables did for a year.
+ */
+const PURGED = [
+  'github_pull_task',
+  'github_comment',
+  'github_issue',
+  'github_pull',
+  'github_out',
+  'github_link',
+  'message',
+  'conversation_member',
+  'task_label',
+  'time_entry',
+  'comment',
+  'subscription',
+  'notification',
+  'object_link',
+  'sidebar_place',
+  'activity_event',
+  'task',
+  'file',
+  'conversation',
+  'task_list',
+  'cycle',
+  'label',
+  'post',
+  'project_member',
+  'project',
+]
+
+test('every foreign key into what a purge deletes is deleted by it or goes by itself', async () => {
+  const fks = await owner<{ tbl: string; ref: string; del: string; name: string }[]>`
+    select c.conrelid::regclass::text as tbl, c.confrelid::regclass::text as ref,
+           c.confdeltype as del, c.conname as name
+    from pg_constraint c
+    where c.contype = 'f' and c.connamespace = 'public'::regnamespace`
+  assert.ok(
+    fks.some((f) => f.ref === 'project' && f.tbl === 'github_link'),
+    'the catalogue is read: github_link names project',
+  )
+
+  // What goes: the list, and whatever its rows take with them by cascade.
+  const gone = new Set(PURGED)
+  for (let grew = true; grew; ) {
+    grew = false
+    for (const f of fks) {
+      if (gone.has(f.ref) && f.del === 'c' && !gone.has(f.tbl)) {
+        gone.add(f.tbl)
+        grew = true
+      }
+    }
+  }
+  const holding = fks
+    .filter((f) => gone.has(f.ref) && !PURGED.includes(f.tbl) && !['c', 'n', 'd'].includes(f.del))
+    .map((f) => `${f.tbl} → ${f.ref} (${f.name})`)
+    .sort()
+  assert.deepEqual(holding, [], 'add the table to purge_project_rows (and PURGED), or make its key cascade')
+
+  // And the list is what the function does.
+  const [fn] = await owner<{ src: string }[]>`select prosrc as src from pg_proc where proname = 'purge_project_rows'`
+  const missing = PURGED.filter((t) => !new RegExp(`\\bdelete from ${t}\\b`).test(fn!.src))
+  assert.deepEqual(missing, [], 'on PURGED but not deleted by purge_project_rows')
 })
 
 test('a key some row still names is kept, not removed', async () => {
