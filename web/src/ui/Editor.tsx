@@ -29,11 +29,16 @@ import { Toggle, ToggleKeys } from './editor/toggle.js'
 import { Wraps } from './editor/wraps.js'
 import type { Collab } from './editor/collab.js'
 import { CommentMark } from './editor/comment.js'
+import type { EditorView } from '@tiptap/pm/view'
 
 /** What the screen around a body may ask of it. */
 export type EditorHandle = {
   enter: () => void
   end?: () => void
+  /** Where its caret is, for the editor that takes over from it. */
+  caret?: () => Caret | null
+  /** The caret given back, focused: the one the editor before had. */
+  keep?: (at: Caret) => void
   files?: (list: File[]) => void
   /** The editor itself, for the screen around it to read the words and draw
       over them — a thread's card beside its words. */
@@ -299,6 +304,13 @@ export function Editor({
         window.open(a.href, '_blank', 'noopener,noreferrer')
         return true
       },
+      /* And as the press is let go, before ProseMirror puts its own back. */
+      handleDOMEvents: {
+        mouseup: (view) => {
+          caughtUp(view)
+          return false
+        },
+      },
       handlePaste: (_view, event) => take(event.clipboardData),
       /* Where it was let go, between two blocks: a picture dropped in
          the middle of a sentence would cut it in two. The same point the
@@ -318,6 +330,8 @@ export function Editor({
        * changes and Enter pick whatever was first when the editor was made.
        */
       handleKeyDown: (view, event) => {
+        /* Where the caret is, before any key acts on it. */
+        if (!event.isComposing) caughtUp(view)
         const now = live.current
         /* Who `@` is offering, before anything else reads the arrows. */
         const call = calls.current
@@ -896,13 +910,24 @@ export function Editor({
          body somebody is writing in a window. */
       end: () => {
         if (!editor || editor.isDestroyed) return
-        /* Focused now, as `enter` is below: this is also the caret handed
-           to the editor bound to the shared state when it takes over, and
-           the keys pressed in the frame TipTap's `focus` waits for went
-           into neither editor — a new document typed into at once lost
-           every word one time in three. */
+        /* Focused now, as `enter` is below: this was once also the caret
+           handed to the editor bound to the shared state when it takes
+           over (`keep` is now), and the keys pressed in the frame TipTap's
+           `focus` waits for went into neither editor — a new document typed
+           into at once lost every word one time in three. */
         editor.view.focus()
         editor.view.dispatch(editor.state.tr.setSelection(Selection.atEnd(editor.state.doc)).scrollIntoView())
+      },
+      caret: () => (editor && !editor.isDestroyed ? caretOf(editor.view) : null),
+      /* Focused now, as `end` is, and not scrolled: the caret is where the
+         person put it, on the screen they are reading. The words are the
+         same ones, so the numbers are; kept inside them if they are not. */
+      keep: (at: Caret) => {
+        if (!editor || editor.isDestroyed) return
+        const { doc, tr } = editor.state
+        const inside = (n: number) => doc.resolve(Math.min(Math.max(n, 0), doc.content.size))
+        editor.view.focus()
+        editor.view.dispatch(tr.setSelection(TextSelection.between(inside(at.anchor), inside(at.head))))
       },
       /* Files let go of anywhere around the body rather than on its words —
          a window's empty room under them — go in at its end, as a picked
@@ -1225,6 +1250,44 @@ export function Editor({
 
 /** Somebody `@` can name: who they are and the face to show. */
 export type Callable = { actor_id: string; name: string; avatar_url?: string | null | undefined }
+
+/**
+ * The caret where the browser has already put it.
+ *
+ * A press puts the caret in the page at once, and ProseMirror hears of it
+ * from the `selectionchange` that follows, a task later. Until then it goes
+ * by its own caret: a key pressed in between acted there, and twenty
+ * milliseconds after the body takes the focus ProseMirror writes its own
+ * back over the press if it has heard nothing. In a body just bound to the
+ * shared state its own is the document's first letter — where words typed
+ * straight after a click landed, one run in three on a busy machine. This
+ * is what that event would do, done now: the observer's own check, which
+ * reads the page only when it holds a caret ProseMirror has not seen.
+ */
+function caughtUp(view: EditorView): void {
+  const observer = (view as unknown as { domObserver?: { onSelectionChange?: () => void } }).domObserver
+  observer?.onSelectionChange?.()
+}
+
+/** Where the caret is, as numbers another editor of the same words can take. */
+export type Caret = { anchor: number; head: number }
+
+/**
+ * Read from the page where the person put it rather than from the state,
+ * which may not have heard of the press yet (`caughtUp`). A read only: this
+ * is asked while the screen is being drawn.
+ */
+function caretOf(view: EditorView): Caret {
+  const { anchor, head } = view.state.selection
+  const dom = view.dom.ownerDocument.getSelection()
+  if (!(view.state.selection instanceof TextSelection) || !dom?.anchorNode || !dom.focusNode) return { anchor, head }
+  if (!view.dom.contains(dom.anchorNode) || !view.dom.contains(dom.focusNode)) return { anchor, head }
+  try {
+    return { anchor: view.posAtDOM(dom.anchorNode, dom.anchorOffset), head: view.posAtDOM(dom.focusNode, dom.focusOffset) }
+  } catch {
+    return { anchor, head }
+  }
+}
 
 /**
  * The document as it may leave the editor: without the files still on

@@ -7,7 +7,7 @@ import { DocMark, MarkRails, MentionedIn, Popover, Toolbar, readLinks, urlField 
 import { Round, RoundFace } from './TaskDetail.jsx'
 import { Icon, type IconName } from './glyphs.jsx'
 import { Discussion, type Comment } from './Comments.jsx'
-import { Editor, type EditorHandle, type OnWords } from './Editor.jsx'
+import { type Caret, Editor, type EditorHandle, type OnWords } from './Editor.jsx'
 import type { Editor as Tip } from '@tiptap/react'
 import { WordsCard, type CardAt, type WordsCardState } from './WordsCard.jsx'
 import { anchorOf, threadsIn, wait, waitingRange } from './editor/comment.js'
@@ -375,8 +375,9 @@ export function FileDetail({
   )
   /* The caret goes with the swap: somebody who had clicked into the body
      the moment before it was bound is still in it after, rather than
-     typing into nothing. */
-  const focusedBefore = useRef(false)
+     typing into nothing — and where they clicked, not at the end of the
+     document, where it was sent until. */
+  const focusedBefore = useRef<Caret | null>(null)
   /* Asked in the render that swaps them, while the old editor is still on
      the page: a press into the body renders nothing here, so a value kept
      from the render before was from before the press, and the keys typed
@@ -384,12 +385,15 @@ export function FileDetail({
      shortcuts. */
   const boundBefore = useRef<unknown>(null)
   if (collab !== boundBefore.current) {
-    if (collab && !boundBefore.current) focusedBefore.current = Boolean(written.current?.contains(document.activeElement))
+    if (collab && !boundBefore.current && written.current?.contains(document.activeElement)) {
+      focusedBefore.current = into.current?.caret?.() ?? null
+    }
     boundBefore.current = collab
   }
   useEffect(() => {
-    if (collab && focusedBefore.current) into.current?.end?.()
-    focusedBefore.current = false
+    const at = focusedBefore.current
+    if (collab && at) into.current?.keep?.(at)
+    focusedBefore.current = null
   }, [collab])
   /* What the document opens on next time is what it last showed. */
   const latest = useRef<unknown>(null)
