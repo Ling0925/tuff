@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../../data/api.js'
-import { ACTS } from '../../data/words.js'
 import { isKey } from '../../data/keys.js'
 import { dropUndo, useUndoOffer } from '../../data/undo.js'
 import { DOCS as W } from '../../words/docs.js'
-import { Glass } from '../Glass.jsx'
+import { UndoBar } from '../UndoToast.jsx'
 import { type FileRow } from '../Project.jsx'
 
 /**
@@ -67,13 +66,6 @@ export function useDocDeletes({
     [load],
   )
 
-  /* The offer expires, as the tasks' does, after thirty seconds. */
-  useEffect(() => {
-    if (!undo) return
-    const t = setTimeout(() => setUndo(null), 30_000)
-    return () => clearTimeout(t)
-  }, [undo])
-
   /* ⌘Z, by the key and not the letter; never while typing or under a dialog. */
   useEffect(() => {
     if (!active) return
@@ -94,26 +86,12 @@ export function useDocDeletes({
 
   /* A newer delete elsewhere — a comment's — holds the foot until it goes. */
   const elsewhere = useUndoOffer()
-  const toast = active && undo && !elsewhere && (
-    <div
-      data-undo-toast
-      className="fixed left-1/2 z-50 -translate-x-1/2"
-      /* Above a phone's tabs, which are at the foot too. */
-      style={{ bottom: 'calc(24px + var(--foot))' }}
-      role="status"
-    >
-      <Glass radius={16} className="flex items-center gap-4 py-2 pr-2 pl-4">
-        <span className="max-w-[320px] truncate text-base text-ink">{undo.said}</span>
-        <button
-          data-testid="undo-delete"
-          onClick={() => void back(undo.id)}
-          className="flex h-8 shrink-0 items-center px-3 text-base font-medium text-accent"
-          style={{ borderRadius: 'var(--r-pill)' }}
-        >
-          {ACTS.undo}
-        </button>
-      </Glass>
-    </div>
+  const toast = (
+    <UndoBar
+      offer={active && undo && !elsewhere ? { key: undo.id, said: undo.said } : null}
+      onUndo={() => undo && void back(undo.id)}
+      onGone={() => setUndo(null)}
+    />
   )
 
   return { remove, toast } as const

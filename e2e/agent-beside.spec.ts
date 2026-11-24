@@ -133,6 +133,59 @@ test.describe('wide', () => {
     expect(new URL(page.url()).searchParams.get('beside')).toBeNull()
   })
 
+  test('the panel is as wide as it is dragged, never past half the window, and keeps that width through a reload', async ({ page }) => {
+    await login(page)
+    const s = await stage(page, Date.now())
+    await page.goto(`/${s.ws}/${s.slug}/tasks/${s.number}`)
+    await expect(page.getByTestId('task-assignees')).toContainText(s.name, { timeout: 15_000 })
+    await page.getByTestId('talk-beside').click()
+    const panel = page.locator('[data-beside-panel]')
+    await expect(panel.locator('[data-history] [data-message]').filter({ hasText: s.hello })).toBeVisible({ timeout: 15_000 })
+    await expect.poll(() => widthOf(page, '[data-beside-panel]')).toBe(400)
+    const before = await widthOf(page, 'main')
+
+    /* The handle is on the panel's left edge: dragged left, it widens, and
+       the work gives up exactly what the panel took. */
+    const handle = page.locator('[data-resizer="Conversation Width"]')
+    const box = (await handle.boundingBox())!
+    const x = box.x + box.width / 2
+    const y = box.y + box.height / 2
+    await page.mouse.move(x, y)
+    await page.mouse.down()
+    await page.mouse.move(x - 60, y, { steps: 4 })
+    await page.mouse.move(x - 120, y, { steps: 4 })
+    await page.mouse.up()
+    await expect.poll(() => widthOf(page, '[data-beside-panel]')).toBe(520)
+    await expect.poll(() => widthOf(page, 'main')).toBe(before - 120)
+
+    /* Never past half the window, however far it is pulled. */
+    const wide = (await handle.boundingBox())!
+    await page.mouse.move(wide.x + wide.width / 2, y)
+    await page.mouse.down()
+    await page.mouse.move(wide.x - 600, y, { steps: 8 })
+    await page.mouse.up()
+    await expect.poll(() => widthOf(page, '[data-beside-panel]')).toBe(720)
+
+    /* The keyboard moves it too: → narrows a panel that grows to the left. */
+    await handle.focus()
+    await page.keyboard.press('ArrowRight')
+    await expect.poll(() => widthOf(page, '[data-beside-panel]')).toBe(704)
+
+    /* Kept on this machine through a reload. */
+    await page.reload()
+    await expect(panel.locator('[data-history] [data-message]').filter({ hasText: s.hello })).toBeVisible({ timeout: 15_000 })
+    expect(await widthOf(page, '[data-beside-panel]')).toBe(704)
+
+    /* A narrower window holds it to half of itself. */
+    await page.setViewportSize({ width: 1200, height: 900 })
+    await expect.poll(() => widthOf(page, '[data-beside-panel]')).toBe(600)
+
+    /* A double-click puts it back. */
+    await page.setViewportSize({ width: 1600, height: 900 })
+    await handle.dblclick()
+    await expect.poll(() => widthOf(page, '[data-beside-panel]')).toBe(400)
+  })
+
   test('a person on the task is one press from a conversation beside it, the button on a ground of its own', async ({ page }) => {
     await login(page)
     const ws = new URL(page.url()).pathname.split('/')[1]!

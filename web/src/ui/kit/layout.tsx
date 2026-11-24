@@ -256,6 +256,7 @@ export function Resizer({
   min,
   max,
   label,
+  side = 'right',
 }: {
   width: number
   /** `key` when an arrow said it, which is answered without travel. */
@@ -266,7 +267,11 @@ export function Resizer({
   min: number
   max: number
   label: string
+  /** Which edge of its column it stands on. A column on the right of the
+      window grows to the left, so there a drag left and ← widen it. */
+  side?: 'left' | 'right'
 }) {
+  const toward = side === 'left' ? -1 : 1
   const from = useRef<{ x: number; width: number } | null>(null)
   const [live, setLive] = useState(false)
 
@@ -295,7 +300,7 @@ export function Resizer({
       aria-valuemax={max}
       tabIndex={0}
       data-resizer={label}
-      className="group/resizer absolute inset-y-0 right-0 z-20 w-3 translate-x-1/2 cursor-col-resize"
+      className={`group/resizer absolute inset-y-0 z-20 w-3 cursor-col-resize ${side === 'left' ? 'left-0 -translate-x-1/2' : 'right-0 translate-x-1/2'}`}
       onPointerDown={(e) => {
         if (e.button !== 0) return
         from.current = { x: e.clientX, width }
@@ -305,7 +310,7 @@ export function Resizer({
       }}
       onPointerMove={(e) => {
         if (!from.current) return
-        onChange(from.current.width + e.clientX - from.current.x)
+        onChange(from.current.width + toward * (e.clientX - from.current.x))
       }}
       onPointerUp={() => {
         from.current = null
@@ -319,8 +324,8 @@ export function Resizer({
       }}
       onDoubleClick={() => onReset()}
       onKeyDown={(e) => {
-        if (e.key === 'ArrowLeft') onChange(width - 16, true)
-        else if (e.key === 'ArrowRight') onChange(width + 16, true)
+        if (e.key === 'ArrowLeft') onChange(width - 16 * toward, true)
+        else if (e.key === 'ArrowRight') onChange(width + 16 * toward, true)
         else if (e.key === 'Enter' || e.key === ' ') onReset(true)
         else return
         e.preventDefault()

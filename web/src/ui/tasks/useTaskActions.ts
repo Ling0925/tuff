@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { dropUndo } from '../../data/undo.js'
 import { TASKS as W } from '../../words/tasks.js'
 import { api } from '../../data/api.js'
@@ -149,22 +149,7 @@ export function useTaskActions({
     await load()
   }, [undo, load, undone, setUndo])
 
-  /*
-   * The offer expires, because a toast that stays is a thing on the
-   * screen rather than a chance to change your mind.
-   *
-   * Thirty rather than ten. Ten is long enough to catch a slip you
-   * noticed at once and short of the one you notice a moment later —
-   * the glance away, the second thought, the colleague saying "wait".
-   * The test that presses Cmd+Z kept losing the race against it, which
-   * is the same complaint from the other side: the window was tight
-   * enough that merely being slow missed it.
-   */
-  useEffect(() => {
-    if (!undo) return
-    const t = setTimeout(() => setUndo(null), 30_000)
-    return () => clearTimeout(t)
-  }, [undo, setUndo])
+  /* The offer expires with the toast that makes it — `UndoBar`. */
   return {
     today,
     anyLabels,

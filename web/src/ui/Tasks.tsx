@@ -4,7 +4,7 @@ import { NewButton } from './New.jsx'
 import { PageTitle, Segments, Toolbar } from './kit.jsx'
 import { TaskDetail } from './TaskDetail.jsx'
 import { Over } from './kit.jsx'
-import { Glass } from './Glass.jsx'
+import { UndoBar } from './UndoToast.jsx'
 import { View } from './tasks/view.jsx'
 import { boardView } from './tasks/boardView.jsx'
 import { listView } from './tasks/listView.jsx'
@@ -341,27 +341,11 @@ export function Tasks({
         carries the title, because "Deleted" alone makes somebody check
         which one — and checking is the thing the toast exists to spare.
       */}
-      {undo && !elsewhere && (
-        <div
-          data-undo-toast
-          className="fixed left-1/2 z-50 -translate-x-1/2"
-          /* Above a phone's tabs, which are at the foot too. */
-          style={{ bottom: 'calc(24px + var(--foot))' }}
-          role="status"
-        >
-          <Glass radius={16} className="flex items-center gap-4 py-2 pr-2 pl-4">
-            <span className="max-w-[320px] truncate text-base text-ink">{undo.said}</span>
-            <button
-              data-testid="undo-delete"
-              onClick={() => void putBack()}
-              className="flex h-8 shrink-0 items-center px-3 text-base font-medium text-accent"
-              style={{ borderRadius: 'var(--r-pill)' }}
-            >
-              {ACTS.undo}
-            </button>
-          </Glass>
-        </div>
-      )}
+      <UndoBar
+        offer={undo && !elsewhere ? { key: undo.ids.join(), said: undo.said } : null}
+        onUndo={() => void putBack()}
+        onGone={() => setUndo(null)}
+      />
       {/*
         Both create buttons sit on the project's own bar, beside the tabs,
         rather than on a second bar of their own — two bars of chrome above a

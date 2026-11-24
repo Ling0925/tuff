@@ -220,6 +220,7 @@ const BARS = {
     openTheNavigation: 'Open the navigation',
     sidebarWidth: 'Sidebar Width',
     toolsWidth: 'Tools Width',
+    besideWidth: 'Conversation Width',
   },
   es: {
     search: 'Buscar',
@@ -229,6 +230,7 @@ const BARS = {
     openTheNavigation: 'Abrir la navegación',
     sidebarWidth: 'Ancho de la barra lateral',
     toolsWidth: 'Ancho de las herramientas',
+    besideWidth: 'Ancho de la conversación',
   },
   fr: {
     search: 'Rechercher',
@@ -238,6 +240,7 @@ const BARS = {
     openTheNavigation: 'Ouvrir la navigation',
     sidebarWidth: 'Largeur de la barre latérale',
     toolsWidth: 'Largeur des outils',
+    besideWidth: 'Largeur de la conversation',
   },
 } as const
 

@@ -10413,8 +10413,8 @@ test('a right-click duplicates a task with its steps, or deletes it', async ({ p
    * alone, four times over, and beside its neighbours — but in a run of
    * a hundred and forty-six it fails, with a snapshot showing the row
    * gone and no toast on screen. Six explanations were tried and
-   * measured away: the ten-second window (now thirty, which is better
-   * anyway), waiting on the count before pressing, waiting on the toast
+   * measured away: the ten-second window (thirty for a while, and ten
+   * again since, held while the pointer is on it), waiting on the count before pressing, waiting on the toast
    * instead, the modifiers each spelling sends, whether the toast
    * survives the refetch, and where a restored row lands. None of them
    * is it.
