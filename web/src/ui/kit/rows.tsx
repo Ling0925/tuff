@@ -437,6 +437,23 @@ export function Fluid({
      reads and a compare is cheaper than working out which it was. */
   useLayoutEffect(put)
 
+  /*
+   * And whenever the host changes size without a render of this.
+   *
+   * A window's body that grows a scrollbar — a mouse plugged in shows them
+   * — narrows a segmented control after the press was drawn: the halves
+   * shrink and the chip, measured before, stood past the one on, flush
+   * with the track's end. New conversation, where the tab's own list
+   * arriving was what brought the scrollbar.
+   */
+  useEffect(() => {
+    const host = self.current?.parentElement
+    if (!host || typeof ResizeObserver === 'undefined') return
+    const watch = new ResizeObserver(() => put())
+    watch.observe(host)
+    return () => watch.disconnect()
+  }, [put])
+
   useEffect(() => {
     const host = self.current?.parentElement
     if (!host || pinned) return

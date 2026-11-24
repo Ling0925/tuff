@@ -5,6 +5,7 @@ import { Icon } from '../glyphs.jsx'
 import { asHours } from '../../data/hours.js'
 import { usePhone } from './layout.jsx'
 import { Over, Fluid } from './rows.jsx'
+import { Segments } from './lists.jsx'
 
 /* --------------------------------------------------------------- popover */
 
@@ -515,33 +516,17 @@ export function Choice<T extends string>({
             answers or six, it is one control and it moves. */}
         {/* A pill, as the tabs over a list are (Files' kinds, the bar's
             switch): one shape for "one of these", wherever it stands. */}
-        <span data-fluid className="relative flex w-full items-center gap-1 p-1 bg-track" style={{ borderRadius: 'var(--r-pill)' }}>
-          <Fluid pinned="[data-on]" tone="chip" />
-          {options.map((o) => {
-            const on = o.id === value
-            return (
-              <button
-                key={o.id}
-                type="button"
-                role="radio"
-                aria-checked={on}
-                data-testid={o.testId}
-                data-pick={o.id}
-                data-on={on || undefined}
-                {...(on ? {} : { 'data-control': '' })}
-                onClick={() => onPick(o.id)}
-                className="relative flex h-7 flex-1 items-center justify-center px-2 text-base font-medium"
-                style={{
-                  borderRadius: 'var(--r-pill)',
-                  color: on ? 'var(--ink)' : 'var(--ink-3)',
-                  letterSpacing: 'var(--track-body)',
-                }}
-              >
-                {o.label}
-              </button>
-            )
-          })}
-        </span>
+        <Segments
+          fill
+          items={options.map((o) => ({
+            key: o.id,
+            label: o.label,
+            testId: o.testId,
+            attrs: { role: 'radio', 'aria-checked': String(o.id === value) },
+          }))}
+          value={value}
+          onPick={onPick}
+        />
       </div>
     )
   }
