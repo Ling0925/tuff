@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { HEADS, MORE, SAYS, TONGUES, chooseTongue, readTongue, type Chosen } from '../data/words.js'
 import { ACCOUNT as W } from '../words/account.jsx'
 import { api } from '../data/api.js'
@@ -101,12 +101,20 @@ export function Notifications() {
   const [it, setIt] = useState<Notify | null>(() => known<Notify>('/inbox/settings'))
   const [sound, setSound] = useState(chimeOn)
 
+  /* A switch pressed while the read was on its way wins over the read: the
+     screen opens on the last answer kept, and an answer that came back after
+     the press put the switch back where it was, while the server kept the
+     press — so it read on and showed off. */
+  const pressed = useRef(0)
   const load = useCallback(async () => {
-    setIt(await ahead<Notify>('/inbox/settings'))
+    const at = pressed.current
+    const read = await ahead<Notify>('/inbox/settings')
+    if (pressed.current === at) setIt(read)
   }, [])
   useEffect(() => void load(), [load])
 
   async function patch(change: Partial<Notify>) {
+    pressed.current++
     setIt((prev) => (prev ? { ...prev, ...change } : prev))
     await api('/inbox/settings', { method: 'PATCH', body: JSON.stringify(change) })
   }

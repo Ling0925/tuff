@@ -444,8 +444,12 @@ test('a chip wrapped over two lines keeps its tints apart, in a heading and in t
   for (const where of ['h2', 'p']) {
     const el = page.locator(`.ProseMirror ${where} [data-task-chip]`).first()
     await expect(el).toBeVisible({ timeout: 15_000 })
+    /* Polled: the chip's view is drawn again once its task is read, and a
+       read taken between the two found a node with no boxes at all. */
+    await expect
+      .poll(() => el.evaluate((n) => n.getClientRects().length), { message: `the chip in the ${where} wraps`, timeout: 5_000 })
+      .toBeGreaterThan(1)
     const rects = await el.evaluate((n) => [...n.getClientRects()].map((r) => ({ top: r.top, bottom: r.bottom })))
-    expect(rects.length, `the chip in the ${where} wraps`).toBeGreaterThan(1)
     for (let i = 1; i < rects.length; i++) {
       expect(rects[i]!.top - rects[i - 1]!.bottom, `the ${where} chip's line ${i} lies over the one above`).toBeGreaterThan(0)
     }
