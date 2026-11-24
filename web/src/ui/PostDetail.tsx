@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { BAR, HEADS } from '../data/words.js'
 import { api, untilAnswered } from '../data/api.js'
 import { Editor, type EditorHandle } from './Editor.jsx'
@@ -124,7 +124,7 @@ export function PostDetail({
   /* An agent's announcement opened for changing by Edit — somebody else's
      words are never a field open for a keystroke until somebody asks. */
   const [editing, setEditing] = useState(false)
-  const title = useRef<HTMLInputElement | null>(null)
+  const title = useRef<HTMLTextAreaElement | null>(null)
   /*
    * The title being written, apart from the announcement's: set when the
    * field takes the caret and let go once what it held is saved, or was
@@ -176,6 +176,20 @@ export function PostDetail({
 
   /** The body, for files let go around it. */
   const into = useRef<EditorHandle | null>(null)
+  /* As many lines as the title takes, as a document's and a task's do: an
+     input kept it to one and scrolled a long one sideways out of sight. */
+  useLayoutEffect(() => {
+    const el = title.current
+    if (!el) return
+    const fit = () => {
+      el.style.height = 'auto'
+      el.style.height = `${el.scrollHeight}px`
+    }
+    fit()
+    const watch = new ResizeObserver(fit)
+    watch.observe(el.parentElement ?? el)
+    return () => watch.disconnect()
+  })
   const drop = useDropFiles(Boolean(post && openFor(post, meId, canWrite, editing)), (files) => into.current?.files?.(files))
   /* Opened by Edit, the title takes the caret — after the render that
      lets it. */
@@ -445,20 +459,30 @@ export function PostDetail({
               </div>
             </div>
 
-            {/* The size a task's and a document's title is. */}
-            <input
+            {/* The size a task's and a document's title is, on as many lines. */}
+            <textarea
               {...notALogin}
               ref={title}
+              rows={1}
               data-testid="post-title"
-              className="mt-4 w-full bg-transparent text-xl leading-[1.3] font-medium outline-none text-ink"
+              className="mt-4 block w-full resize-none overflow-hidden bg-transparent text-xl leading-[1.3] font-medium outline-none text-ink"
               value={draftTitle ?? post.title}
+              /* Enter or down at the end goes into the words, as in a
+                 document; a title is one line of thought however it wraps. */
+              onKeyDown={(e) => {
+                if (e.nativeEvent.isComposing) return
+                if (e.key === 'Enter' || e.key === 'ArrowDown') {
+                  e.preventDefault()
+                  into.current?.enter()
+                }
+              }}
               disabled={!editable}
               onFocus={(e) => {
                 if (draftTitle !== null) return
                 titleWas.current = e.target.value
                 setDraftTitle(e.target.value)
               }}
-              onChange={(e) => setDraftTitle(e.target.value)}
+              onChange={(e) => setDraftTitle(e.target.value.replace(/\s*\n\s*/g, ' '))}
               onBlur={(e) => {
                 const title = e.target.value.trim()
                 if (!title || title === titleWas.current?.trim()) {

@@ -372,6 +372,9 @@ export const ERRORS_FR: Record<string, string> = {
   'Give a project or a conversation, and 1 to 50 task handles like ACM-41, separated by commas.':
     'Indiquez un projet ou une conversation, et de 1 à 50 identifiants de tâche comme ACM-41, séparés par des virgules.',
   'Only a written document can be shared to the web.': 'Seul un document rédigé peut être partagé sur le Web.',
+  /* An announcement kept as a draft. */
+  'A draft has no schedule.': 'Un brouillon ne peut pas être programmé.',
+  'Publish it before anyone can reply.': 'Publiez-la avant que quiconque puisse y répondre.',
   /* Who a document is for. */
   'Publish this document to everyone on the project before sharing it to the web.':
     'Publiez ce document pour toutes les personnes du projet avant de le partager sur le Web.',
