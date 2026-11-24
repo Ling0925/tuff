@@ -120,6 +120,16 @@ export const Action = z.enum([
    */
   'file.share',
   /*
+   * Publishing an announcement kept as its author's draft.
+   * Its author's, while they may post on the
+   * project; nobody else's, since nobody else can see it. Never an agent's
+   * and never through a token: publishing tells everybody on the project,
+   * and "publish your drafts" is a sentence anybody can write in a task.
+   * Asked too of whoever asks for a draft, since a draft somebody cannot
+   * publish is one nobody would ever see.
+   */
+  'post.publish',
+  /*
    * Marking one written document as the project's instructions for agents,
    * or taking the mark off. Whoever may change
    * the document and run the project (`project.tools`): it changes what
@@ -476,6 +486,8 @@ export const NEVER_VIA_MCP: readonly Action[] = [
   /* Who reads a document is a person's press — "share this with everyone"
      is a sentence anybody can write in a task. */
   'file.share',
+  /* And an announcement's draft, told to everybody. */
+  'post.publish',
   /* Who is on a project is a person's decision, as what they may do there
      already was — the rights are never set through a token either. "Take
      everyone off the project" is a sentence anybody can write in a task. */
@@ -523,7 +535,7 @@ const NEVER_AN_AGENT: readonly Action[] = [
   'workspace.create', 'workspace.enter', 'workspace.confirm',
   'project.create', 'project.member.add', 'project.member.remove', 'project.leave', 'project.archive', 'project.tools',
   'people.invite', 'people.role', 'members.read', 'agent.connect', 'agent.manage', 'agent.remove', 'agent.work.read', 'token.issue.own',
-  'channel.create', 'channel.create.workspace', 'channel.delete', 'task.delete', 'file.delete', 'file.share', 'time.any', 'feedback.manage',
+  'channel.create', 'channel.create.workspace', 'channel.delete', 'task.delete', 'file.delete', 'file.share', 'post.publish', 'time.any', 'feedback.manage',
   'instance', 'task.remind', 'hook.manage', 'question.answer', 'workspace.leave', 'channel.leave', 'list.agent',
   'file.for_agents',
 ]
@@ -704,6 +716,11 @@ export function can(action: Action, input: PermissionInput): boolean {
      else as they may edit somebody else's. */
   if (action === 'file.share') {
     return can(input.isAuthor ? 'content.edit.own' : 'content.edit.any', input)
+  }
+
+  /* An announcement's draft: its author's, as posting is. */
+  if (action === 'post.publish') {
+    return input.isAuthor === true && can('content.create', input)
   }
 
   /* The project's instructions for agents: changing the document, and

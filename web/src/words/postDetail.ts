@@ -36,4 +36,10 @@ export const POST_DETAIL = say({
   asked: [(schedule: string) => ` · asked ${schedule}`, (schedule: string) => ` · posée ${schedule}`],
   whatAbout: ['What is it about?', 'De quoi s’agit-il ?'],
   nothingWritten: ['Nothing written yet.', 'Rien d’écrit pour l’instant.'],
+  /* An announcement kept as its author's draft.
+     As a document's draft says it (`words/fileDetail.ts`). */
+  draft: ['Draft', 'Brouillon'],
+  publish: ['Publish', 'Publier'],
+  draftOnlyYou: ['Only you can see this draft', 'Vous seul pouvez voir ce brouillon'],
+  couldNotPublish: ['Couldn’t publish. Try again.', 'Impossible de publier. Réessayez.'],
 })

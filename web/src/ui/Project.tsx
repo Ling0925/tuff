@@ -48,6 +48,8 @@ export type Post = {
   author_avatar_url?: string | null
   created_at: string
   schedule: string | null
+  /** `author` while it is its author's draft, drawn first and marked. */
+  audience?: string
 }
 export type FileRow = DocRow & {
   author_avatar_url?: string | null
@@ -463,7 +465,7 @@ export function Project({
               />
             )}
 
-            {postsList({ project, canWrite, objectId, onNavigate, posts, shown, load })}
+            {postsList({ project, canWrite, objectId, onNavigate, posts, setPosts, shown, load })}
 
             {shown === 'files' && objectId && (
               <FileDetail

@@ -550,11 +550,15 @@ overview.post('/checkins/run', async (c) => {
       select id, project_id, title, body from post
       where workspace_id = ${ctx.workspaceId} and schedule is not null
         and deleted_at is null
+        /* Never somebody's draft, the asker's own included: copied, it
+           would be published by a timer. */
+        and audience = 'project'
         and not exists (
           select 1 from post copy
           where copy.workspace_id = post.workspace_id
             and copy.title = post.title
             and copy.schedule is null
+            and copy.audience = 'project'
             and copy.created_at::date = current_date
         )`
     for (const p of due) {

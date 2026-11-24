@@ -138,6 +138,20 @@ test('choosing who reads a document is its author’s and its editors’', () =>
   assert.equal(can('file.share', base('member', { isAuthor: true, agent: true })), false)
 })
 
+/* An announcement's draft: its author publishes it, in person — never a
+   tool, an agent, or anybody else. */
+test('publishing an announcement’s draft is its author’s alone, in person', () => {
+  assert.equal(can('post.publish', base('member', { isAuthor: true })), true)
+  assert.equal(can('post.publish', base('owner', { isAuthor: true })), true)
+  assert.equal(can('post.publish', base('member', { isAuthor: false, rights: ['manage', 'edit.any'] })), false)
+  assert.equal(can('post.publish', base('owner', { isAuthor: false })), false, 'not the owner, who cannot see it')
+  assert.equal(can('post.publish', base('member', { isAuthor: true, inProject: false })), false)
+  assert.equal(can('post.publish', base('member', { isAuthor: true, viaMcp: true })), false)
+  assert.equal(can('post.publish', base('owner', { isAuthor: true, viaMcp: true })), false)
+  assert.equal(can('post.publish', base('member', { isAuthor: true, agent: true })), false)
+  assert.equal(can('post.publish', base('member', { isAuthor: true, board: true })), false)
+})
+
 /* The project's instructions for agents: whoever may change the document
    and runs the project — never a tool or an agent. */
 test('marking a project’s instructions for agents is for whoever runs it and may change the document', () => {
@@ -350,6 +364,7 @@ test('every action is reachable by somebody', () => {
       (role) =>
         can(action, base(role)) ||
         can(action, base(role, { connectedIt: true })) ||
+        can(action, base(role, { isAuthor: true })) ||
         can(action, base(role, { operator: true })) ||
         can(action, base(role, { instanceOwner: true })) ||
         can(action, base(role, { agent: true, viaMcp: true, plan: 'team' })),

@@ -1382,10 +1382,25 @@ export const PostInProject = z.object({
   updated_at: z.string().nullable().optional(),
   project_id: Uuid.nullable().optional(),
   reply_count: Count.optional(),
+  /** Who it is said to: `author` while it is its author's draft, `project`
+      once published. A string, so a client
+      reads an answer it does not know rather than failing on it. */
+  audience: z.string().optional(),
 })
 export const PostPage = z.object({
+  /** Published announcements only, the asker's own included. */
   posts: z.array(PostInProject),
   next_cursor: z.string().nullable().optional(),
+  /** The asker's own drafts in the project, newest first, at most fifty —
+      only on a first page asked with `drafts=1`, never otherwise. */
+  drafts: z.array(PostInProject).optional(),
+})
+/** An announcement published, after `PUT /api/posts/:id/audience`. */
+export const PostPublished = z.object({
+  ok: z.boolean(),
+  audience: z.string(),
+  /** The moment it was published, which is its `created_at` now too. */
+  published_at: z.string().nullable(),
 })
 /** `GET /api/posts/:id`: the announcement and its replies. */
 export const PostRead = z.object({

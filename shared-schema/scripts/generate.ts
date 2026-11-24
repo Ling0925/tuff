@@ -249,6 +249,7 @@ const RESPONSES: Record<string, z.ZodType> = {
   PostInProject: S.PostInProject,
   PostPage: S.PostPage,
   PostRead: S.PostRead,
+  PostPublished: S.PostPublished,
   CommentsPage: S.CommentsPage,
   FileInList: S.FileInList,
   FilesInProject: S.FilesInProject,

@@ -1,17 +1,22 @@
 import { MAKE, SAYS } from '../../data/words.js'
 import { PROJECT_SAID as W } from '../../words/project.js'
 import { Doc } from '../Doc.jsx'
-import { nearPost } from '../PostDetail.jsx'
+import { nearPost, publishPost } from '../PostDetail.jsx'
 import { NewButton } from '../New.jsx'
-import { Toolbar, PageTitle, EmptyState, Avatar } from '../kit.jsx'
+import { Toolbar, PageTitle, EmptyState, Avatar, Button } from '../kit.jsx'
+import { POST_DETAIL } from '../../words/postDetail.js'
 import { LABEL } from '../../data/tools.js'
 import { dayAndClock } from '../../data/said.js'
-import { type ProjectProps } from '../Project.jsx'
+import { type Post, type ProjectProps } from '../Project.jsx'
 import { type ProjectFrame } from './useProjectFrame.js'
 import { type ProjectContent } from './useProjectContent.js'
 
+/* A card that said it could not be published — this screen's, never the
+   server's. */
+type Shown = Post & { notPublished?: boolean }
+
 /**
- * Announcements, newest first.
+ * Announcements, newest first — the reader's own drafts above them,
  */
 export function postsList({
   project,
@@ -19,11 +24,41 @@ export function postsList({
   objectId,
   onNavigate,
   posts,
+  setPosts,
   shown,
   load,
 }: Pick<ProjectProps, 'project' | 'canWrite' | 'objectId'> &
-  Pick<ProjectFrame, 'onNavigate' | 'posts' | 'shown'> &
+  Pick<ProjectFrame, 'onNavigate' | 'posts' | 'setPosts' | 'shown'> &
   Pick<ProjectContent, 'load'>): React.ReactNode {
+  /*
+   * A draft published from its card: it leaves the drafts and lands at the
+   * top of what was published, at once, with the hour it is now — and goes
+   * back, saying so, if the server refuses. The press is the only way in:
+   * nothing here publishes on a read or an address.
+   */
+  const publish = (id: string) => {
+    let was: Post[] | null = null
+    setPosts((had) => {
+      was = had
+      if (!had) return had
+      const it = had.find((x) => x.id === id)
+      if (!it) return had
+      const rest = had.filter((x) => x.id !== id)
+      const drafts = rest.filter((x) => x.audience === 'author').length
+      const out: Shown = { ...it, audience: 'project', created_at: new Date().toISOString(), notPublished: false }
+      return [...rest.slice(0, drafts), out, ...rest.slice(drafts)]
+    })
+    /* Put back only when the publishing failed — not when the list read
+       after it did, which would show a published one as a draft. */
+    void publishPost(id).then(
+      () => void load().catch(() => {}),
+      () =>
+        setPosts((had) => {
+          const back = was ?? had
+          return back && back.map((x) => (x.id === id ? ({ ...x, notPublished: true } as Shown) : x))
+        }),
+    )
+  }
   return (
     shown === 'posts' &&
     !objectId && (
@@ -95,10 +130,11 @@ export function postsList({
               sentence. And not one from a picture opened over the screen:
               a portal's clicks still bubble through the tree it came from.
             */}
-        {(posts ?? []).map((p) => (
+        {(posts ?? []).map((p: Shown) => (
           <article
             key={p.id}
             data-post
+            data-post-draft={p.audience === 'author' || undefined}
             onPointerEnter={() => nearPost(p.id)}
             onClick={(e) => {
               const at = e.target as Element
@@ -112,13 +148,28 @@ export function postsList({
           >
             <div className="flex items-center gap-3">
               <Avatar name={p.author_name} {...(p.author_id ? { id: p.author_id } : {})} url={p.author_avatar_url} size={28} />
-              <div className="flex flex-col">
+              <div className="flex min-w-px flex-col">
                 <span className="text-base font-medium text-ink">{p.author_name}</span>
                 <span className="text-base text-ink-2">
-                  {dayAndClock(p.created_at)}
+                  {/* A draft has not been said, so it has no hour yet:
+                      where the hour goes, what it is. Only its author
+                      ever sees one. */}
+                  {p.audience === 'author' ? <span data-draft-mark>{POST_DETAIL.draft}</span> : dayAndClock(p.created_at)}
                   {p.schedule && <span data-schedule>{W.asked(p.schedule)}</span>}
                 </span>
               </div>
+              {p.audience === 'author' && (
+                <span className="ml-auto flex shrink-0 items-center gap-3">
+                  {p.notPublished && (
+                    <span role="status" data-not-published className="text-sm text-danger">
+                      {POST_DETAIL.couldNotPublish}
+                    </span>
+                  )}
+                  <Button tone="primary" data-testid="publish-draft" onClick={() => publish(p.id)}>
+                    {POST_DETAIL.publish}
+                  </Button>
+                </span>
+              )}
             </div>
             {/* The heading opens it too. A card with one small link at
                     the bottom is a card people read and leave. */}

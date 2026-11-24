@@ -2466,6 +2466,7 @@
                   "file.delete",
                   "list.agent",
                   "file.share",
+                  "post.publish",
                   "file.for_agents",
                   "channel.create.workspace",
                   "channel.leave",
@@ -10512,6 +10513,9 @@
         },
         "reply_count": {
           "$ref": "#/$defs/Count"
+        },
+        "audience": {
+          "type": "string"
         }
       },
       "required": [
@@ -10535,6 +10539,12 @@
             "string",
             "null"
           ]
+        },
+        "drafts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PostInProject"
+          }
         }
       },
       "required": [
@@ -10648,6 +10658,9 @@
             "reply_count": {
               "$ref": "#/$defs/Count"
             },
+            "audience": {
+              "type": "string"
+            },
             "subscribed": {
               "type": "boolean"
             },
@@ -10682,6 +10695,29 @@
       },
       "required": [
         "post"
+      ]
+    },
+    "PostPublished": {
+      "title": "PostPublished",
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "audience": {
+          "type": "string"
+        },
+        "published_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "ok",
+        "audience",
+        "published_at"
       ]
     },
     "CommentsPage": {
@@ -11828,6 +11864,7 @@
     "file.delete",
     "list.agent",
     "file.share",
+    "post.publish",
     "file.for_agents",
     "channel.create.workspace",
     "channel.leave",
@@ -11868,6 +11905,7 @@
     "channel.delete",
     "file.delete",
     "file.share",
+    "post.publish",
     "project.member.remove",
     "project.leave",
     "channel.leave",

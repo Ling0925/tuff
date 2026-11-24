@@ -50,6 +50,14 @@ export async function record(
     kept = f?.apart === true
     feedOnly = feedOnly || kept
   }
+  /* And an announcement still its author's draft: its handlers write no
+     line while it is one, and one written anyway is its actor's alone and
+     sent nowhere (`post_apart`, migration 320). */
+  if (about.objectType === 'post' && about.objectId) {
+    const [p] = await tx<{ apart: boolean }[]>`select post_apart(${about.objectId}) as apart`
+    kept = kept || p?.apart === true
+    feedOnly = feedOnly || kept
+  }
   await tx`
     insert into activity_event
       (id, workspace_id, project_id, actor_id, action, object_type, object_id, origin, meta, kept)

@@ -5,7 +5,7 @@ import { Editor, type EditorHandle } from './Editor.jsx'
 import { DropHere, useDropFiles } from './DropFiles.jsx'
 import { EDITOR } from '../words/editor.js'
 import { Discussion, type Comment } from './Comments.jsx'
-import { Avatar, MentionedIn, Popover, Toolbar, readLinks, notALogin } from './kit.jsx'
+import { Avatar, Button, MentionedIn, Popover, Toolbar, readLinks, notALogin } from './kit.jsx'
 import { recall, remember } from '../data/memory.js'
 import { Round, RoundFace } from './TaskDetail.jsx'
 import { Icon } from './glyphs.jsx'
@@ -31,6 +31,21 @@ type Full = {
   /** What the server's PATCH and DELETE would answer. */
   may_edit?: boolean
   may_delete?: boolean
+  /** `author` while it is its author's draft. */
+  audience?: string
+}
+
+/**
+ * A draft published: the one request, which only a press sends — never a
+ * read, a link or an address. Answers the
+ * moment it was published, which is its place in the list.
+ */
+export async function publishPost(id: string): Promise<string | null> {
+  const r = await api<{ published_at: string | null }>(`/posts/${id}/audience`, {
+    method: 'PUT',
+    body: JSON.stringify({ audience: 'project' }),
+  })
+  return r.published_at
 }
 
 /**
@@ -102,6 +117,10 @@ export function PostDetail({
   const [asking, setAsking] = useState(false)
   /* "Link copied", for a moment, beside the menu it came from. */
   const [copied, setCopied] = useState<string | null>(null)
+  /* Publishing it, from its bar, and why it did not — said where
+     "Couldn't save" is. */
+  const [publishing, setPublishing] = useState(false)
+  const [notPublished, setNotPublished] = useState(false)
   /* An agent's announcement opened for changing by Edit — somebody else's
      words are never a field open for a keystroke until somebody asks. */
   const [editing, setEditing] = useState(false)
@@ -177,6 +196,27 @@ export function PostDetail({
   if (!post) return null
 
   const mine = post.author_id === meId
+  /* Its author's draft: only they see it, so whoever sees this is them. */
+  const draft = post.audience === 'author'
+  /* Moved before the server answers, and put back if it refuses — the
+     list hears it through `onChanged` and reads again. */
+  const publish = () => {
+    if (publishing) return
+    const was = post
+    setPublishing(true)
+    setNotPublished(false)
+    setPost({ ...post, audience: 'project', created_at: new Date().toISOString() })
+    publishPost(post.id)
+      .then((at) => {
+        setPost((p) => (p ? { ...p, audience: 'project', ...(at ? { created_at: at } : {}) } : p))
+        onChanged()
+      })
+      .catch(() => {
+        setPost((p) => (p ? { ...p, audience: was.audience ?? 'author', created_at: was.created_at } : p))
+        setNotPublished(true)
+      })
+      .finally(() => setPublishing(false))
+  }
   /*
    * Off the screen and out of the list at once; the delete and the list
    * follow, and the shell's toast offers it back for thirty seconds, on ⌘Z
@@ -239,7 +279,24 @@ export function PostDetail({
               {W.unsaved}
             </span>
           )}
+          {notPublished && (
+            <span data-not-published role="status" className="min-w-px truncate text-sm text-danger">
+              {W.couldNotPublish}
+            </span>
+          )}
           <span className="ml-auto flex items-center gap-2">
+            {/* A draft, to its author: what it is, and the press that
+                sends it. */}
+            {draft && (
+              <>
+                <span data-draft-only-you className="text-sm text-ink-3 max-sm:hidden">
+                  {W.draftOnlyYou}
+                </span>
+                <Button tone="primary" data-testid="publish-post" disabled={publishing} onClick={publish}>
+                  {W.publish}
+                </Button>
+              </>
+            )}
             {offered && editing && (
               <button
                 type="button"
@@ -262,13 +319,15 @@ export function PostDetail({
                 {copied}
               </span>
             )}
-            <SubscribePill
-              testId="follow-post"
-              on={Boolean(post.subscribed)}
-              path={`/posts/${post.id}`}
-              words={W}
-              onChange={(on) => setPost((p) => (p ? { ...p, subscribed: on } : p))}
-            />
+            {!draft && (
+              <SubscribePill
+                testId="follow-post"
+                on={Boolean(post.subscribed)}
+                path={`/posts/${post.id}`}
+                words={W}
+                onChange={(on) => setPost((p) => (p ? { ...p, subscribed: on } : p))}
+              />
+            )}
             <Popover
               shape="bare"
               width={232}
@@ -379,7 +438,8 @@ export function PostDetail({
               <div className="flex flex-col">
                 <span className="text-base font-medium text-ink">{post.author_name}</span>
                 <span className="text-base text-ink-2">
-                  {dayAndClock(post.created_at)}
+                  {/* A draft has not been said, so it has no hour yet. */}
+                  {draft ? <span data-post-draft-mark>{W.draft}</span> : dayAndClock(post.created_at)}
                   {post.schedule && <span data-schedule>{W.asked(post.schedule)}</span>}
                 </span>
               </div>
@@ -454,21 +514,24 @@ export function PostDetail({
 
             <div className="mt-6 flex flex-col gap-6">
               <MentionedIn type="post" id={post.id} />
-              <Discussion
-                title={HEADS.replies}
-                comments={comments}
-                meId={meId}
-                canWrite={canWrite}
-                canEditAny={canEditAny}
-                projectId={projectId}
-                post={`/posts/${post.id}/comments`}
-                /* And the list behind, whose card says how many replies. */
-                onChanged={() => {
-                  onChanged()
-                  return load()
-                }}
-                label={BAR.reply}
-              />
+              {/* No replies under a draft: nobody else can read it. */}
+              {!draft && (
+                <Discussion
+                  title={HEADS.replies}
+                  comments={comments}
+                  meId={meId}
+                  canWrite={canWrite}
+                  canEditAny={canEditAny}
+                  projectId={projectId}
+                  post={`/posts/${post.id}/comments`}
+                  /* And the list behind, whose card says how many replies. */
+                  onChanged={() => {
+                    onChanged()
+                    return load()
+                  }}
+                  label={BAR.reply}
+                />
+              )}
             </div>
           </div>
         </div>

@@ -139,6 +139,7 @@ public enum API {
         public let postInList: PostInList?
         public let postInProject: PostInProject?
         public let postPage: PostPage?
+        public let postPublished: PostPublished?
         public let postRead: PostRead?
         public let project: ProjectClass?
         public let projectBin: ProjectBin?
@@ -369,6 +370,7 @@ public enum API {
             case postInList = "PostInList"
             case postInProject = "PostInProject"
             case postPage = "PostPage"
+            case postPublished = "PostPublished"
             case postRead = "PostRead"
             case project = "Project"
             case projectBin = "ProjectBin"
@@ -473,7 +475,7 @@ public enum API {
             case workspaceSettings = "WorkspaceSettings"
         }
 
-        public init(activityEvent: ActivityEvent?, activityLine: ActivityLine?, activityPage: ActivityPage?, actor: Actor?, addressLink: AddressLink?, addressLinkAccount: AddressLinkAccount?, addressLinkKind: AddressLinkKind?, agentFacePick: AgentFacePick?, agentInRoom: AgentInRoom?, agentInRoomList: AgentInRoomList?, agentList: AgentList?, agentMade: AgentMade?, agentReachChanged: AgentReachChanged?, agentRow: AgentRow?, agentStatus: AgentStatus?, agentStatusList: AgentStatusList?, agentStatusSet: AgentStatusSet?, agentTokenMade: AgentTokenMade?, agentWork: AgentWork?, agentWorkTask: AgentWorkTask?, agentWorkTasks: AgentWorkTasks?, apiError: APIError?, apiToken: APIToken?, atNumber: AtNumber?, audienceChanged: AudienceChanged?, auditEvent: AuditEvent?, auditPage: AuditPage?, auditPeople: AuditPeople?, blockerAdded: BlockerAdded?, comment: Comment?, commentOnObject: CommentOnObject?, commentsPage: CommentsPage?, conversation: Conversation?, conversationInList: ConversationInList?, conversationList: ConversationList?, count: Count?, countOrNone: CountOrNone?, created: Created?, cycleInProject: CycleInProject?, cyclesInProject: CyclesInProject?, deletedFile: DeletedFile?, deletedFilesPage: DeletedFilesPage?, deletionPlan: DeletionPlan?, directMade: DirectMade?, docVersion: DocVersion?, docVersionPage: DocVersionPage?, docVersionRead: DocVersionRead?, docVersionRestored: DocVersionRestored?, feedbackPublic: FeedbackPublic?, feedbackSettings: FeedbackSettings?, file: File?, fileChanged: FileChanged?, fileImported: FileImported?, fileInDetail: FileInDetail?, fileInList: FileInList?, fileLink: FileLink?, fileRead: FileRead?, filesInProject: FilesInProject?, forAgentsChanged: ForAgentsChanged?, gifKey: GIFKey?, githubHello: GithubHello?, githubLink: GithubLink?, githubRepo: GithubRepo?, githubRepos: GithubRepos?, hoursByPerson: HoursByPerson?, hoursList: HoursList?, importProgress: ImportProgress?, importTeam: ImportTeam?, importTeams: ImportTeams?, inbox: Inbox?, inboxCodeSent: InboxCodeSent?, inboxSettings: InboxSettings?, instance: Instance?, instanceLetter: InstanceLetter?, instanceOwner: InstanceOwner?, invite: Invite?, inviteForMe: InviteForMe?, inviteList: InviteList?, inviteMade: InviteMade?, invitePreview: InvitePreview?, inviteRow: InviteRow?, labelInProject: LabelInProject?, labelOnTask: LabelOnTask?, labelsInProject: LabelsInProject?, leftWorkspace: LeftWorkspace?, linkBack: LinkBack?, linkPreview: LinkPreview?, linksBack: LinksBack?, listInProject: ListInProject?, listPage: ListPage?, listsInProject: ListsInProject?, mailSetup: MailSetup?, me: Me?, meActor: MeActor?, meEmail: MeEmail?, membership: Membership?, message: Message?, messageInRoom: MessageInRoom?, messagePage: MessagePage?, messagesImported: MessagesImported?, meWorkspace: MeWorkspace?, myTask: MyTask?, myTaskList: MyTaskList?, nameable: Nameable?, nameables: Nameables?, notification: Notification?, notificationInInbox: NotificationInInbox?, nowhereMe: NowhereMe?, nowhereSession: NowhereSession?, objectLink: ObjectLink?, openOnPerson: OpenOnPerson?, passwordChanged: PasswordChanged?, passwordSet: PasswordSet?, pending: PendingClass?, peopleList: PeopleList?, personDay: PersonDay?, personHours: PersonHours?, personInProject: PersonInProject?, personInWorkspace: PersonInWorkspace?, personOnPage: PersonOnPage?, personPage: PersonPage?, personWeek: PersonWeek?, post: Post?, postInList: PostInList?, postInProject: PostInProject?, postPage: PostPage?, postRead: PostRead?, project: ProjectClass?, projectBin: ProjectBin?, projectGithub: ProjectGithub?, projectInBin: ProjectInBin?, projectInList: ProjectInList?, projectMember: ProjectMember?, projectMembers: ProjectMembers?, projectPage: ProjectPage?, projectSlack: ProjectSlack?, providers: Providers?, publicShare: PublicShare?, pullOnTask: PullOnTask?, pushDevice: PushDevice?, pushDevices: PushDevices?, pushTried: PushTried?, pushTriedDevice: PushTriedDevice?, questionAnswer: QuestionAnswer?, questionChoice: QuestionChoice?, questionInInbox: QuestionInInbox?, realtimeEvent: RealtimeEvent?, recoveryCodes: RecoveryCodes?, removedFrom: RemovedFrom?, contractRepeat: Repeat?, rewait: Rewait?, roomHook: RoomHook?, roomHookAddress: RoomHookAddress?, roomHooks: RoomHooks?, roomPeople: RoomPeople?, roomPerson: RoomPerson?, savedTemplate: SavedTemplate?, savedTemplates: SavedTemplates?, searchResult: SearchResult?, searchResults: SearchResults?, serverRelease: ServerRelease?, serverUpdate: ServerUpdate?, serverVersion: ServerVersion?, session: SessionClass?, sessionRow: SessionRow?, sessions: Sessions?, setupMail: SetupMail?, setupState: SetupState?, sharedProject: SharedProject?, slackChannel: SlackChannel?, slackChannels: SlackChannels?, slackHello: SlackHello?, slackLink: SlackLink?, spendList: SpendList?, spendOnTask: SpendOnTask?, step: Step?, stepChanged: StepChanged?, stepMade: StepMade?, subscription: Subscription?, task: Task?, taskCard: TaskCard?, taskCardFace: TaskCardFace?, taskChanged: TaskChanged?, taskCopied: TaskCopied?, taskDeleted: TaskDeleted?, taskDuplicated: TaskDuplicated?, taskInDetail: TaskInDetail?, taskInList: TaskInList?, taskInProject: TaskInProject?, taskList: TaskList?, taskPage: TaskPage?, taskPicture: TaskPicture?, taskPrompt: TaskPrompt?, taskRead: TaskRead?, taskRelated: TaskRelated?, taskReminder: TaskReminder?, taskReminderSet: TaskReminderSet?, tasksImported: TasksImported?, templateChanged: TemplateChanged?, timeOnObject: TimeOnObject?, tokenMade: TokenMade?, tokenRow: TokenRow?, tokens: Tokens?, twoFactor: TwoFactor?, twoFactorBegun: TwoFactorBegun?, unconfirmedAnswered: UnconfirmedAnswered?, unconfirmedWorkspaces: UnconfirmedWorkspaces?, user: User?, verified: Verified?, versionContributor: VersionContributor?, waitingInvitations: WaitingInvitations?, wayIn: WayIn?, wayInAdded: WayInAdded?, wayInStart: WayInStart?, waysIn: WaysIn?, webhookChanged: WebhookChanged?, webhookMade: WebhookMade?, webhookRow: WebhookRow?, webhooks: Webhooks?, workspace: WorkspaceClass?, workspaceAddress: WorkspaceAddress?, workspaceErasing: WorkspaceErasing?, workspaceImport: WorkspaceImport?, workspaceImports: WorkspaceImports?, workspaceInList: WorkspaceInList?, workspaceList: WorkspaceList?, workspaceMade: WorkspaceMade?, workspaceSettings: WorkspaceSettings?) {
+        public init(activityEvent: ActivityEvent?, activityLine: ActivityLine?, activityPage: ActivityPage?, actor: Actor?, addressLink: AddressLink?, addressLinkAccount: AddressLinkAccount?, addressLinkKind: AddressLinkKind?, agentFacePick: AgentFacePick?, agentInRoom: AgentInRoom?, agentInRoomList: AgentInRoomList?, agentList: AgentList?, agentMade: AgentMade?, agentReachChanged: AgentReachChanged?, agentRow: AgentRow?, agentStatus: AgentStatus?, agentStatusList: AgentStatusList?, agentStatusSet: AgentStatusSet?, agentTokenMade: AgentTokenMade?, agentWork: AgentWork?, agentWorkTask: AgentWorkTask?, agentWorkTasks: AgentWorkTasks?, apiError: APIError?, apiToken: APIToken?, atNumber: AtNumber?, audienceChanged: AudienceChanged?, auditEvent: AuditEvent?, auditPage: AuditPage?, auditPeople: AuditPeople?, blockerAdded: BlockerAdded?, comment: Comment?, commentOnObject: CommentOnObject?, commentsPage: CommentsPage?, conversation: Conversation?, conversationInList: ConversationInList?, conversationList: ConversationList?, count: Count?, countOrNone: CountOrNone?, created: Created?, cycleInProject: CycleInProject?, cyclesInProject: CyclesInProject?, deletedFile: DeletedFile?, deletedFilesPage: DeletedFilesPage?, deletionPlan: DeletionPlan?, directMade: DirectMade?, docVersion: DocVersion?, docVersionPage: DocVersionPage?, docVersionRead: DocVersionRead?, docVersionRestored: DocVersionRestored?, feedbackPublic: FeedbackPublic?, feedbackSettings: FeedbackSettings?, file: File?, fileChanged: FileChanged?, fileImported: FileImported?, fileInDetail: FileInDetail?, fileInList: FileInList?, fileLink: FileLink?, fileRead: FileRead?, filesInProject: FilesInProject?, forAgentsChanged: ForAgentsChanged?, gifKey: GIFKey?, githubHello: GithubHello?, githubLink: GithubLink?, githubRepo: GithubRepo?, githubRepos: GithubRepos?, hoursByPerson: HoursByPerson?, hoursList: HoursList?, importProgress: ImportProgress?, importTeam: ImportTeam?, importTeams: ImportTeams?, inbox: Inbox?, inboxCodeSent: InboxCodeSent?, inboxSettings: InboxSettings?, instance: Instance?, instanceLetter: InstanceLetter?, instanceOwner: InstanceOwner?, invite: Invite?, inviteForMe: InviteForMe?, inviteList: InviteList?, inviteMade: InviteMade?, invitePreview: InvitePreview?, inviteRow: InviteRow?, labelInProject: LabelInProject?, labelOnTask: LabelOnTask?, labelsInProject: LabelsInProject?, leftWorkspace: LeftWorkspace?, linkBack: LinkBack?, linkPreview: LinkPreview?, linksBack: LinksBack?, listInProject: ListInProject?, listPage: ListPage?, listsInProject: ListsInProject?, mailSetup: MailSetup?, me: Me?, meActor: MeActor?, meEmail: MeEmail?, membership: Membership?, message: Message?, messageInRoom: MessageInRoom?, messagePage: MessagePage?, messagesImported: MessagesImported?, meWorkspace: MeWorkspace?, myTask: MyTask?, myTaskList: MyTaskList?, nameable: Nameable?, nameables: Nameables?, notification: Notification?, notificationInInbox: NotificationInInbox?, nowhereMe: NowhereMe?, nowhereSession: NowhereSession?, objectLink: ObjectLink?, openOnPerson: OpenOnPerson?, passwordChanged: PasswordChanged?, passwordSet: PasswordSet?, pending: PendingClass?, peopleList: PeopleList?, personDay: PersonDay?, personHours: PersonHours?, personInProject: PersonInProject?, personInWorkspace: PersonInWorkspace?, personOnPage: PersonOnPage?, personPage: PersonPage?, personWeek: PersonWeek?, post: Post?, postInList: PostInList?, postInProject: PostInProject?, postPage: PostPage?, postPublished: PostPublished?, postRead: PostRead?, project: ProjectClass?, projectBin: ProjectBin?, projectGithub: ProjectGithub?, projectInBin: ProjectInBin?, projectInList: ProjectInList?, projectMember: ProjectMember?, projectMembers: ProjectMembers?, projectPage: ProjectPage?, projectSlack: ProjectSlack?, providers: Providers?, publicShare: PublicShare?, pullOnTask: PullOnTask?, pushDevice: PushDevice?, pushDevices: PushDevices?, pushTried: PushTried?, pushTriedDevice: PushTriedDevice?, questionAnswer: QuestionAnswer?, questionChoice: QuestionChoice?, questionInInbox: QuestionInInbox?, realtimeEvent: RealtimeEvent?, recoveryCodes: RecoveryCodes?, removedFrom: RemovedFrom?, contractRepeat: Repeat?, rewait: Rewait?, roomHook: RoomHook?, roomHookAddress: RoomHookAddress?, roomHooks: RoomHooks?, roomPeople: RoomPeople?, roomPerson: RoomPerson?, savedTemplate: SavedTemplate?, savedTemplates: SavedTemplates?, searchResult: SearchResult?, searchResults: SearchResults?, serverRelease: ServerRelease?, serverUpdate: ServerUpdate?, serverVersion: ServerVersion?, session: SessionClass?, sessionRow: SessionRow?, sessions: Sessions?, setupMail: SetupMail?, setupState: SetupState?, sharedProject: SharedProject?, slackChannel: SlackChannel?, slackChannels: SlackChannels?, slackHello: SlackHello?, slackLink: SlackLink?, spendList: SpendList?, spendOnTask: SpendOnTask?, step: Step?, stepChanged: StepChanged?, stepMade: StepMade?, subscription: Subscription?, task: Task?, taskCard: TaskCard?, taskCardFace: TaskCardFace?, taskChanged: TaskChanged?, taskCopied: TaskCopied?, taskDeleted: TaskDeleted?, taskDuplicated: TaskDuplicated?, taskInDetail: TaskInDetail?, taskInList: TaskInList?, taskInProject: TaskInProject?, taskList: TaskList?, taskPage: TaskPage?, taskPicture: TaskPicture?, taskPrompt: TaskPrompt?, taskRead: TaskRead?, taskRelated: TaskRelated?, taskReminder: TaskReminder?, taskReminderSet: TaskReminderSet?, tasksImported: TasksImported?, templateChanged: TemplateChanged?, timeOnObject: TimeOnObject?, tokenMade: TokenMade?, tokenRow: TokenRow?, tokens: Tokens?, twoFactor: TwoFactor?, twoFactorBegun: TwoFactorBegun?, unconfirmedAnswered: UnconfirmedAnswered?, unconfirmedWorkspaces: UnconfirmedWorkspaces?, user: User?, verified: Verified?, versionContributor: VersionContributor?, waitingInvitations: WaitingInvitations?, wayIn: WayIn?, wayInAdded: WayInAdded?, wayInStart: WayInStart?, waysIn: WaysIn?, webhookChanged: WebhookChanged?, webhookMade: WebhookMade?, webhookRow: WebhookRow?, webhooks: Webhooks?, workspace: WorkspaceClass?, workspaceAddress: WorkspaceAddress?, workspaceErasing: WorkspaceErasing?, workspaceImport: WorkspaceImport?, workspaceImports: WorkspaceImports?, workspaceInList: WorkspaceInList?, workspaceList: WorkspaceList?, workspaceMade: WorkspaceMade?, workspaceSettings: WorkspaceSettings?) {
             self.activityEvent = activityEvent
             self.activityLine = activityLine
             self.activityPage = activityPage
@@ -600,6 +602,7 @@ public enum API {
             self.postInList = postInList
             self.postInProject = postInProject
             self.postPage = postPage
+            self.postPublished = postPublished
             self.postRead = postRead
             self.project = project
             self.projectBin = projectBin
@@ -4601,6 +4604,7 @@ public enum API {
 
     // MARK: - PostInProject
     public struct PostInProject: Codable, Sendable {
+        public let audience: String?
         public let authorAvatarURL: String?
         public let authorID: String?
         public let authorName: String?
@@ -4617,6 +4621,7 @@ public enum API {
         public let updatedAt: String?
 
         public enum CodingKeys: String, CodingKey {
+            case audience
             case authorAvatarURL = "author_avatar_url"
             case authorID = "author_id"
             case authorName = "author_name"
@@ -4630,7 +4635,8 @@ public enum API {
             case updatedAt = "updated_at"
         }
 
-        public init(authorAvatarURL: String?, authorID: String?, authorName: String?, body: [String: JSONAny]?, category: String?, createdAt: String, id: String, number: Int?, projectID: String?, publishedAt: String?, replyCount: Count?, schedule: String?, title: String, updatedAt: String?) {
+        public init(audience: String?, authorAvatarURL: String?, authorID: String?, authorName: String?, body: [String: JSONAny]?, category: String?, createdAt: String, id: String, number: Int?, projectID: String?, publishedAt: String?, replyCount: Count?, schedule: String?, title: String, updatedAt: String?) {
+            self.audience = audience
             self.authorAvatarURL = authorAvatarURL
             self.authorID = authorID
             self.authorName = authorName
@@ -4650,17 +4656,38 @@ public enum API {
 
     // MARK: - PostPage
     public struct PostPage: Codable, Sendable {
+        public let drafts: [PostInProject]?
         public let nextCursor: String?
         public let posts: [PostInProject]
 
         public enum CodingKeys: String, CodingKey {
+            case drafts
             case nextCursor = "next_cursor"
             case posts
         }
 
-        public init(nextCursor: String?, posts: [PostInProject]) {
+        public init(drafts: [PostInProject]?, nextCursor: String?, posts: [PostInProject]) {
+            self.drafts = drafts
             self.nextCursor = nextCursor
             self.posts = posts
+        }
+    }
+
+    // MARK: - PostPublished
+    public struct PostPublished: Codable, Sendable {
+        public let audience: String
+        public let ok: Bool
+        public let publishedAt: String?
+
+        public enum CodingKeys: String, CodingKey {
+            case audience, ok
+            case publishedAt = "published_at"
+        }
+
+        public init(audience: String, ok: Bool, publishedAt: String?) {
+            self.audience = audience
+            self.ok = ok
+            self.publishedAt = publishedAt
         }
     }
 
@@ -4685,6 +4712,7 @@ public enum API {
 
     // MARK: - PostClass
     public struct PostClass: Codable, Sendable {
+        public let audience: String?
         public let authorAgent: Bool?
         public let authorAvatarURL: String?
         public let authorID: String?
@@ -4704,6 +4732,7 @@ public enum API {
         public let updatedAt: String?
 
         public enum CodingKeys: String, CodingKey {
+            case audience
             case authorAgent = "author_agent"
             case authorAvatarURL = "author_avatar_url"
             case authorID = "author_id"
@@ -4721,7 +4750,8 @@ public enum API {
             case updatedAt = "updated_at"
         }
 
-        public init(authorAgent: Bool?, authorAvatarURL: String?, authorID: String?, authorName: String?, body: [String: JSONAny]?, category: String?, createdAt: String, id: String, mayDelete: Bool?, mayEdit: Bool?, number: Int?, projectID: String?, publishedAt: String?, replyCount: Count?, schedule: String?, subscribed: Bool?, title: String, updatedAt: String?) {
+        public init(audience: String?, authorAgent: Bool?, authorAvatarURL: String?, authorID: String?, authorName: String?, body: [String: JSONAny]?, category: String?, createdAt: String, id: String, mayDelete: Bool?, mayEdit: Bool?, number: Int?, projectID: String?, publishedAt: String?, replyCount: Count?, schedule: String?, subscribed: Bool?, title: String, updatedAt: String?) {
+            self.audience = audience
             self.authorAgent = authorAgent
             self.authorAvatarURL = authorAvatarURL
             self.authorID = authorID

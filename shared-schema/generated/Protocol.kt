@@ -393,6 +393,9 @@ data class Contract (
     @SerialName("PostPage")
     val postPage: PostPage? = null,
 
+    @SerialName("PostPublished")
+    val postPublished: PostPublished? = null,
+
     @SerialName("PostRead")
     val postRead: PostRead? = null,
 
@@ -3344,6 +3347,8 @@ data class PostInList (
 
 @Serializable
 data class PostInProject (
+    val audience: String? = null,
+
     @SerialName("author_avatar_url")
     val authorAvatarURL: String? = null,
 
@@ -3380,10 +3385,21 @@ data class PostInProject (
 
 @Serializable
 data class PostPage (
+    val drafts: List<PostInProject>? = null,
+
     @SerialName("next_cursor")
     val nextCursor: String? = null,
 
     val posts: List<PostInProject>
+)
+
+@Serializable
+data class PostPublished (
+    val audience: String,
+    val ok: Boolean,
+
+    @SerialName("published_at")
+    val publishedAt: String? = null
 )
 
 @Serializable
@@ -3398,6 +3414,8 @@ data class PostRead (
 
 @Serializable
 data class PostClass (
+    val audience: String? = null,
+
     @SerialName("author_agent")
     val authorAgent: Boolean? = null,
 

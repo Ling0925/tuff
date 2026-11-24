@@ -64,7 +64,7 @@ export const sql: Sql = postgres(env.databaseUrlApp, { ...OPTIONS, max: env.pool
  * anybody else — a mention's reader, a linked GitHub account — is not
  * bound by this token, and the worker, outside any request, never is.
  */
-type Bound = { actorId: string; projectIds: readonly string[]; sessionId: string | null; tokenId: string | null }
+type Bound = { actorId: string; projectIds: readonly string[]; sessionId: string | null; tokenId: string | null; viaTool: boolean }
 const scope = new AsyncLocalStorage<Bound>()
 
 /**
@@ -73,13 +73,38 @@ const scope = new AsyncLocalStorage<Bound>()
  * its person asks about first (`stillIn`).
  */
 export function bounded<T>(
-  who: { actorId: string; tokenProjectIds: readonly string[]; sessionId?: string | undefined; tokenId?: string | undefined },
+  who: {
+    actorId: string
+    tokenProjectIds: readonly string[]
+    sessionId?: string | undefined
+    tokenId?: string | undefined
+    viaMcp?: boolean | undefined
+    viaGithub?: boolean | undefined
+    viaImport?: string | undefined
+    agent?: boolean | undefined
+  },
   fn: () => T,
 ): T {
   return scope.run(
-    { actorId: who.actorId, projectIds: who.tokenProjectIds, sessionId: who.sessionId ?? null, tokenId: who.tokenId ?? null },
+    {
+      actorId: who.actorId,
+      projectIds: who.tokenProjectIds,
+      sessionId: who.sessionId ?? null,
+      tokenId: who.tokenId ?? null,
+      /* A token of any kind, an agent, GitHub or an import acting as
+         somebody — the database's floor under what `can()` keeps from a
+         tool (`via_tool()`, migration 320). */
+      viaTool: who.viaMcp === true || who.viaGithub === true || Boolean(who.viaImport) || who.agent === true,
+    },
     fn,
   )
+}
+
+/** `on` when the request is a tool's and the transaction its person's —
+    set every time, as the limit is. */
+function toolFor(actorId: string): string {
+  const b = scope.getStore()
+  return b && b.actorId === actorId && b.viaTool ? 'on' : ''
 }
 
 /** The settings for the limit, or empty strings for none — set every time,
@@ -168,6 +193,7 @@ function actorOn<T>(pool: Sql, actorId: string, workspaceId: string, fn: (tx: Tx
                           set_config('app.workspace_id', ${workspaceId}, true),
                           set_config('app.token_actor', ${tokenActor}, true),
                           set_config('app.token_projects', ${tokenProjects}, true),
+                          set_config('app.via_tool', ${toolFor(actorId)}, true),
                           auth_still_in(${who}::uuid, ${sid}::uuid, ${tid}::uuid)`.execute()
     const [, out] = await Promise.all([set, fn(tx)])
     return out
@@ -200,6 +226,7 @@ function everywhereOn<T>(pool: Sql, actorId: string, fn: (tx: Tx) => Promise<T>)
     const set = tx`select set_config('app.actor_id', ${actorId}, true),
                           set_config('app.token_actor', ${tokenActor}, true),
                           set_config('app.token_projects', ${tokenProjects}, true),
+                          set_config('app.via_tool', ${toolFor(actorId)}, true),
                           auth_still_in(${who}::uuid, ${sid}::uuid, ${tid}::uuid)`.execute()
     const [, out] = await Promise.all([set, fn(tx)])
     return out
