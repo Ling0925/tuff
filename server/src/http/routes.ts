@@ -72,6 +72,7 @@ import { oauth, oauthApi } from './oauth.js'
 import { apple } from './apple.js'
 import { android } from './android.js'
 import { remote } from '../mcp/remote.js'
+import { discovery } from './discovery.js'
 import { BadShape } from './badShape.js'
 import { Busy, busy, TooComplex, tooComplex } from '../mcp/markdownPool.js'
 import { edition } from '../edition.js'
@@ -1219,6 +1220,8 @@ app.route('/', oauth)
 app.route('/', apple)
 app.route('/', android)
 app.route('/', remote)
+/* Where an agent finds the API and the MCP server. */
+app.route('/', discovery)
 /* And outside `/api` with nobody signed in behind it, if anything. */
 edition.outside(app)
 

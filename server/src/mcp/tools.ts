@@ -40,8 +40,10 @@ type Doc = { type: string; attrs?: Record<string, unknown>; content?: Doc[] }
  * Said once, when an agent connects. The first agent through this drew a
  * button to "open the project" at an address it made up, on a domain that
  * is not ours, because nothing it was given said where anything was.
+ * And in the skill an agent finds before connecting
+ * (`http/discovery.ts`), so the two say the same.
  */
-const INSTRUCTIONS = `Tuff is a project manager: projects hold tasks, Docs, announcements and chat.
+export const INSTRUCTIONS = `Tuff is a project manager: projects hold tasks, Docs, announcements and chat.
 
 Links: every project, task, document and announcement in an answer carries a \`url\`, the address it opens at in Tuff. Link to things with that url, exactly as given. Never build or guess an address.
 
@@ -1522,7 +1524,7 @@ const adds = { readOnlyHint: false, destructiveHint: false, idempotentHint: fals
 /* It changes what is there, in place — not additive, though nothing it does
    is beyond doing again the other way. */
 const changes = { readOnlyHint: false, destructiveHint: true, idempotentHint: true }
-const ABOUT: Record<string, { title: string; readOnlyHint: boolean; destructiveHint: boolean; idempotentHint: boolean }> = {
+export const ABOUT: Record<string, { title: string; readOnlyHint: boolean; destructiveHint: boolean; idempotentHint: boolean }> = {
   list_projects: { title: 'List projects', ...reads },
   my_tasks: { title: 'My tasks', ...reads },
   my_mentions: { title: 'My mentions', ...reads },

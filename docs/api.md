@@ -3164,6 +3164,19 @@ somebody's text rather than as something to do. That is the weakest of the
 three defences. The others are that a token cannot exercise the dangerous
 actions at all, and that the person is named in the feed for whatever it does.
 
+### Discovery
+
+Where an agent finds the API and the MCP server without being told, on
+every server, each naming the server it is asked of (`APP_URL` in
+production, never the request's `Host`). No session; an hour's
+`Cache-Control`.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET HEAD | `/.well-known/api-catalog` | RFC 9727: `application/linkset+json; profile="https://www.rfc-editor.org/info/rfc9727"`, and `Link: <…/.well-known/api-catalog>; rel="api-catalog"` on both. `item` the two APIs, `/api` and `/mcp`; `/api` with `service-desc` (the generated `api.schema.json` in the public repository), `service-doc` (this document there) and `status` (`/health`); `/mcp` with `service-doc` (the skill below, and this document's MCP section) and `service-meta` (`/.well-known/oauth-protected-resource/mcp`) |
+| GET | `/.well-known/agent-skills/index.json` | the agent-skills discovery index (draft v0.2.0): `{ $schema, skills: [{ name: "tuff", type: "skill-md", description, url, digest }] }`, `digest` `sha256:` and the hex of the exact bytes `url` answers |
+| GET | `/.well-known/agent-skills/tuff/SKILL.md` | `text/markdown`: front matter (`name`, `description`), how to connect `/mcp`, every tool by name and title (`ABOUT` in `server/src/mcp/tools.ts`) and the instructions the server gives an agent when it connects |
+
 ## Import from Linear, Jira and Asana
 
 Tables `linear_import` (the key sealed in `key_enc`, a column the application role is not granted, cleared when the import ends) and `linear_import_parent`; `project.import_id` and `project.imported_from`. The worker writes through the last three doors with a two-minute token marked `via: 'import'` and the import's id; nothing else may call them, and they write only into projects that import made.
