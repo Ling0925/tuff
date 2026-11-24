@@ -175,3 +175,73 @@ test('the thread’s head stands clear of the line above it, and the pane does n
   await page.waitForTimeout(400)
   expect((await pane.boundingBox())!.height).toBe(height)
 })
+
+test('a thread beside the room is as wide as it is dragged, and over the room its whole head is the way back', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await login(page)
+  await page.locator('aside').getByText('acme-rebrand-main').click()
+  await expect(page.locator('[data-room-bar]')).toBeVisible({ timeout: 30_000 })
+  const words = `Thread width ${Date.now()}`
+  const root = await say(page, words)
+  await root.hover()
+  await root.getByRole('button', { name: 'Reply in thread' }).click()
+  const pane = page.locator('[data-thread]')
+  await expect(pane.locator('[data-message]').first()).toBeVisible({ timeout: 15_000 })
+  const width = () => pane.evaluate((el) => Math.round(el.getBoundingClientRect().width))
+  await expect.poll(width).toBe(360)
+  const room = () =>
+    page
+      .locator('[data-room-bar]')
+      .first()
+      .evaluate((el) => Math.round(el.getBoundingClientRect().width))
+  const roomBefore = await room()
+  /* The pane rides in on its frame for a fifth of a second; the handle is
+     taken where it comes to rest, not where it was on the way. */
+  const handleAt = () =>
+    page
+      .locator('[data-resizer="Thread Width"]')
+      .boundingBox()
+      .then((b) => Math.round(b?.x ?? 0))
+  let was = -1
+  await expect
+    .poll(async () => {
+      const now = await handleAt()
+      const still = now === was
+      was = now
+      return still
+    })
+    .toBe(true)
+
+  /* Dragged left from its left edge, it widens; the room keeps its width. */
+  const handle = page.locator('[data-resizer="Thread Width"]')
+  const box = (await handle.boundingBox())!
+  const x = box.x + box.width / 2
+  const y = box.y + box.height / 2
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  await page.mouse.move(x - 50, y, { steps: 4 })
+  await page.mouse.move(x - 100, y, { steps: 4 })
+  await page.mouse.up()
+  await expect.poll(width).toBe(460)
+  expect(Math.abs((await room()) - roomBefore)).toBeLessThanOrEqual(1)
+
+  /* Kept through a reload — a thread opened again opens at that width —
+     then put back by a double-click. */
+  await page.reload()
+  const again = page.locator('[data-history] [data-message]').filter({ hasText: words })
+  await again.hover({ timeout: 15_000 })
+  await again.getByRole('button', { name: 'Reply in thread' }).click()
+  await expect(pane.locator('[data-message]').first()).toBeVisible({ timeout: 15_000 })
+  await expect.poll(width).toBe(460)
+  await handle.dblclick()
+  await expect.poll(width).toBe(360)
+
+  /* Too narrow for both: over the room, and the arrow, the word and the
+     room's name are one button that goes back. */
+  await page.setViewportSize({ width: 800, height: 900 })
+  const back = pane.getByTestId('close-thread')
+  await expect(back.locator('[data-thread-title]')).toBeVisible()
+  await expect(back).toContainText('main')
+  await back.click()
+  await expect(pane).toHaveCount(0)
+})

@@ -221,6 +221,7 @@ const BARS = {
     sidebarWidth: 'Sidebar Width',
     toolsWidth: 'Tools Width',
     besideWidth: 'Conversation Width',
+    threadWidth: 'Thread Width',
   },
   es: {
     search: 'Buscar',
@@ -231,6 +232,7 @@ const BARS = {
     sidebarWidth: 'Ancho de la barra lateral',
     toolsWidth: 'Ancho de las herramientas',
     besideWidth: 'Ancho de la conversación',
+    threadWidth: 'Ancho del hilo',
   },
   fr: {
     search: 'Rechercher',
@@ -241,6 +243,7 @@ const BARS = {
     sidebarWidth: 'Largeur de la barre latérale',
     toolsWidth: 'Largeur des outils',
     besideWidth: 'Largeur de la conversation',
+    threadWidth: 'Largeur du fil',
   },
 } as const
 
