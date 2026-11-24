@@ -241,7 +241,7 @@ export function NewChat({
       onClose={onClose}
       footer={
         tab === 'channel' ? (
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex flex-1 items-center justify-end gap-2">
             <button onClick={onClose} className="h-8 px-3 text-base font-medium text-ink-2">
               {MORE.cancel}
             </button>
@@ -259,8 +259,10 @@ export function NewChat({
       }
     >
       <div className="flex flex-col">
+        {/* Sixteen on every side of the switch: the title's row leaves four
+            under itself, so twelve more above, and sixteen below. */}
         {canChannel && (
-          <div className="px-4 pt-1 pb-3">
+          <div className="px-4 pt-3 pb-4">
             <Segments
               fill
               items={[

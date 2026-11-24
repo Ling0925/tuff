@@ -95,7 +95,7 @@ export function RoomHooksWindow({
       testId="room-hooks"
       onClose={onClose}
       footer={
-        <div className="flex justify-end">
+        <div className="flex flex-1 justify-end">
           <Button tone="primary" data-testid="room-hooks-done" onClick={onClose}>
             {W.done}
           </Button>
