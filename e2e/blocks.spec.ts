@@ -98,7 +98,8 @@ test('a callout and a toggle are put in from the slash list, and kept', async ({
 })
 
 test('a long document has its headings beside it, which follow the reading and do not move it', async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 900 })
+  /* Wide enough for the outline beside a column as wide as a task's. */
+  await page.setViewportSize({ width: 1920, height: 1000 })
   await login(page)
   await openProject(page, 'Website')
   const filler = Array.from({ length: 30 }, (_, i) => para(`Line ${i + 1} of a long document.`))
@@ -148,8 +149,8 @@ test('a long document has its headings beside it, which follow the reading and d
   const heights = await drawnWhole(page, '[data-outline]', () => row.click())
   expect(heights.length).toBe(1)
 
-  /* A narrow window has no room for it, and the document does not move. */
-  await page.setViewportSize({ width: 1100, height: 900 })
+  /* A narrower window has no room for it, and the document does not move. */
+  await page.setViewportSize({ width: 1440, height: 900 })
   await expect(page.locator('[data-outline]')).toHaveCount(0)
 })
 

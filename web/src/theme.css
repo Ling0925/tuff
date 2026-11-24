@@ -2010,21 +2010,12 @@
 }
 /*
  * The measure. Words wider than about seventy characters make the eye lose
- * its place on the way back, and a task's description at 800 wide was a
- * hundred and ten. Tables, code and pictures keep the whole width — they
- * are not lines to be read back along.
+ * its place on the way back, and a task's description or a document at 800
+ * wide was a hundred and ten. Tables, code and pictures keep the whole
+ * width — they are not lines to be read back along.
  */
 .prose-body .ProseMirror > :is(p, h1, h2, h3, ul, ol, blockquote) {
   max-width: 70ch;
-}
-/*
- * Except in a document, whose column is already 640 — Google Docs' 624 on a
- * Letter page, about eighty-five characters at 15. Seventy there drew the
- * words some hundred pixels inside their own column, and a document is
- * what gets held up beside Google Docs and Notion and read as narrow.
- */
-[data-document] .prose-body .ProseMirror > :is(p, h1, h2, h3, ul, ol, blockquote) {
-  max-width: none;
 }
 .prose-body .ProseMirror h1,
 .prose-body .ProseMirror h2,

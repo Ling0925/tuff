@@ -962,7 +962,11 @@ export function FileDetail({
         <div className="relative flex min-h-0 flex-1 flex-col" {...drop.handlers}>
           {drop.held && <DropHere bleed said={EDITOR.dropIntoDocument} />}
           <div data-foot className="reads min-h-0 flex-1 overflow-y-auto pt-4">
-            <div ref={column} data-document className="relative max-w-[640px]">
+            {/* As wide as a task's column, and its words held to the same
+              measure, so a document and a task opened one after the other
+              stand in one column. It was 640, and read as the
+              narrower of the two. */}
+            <div ref={column} data-document className="relative max-w-[800px]">
               {/* The open threads' words tinted, the one whose card is open
                 more. Ids are uuids. */}
               {openIds.length > 0 && (
