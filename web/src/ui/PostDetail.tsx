@@ -446,7 +446,9 @@ export function PostDetail({
       <div className="relative flex min-h-0 flex-1 flex-col" {...drop.handlers}>
         {drop.held && <DropHere bleed said={EDITOR.dropIntoPost} />}
         <div data-foot className="reads min-h-0 flex-1 overflow-y-auto pt-4">
-          <div className="max-w-[720px]">
+          {/* As wide as a task's column and a document's, so the three
+            things a project opens stand in one column. */}
+          <div className="max-w-[800px]">
             <div className="flex items-center gap-3">
               <Avatar name={post.author_name} id={post.author_id} url={post.author_avatar_url} size={28} />
               <div className="flex flex-col">
