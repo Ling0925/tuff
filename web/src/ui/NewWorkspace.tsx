@@ -147,69 +147,51 @@ export function NewWorkspace({ onClose }: { onClose: () => void }) {
       }
     >
       <div className="flex flex-col gap-4 px-4 pt-2 pb-4">
-        <div className="flex items-center gap-3">
-          <WorkspaceMark look={look} size={48} />
-          <label className="flex min-w-px flex-1 flex-col gap-1">
-            <span className="text-sm text-ink-3">{W.name}</span>
-            <input
-              {...notALogin}
-              autoFocus
-              data-testid="workspace-name"
-              value={name}
-              maxLength={80}
-              placeholder="Acme Studio"
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && void create()}
-              className="h-10 rounded-[var(--r-row)] px-3 text-base outline-none bg-sunken text-ink"
-            />
-          </label>
-        </div>
-
-        <label className="flex flex-col gap-1">
-          <span className="text-sm text-ink-3">{W.address}</span>
-          <span className="flex h-10 items-center rounded-[var(--r-row)] pl-3 text-base bg-sunken">
-            <span className="shrink-0 text-ink-3">{location.host}/</span>
-            <input
-              {...notALogin}
-              {...asTyped}
-              data-testid="workspace-slug"
-              value={slug}
-              maxLength={40}
-              spellCheck={false}
-              autoCapitalize="off"
-              onChange={(e) => {
-                setOwnSlug(e.target.value.trim() !== '')
-                setSlug(e.target.value.toLowerCase().replace(/\s+/g, '-'))
-              }}
-              onKeyDown={(e) => e.key === 'Enter' && void create()}
-              className="h-full min-w-px flex-1 bg-transparent pr-3 outline-none text-ink"
-            />
-          </span>
-          <AddressSays
-            address={address}
-            onUse={(s) => {
-              setOwnSlug(true)
-              setSlug(s)
-            }}
-          />
-        </label>
-
+        {/* The mark first, as an avatar is set: what it looks like, the
+            picture or the way to one beside it, and the glyph and colour
+            under; then the name and the address it makes. */}
         <div className="flex flex-col gap-2">
           <span className="text-sm text-ink-3">{W.icon}</span>
-          {picture ? (
-            <div className="flex items-center gap-3 text-base">
-              <span className="text-ink-2">{picture.name}</span>
-              <button data-testid="workspace-picture-remove" onClick={() => setPicture(null)} className="font-medium text-accent">
-                {W.removePicture}
-              </button>
-            </div>
-          ) : (
+          <div className="flex items-center gap-3">
+            <WorkspaceMark look={look} size={48} />
+            {picture ? (
+              <div className="flex items-center gap-3 text-base">
+                <span className="text-ink-2">{picture.name}</span>
+                <button data-testid="workspace-picture-remove" onClick={() => setPicture(null)} className="font-medium text-accent">
+                  {W.removePicture}
+                </button>
+              </div>
+            ) : (
+              <label className="flex h-8 cursor-pointer items-center gap-2 rounded-full px-3 text-base font-medium bg-hover text-ink">
+                <Icon name="upload" size={16} />
+                {W.uploadPicture}
+                <input
+                  type="file"
+                  accept="image/*"
+                  data-testid="workspace-picture"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const f = e.target.files?.[0]
+                    e.target.value = ''
+                    if (!f) return
+                    /* Made fit as every mark is — `data/picture.ts` — and a
+                       refusal said rather than the press doing nothing. */
+                    const fit = await pictureFor(f)
+                    if ('refused' in fit) return setFailed(fit.refused)
+                    setFailed(null)
+                    setPicture(fit)
+                  }}
+                />
+              </label>
+            )}
+          </div>
+          {!picture && (
             <>
               <div
                 role="radiogroup"
                 aria-label={W.symbol}
                 className="flex flex-wrap items-center gap-1 self-start p-1 bg-track"
-                style={{ borderRadius: 'var(--r-pill)' }}
+                style={{ borderRadius: 'var(--r-panel)' }}
               >
                 {[null, ...PROJECT_MARKS].map((g) => {
                   const on = icon === g
@@ -239,7 +221,7 @@ export function NewWorkspace({ onClose }: { onClose: () => void }) {
                 role="radiogroup"
                 aria-label={W.colour}
                 className="flex flex-wrap items-center gap-1 self-start p-1 bg-track"
-                style={{ borderRadius: 'var(--r-pill)' }}
+                style={{ borderRadius: 'var(--r-panel)' }}
               >
                 {Array.from({ length: 10 }, (_, i) => i).map((i) => {
                   const on = (tint ?? -1) === i
@@ -265,30 +247,51 @@ export function NewWorkspace({ onClose }: { onClose: () => void }) {
               </div>
             </>
           )}
-          {!picture && (
-            <label className="flex h-8 cursor-pointer items-center gap-2 self-start rounded-full px-3 text-base font-medium bg-hover text-ink">
-              <Icon name="upload" size={16} />
-              {W.uploadPicture}
-              <input
-                type="file"
-                accept="image/*"
-                data-testid="workspace-picture"
-                className="hidden"
-                onChange={async (e) => {
-                  const f = e.target.files?.[0]
-                  e.target.value = ''
-                  if (!f) return
-                  /* Made fit as every mark is — `data/picture.ts` — and a
-                     refusal said rather than the press doing nothing. */
-                  const fit = await pictureFor(f)
-                  if ('refused' in fit) return setFailed(fit.refused)
-                  setFailed(null)
-                  setPicture(fit)
-                }}
-              />
-            </label>
-          )}
         </div>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-sm text-ink-3">{W.name}</span>
+          <input
+            {...notALogin}
+            autoFocus
+            data-testid="workspace-name"
+            value={name}
+            maxLength={80}
+            placeholder="Acme Studio"
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && void create()}
+            className="h-10 rounded-[var(--r-row)] px-3 text-base outline-none bg-sunken text-ink"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-sm text-ink-3">{W.address}</span>
+          <span className="flex h-10 items-center rounded-[var(--r-row)] pl-3 text-base bg-sunken">
+            <span className="shrink-0 text-ink-3">{location.host}/</span>
+            <input
+              {...notALogin}
+              {...asTyped}
+              data-testid="workspace-slug"
+              value={slug}
+              maxLength={40}
+              spellCheck={false}
+              autoCapitalize="off"
+              onChange={(e) => {
+                setOwnSlug(e.target.value.trim() !== '')
+                setSlug(e.target.value.toLowerCase().replace(/\s+/g, '-'))
+              }}
+              onKeyDown={(e) => e.key === 'Enter' && void create()}
+              className="h-full min-w-px flex-1 bg-transparent pr-3 outline-none text-ink"
+            />
+          </span>
+          <AddressSays
+            address={address}
+            onUse={(s) => {
+              setOwnSlug(true)
+              setSlug(s)
+            }}
+          />
+        </label>
       </div>
     </Dialog>
   )

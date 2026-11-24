@@ -190,7 +190,7 @@ export function Identity({ look, onChanged }: { look: Look; onChanged: () => Pro
                 aria-label={W.symbol}
                 data-workspace-glyphs={now.mark_icon ?? 'letter'}
                 className="flex max-w-full flex-wrap items-center gap-1 self-start p-1 bg-track"
-                style={{ borderRadius: 'var(--r-pill)' }}
+                style={{ borderRadius: 'var(--r-panel)' }}
               >
                 {[null, ...PROJECT_MARKS].map((g) => {
                   const on = (now.mark_icon ?? null) === g
@@ -220,7 +220,7 @@ export function Identity({ look, onChanged }: { look: Look; onChanged: () => Pro
                 role="radiogroup"
                 aria-label={W.colour}
                 className="flex max-w-full flex-wrap items-center gap-1 self-start p-1 bg-track"
-                style={{ borderRadius: 'var(--r-pill)' }}
+                style={{ borderRadius: 'var(--r-panel)' }}
               >
                 {Array.from({ length: 10 }, (_, i) => i).map((i) => {
                   const on = (now.mark_tint ?? null) === i

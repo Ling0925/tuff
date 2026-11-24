@@ -147,7 +147,7 @@ export function LabelRow({ label, may, onChanged }: { label: Label & { used: num
           role="radiogroup"
           aria-label={W.colourOf(label.name)}
           className="flex w-fit shrink-0 flex-wrap items-center gap-1 p-1 bg-track"
-          style={{ borderRadius: 'var(--r-pill)' }}
+          style={{ borderRadius: 'var(--r-panel)' }}
         >
           {[['none', tintOf(label.id)] as const, ...LIST_TINTS].map(([id, paint]) => {
             const on = (label.color ?? 'none') === id
@@ -502,7 +502,7 @@ export function ListRow({
             role="radiogroup"
             aria-label={PROJECT.itsColour}
             className="flex max-w-full min-w-0 flex-wrap items-center gap-1 p-1 bg-track"
-            style={{ borderRadius: 'var(--r-pill)' }}
+            style={{ borderRadius: 'var(--r-panel)' }}
           >
             {[['none', ''] as const, ...LIST_TINTS].map(([id, paint]) => {
               const on = (list.color ?? 'none') === id
