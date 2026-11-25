@@ -22,6 +22,7 @@ import {
   swipeUp,
   backFromMade,
   readToEnd,
+  withoutMail,
 } from './helpers.js'
 
 test('the keyboard reaches every project without touching the sidebar', async ({ page }) => {
@@ -2662,7 +2663,13 @@ test('people are invited by email, onto projects, holding what they may do there
 
   await expect(page.getByTestId('invite-send')).toHaveText('Send 2 invitations')
   await page.getByTestId('invite-send').click()
-  await expect(window.locator('[data-invite-sent]')).toContainText('Sent to 2 people', { timeout: 15_000 })
+  /* Mailed, or — on a server with no mail — handed over by hand, a link
+     for each, which is `invite-by-hand.spec.ts`'s to follow. */
+  if (await withoutMail()) {
+    await expect(window.locator('[data-invite-by-hand]')).toHaveCount(2, { timeout: 15_000 })
+  } else {
+    await expect(window.locator('[data-invite-sent]')).toContainText('Sent to 2 people', { timeout: 15_000 })
+  }
   await window.getByRole('button', { name: 'Done' }).click()
 
   // Out, with who, onto what, and until when.
@@ -12335,6 +12342,12 @@ test('a workspace is made with a name, an address and a mark, and people are ask
   await field.fill(`one-${stamp}@example.com, `)
   await expect(page.locator('[data-invite-email]')).toHaveCount(1)
   await page.getByTestId('invite-send').click()
+  /* A server with no mail hands the link over instead, and the window
+     stays open with it until somebody goes on to the workspace. */
+  if (await withoutMail()) {
+    await expect(page.locator(`[data-invite-by-hand="one-${stamp}@example.com"]`)).toBeVisible({ timeout: 15_000 })
+    await page.getByTestId('invite-skip').click()
+  }
 
   await expect(page).toHaveURL(new RegExp(`/own-${stamp}`), { timeout: 15_000 })
   await expect(page.locator('[data-workspace-mark="rocket"]').first()).toBeVisible({ timeout: 15_000 })

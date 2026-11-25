@@ -1,5 +1,17 @@
 import { test, expect } from '@playwright/test'
-import { account, add, drawnWhole, letterTo, login, openAccount, openProject, openSettings, PASSWORD } from './helpers.js'
+import {
+  account,
+  add,
+  drawnWhole,
+  letterTo,
+  login,
+  NEEDS_MAIL,
+  openAccount,
+  openProject,
+  openSettings,
+  PASSWORD,
+  withoutMail,
+} from './helpers.js'
 
 test('signing in lands on a workspace with its projects', async ({ page }) => {
   await login(page)
@@ -94,6 +106,7 @@ test('an invitation link opens a way in, and joining signs in', async ({ page, b
 })
 
 test('somebody signed in joins a second workspace with one press, and the owner hands it to them', async ({ page, browser }) => {
+  test.skip(await withoutMail(), NEEDS_MAIL)
   test.setTimeout(90_000)
   await login(page)
   await page.goto('/')
@@ -352,6 +365,7 @@ test('two windows open on a session that has to be renewed, and both stay signed
  * says where it went.
  */
 test('signing up asks for a name and an email, and waits for the letter', async ({ page }) => {
+  test.skip(await withoutMail(), NEEDS_MAIL)
   await page.goto('/signup')
   const stamp = Date.now()
   const email = `new-${stamp}@example.com`
@@ -380,6 +394,7 @@ test('signing up asks for a name and an email, and waits for the letter', async 
  * moves nothing.
  */
 test('the letter asks for a password, and choosing it lands in the new workspace', async ({ page }) => {
+  test.skip(await withoutMail(), NEEDS_MAIL)
   await page.goto('/signup')
   const stamp = Date.now()
   const email = `chooser-${stamp}@example.com`
@@ -420,6 +435,7 @@ test('the letter asks for a password, and choosing it lands in the new workspace
  * account it is and to sign in to it, and comes back to the press.
  */
 test('a new email is confirmed by a press from the account that asked, wherever the letter is opened', async ({ page, browser }) => {
+  test.skip(await withoutMail(), NEEDS_MAIL)
   // An account of its own: the studio's people keep their addresses.
   await page.goto('/signup')
   const stamp = Date.now()
@@ -488,6 +504,7 @@ test('a new email is confirmed by a press from the account that asked, wherever 
 })
 
 test('a forgotten password has a way back, and a spent link says so', async ({ page }) => {
+  test.skip(await withoutMail(), NEEDS_MAIL)
   await page.goto('/signin')
   await page.getByTestId('to-forgot').click()
   await page.getByTestId('forgot-email').fill(`nobody-${Date.now()}@example.com`)

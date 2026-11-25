@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import { drawnWhole, letterTo, login, openProject, PASSWORD } from './helpers.js'
+import { drawnWhole, invitationTo, login, openProject, PASSWORD } from './helpers.js'
 
 /*
  * An announcement can wait as its author's draft.
@@ -22,8 +22,8 @@ test('Save draft keeps an announcement its author’s, and Publish gives it to t
   const stamp = Date.now()
   const email = `lee${stamp}@example.com`
 
-  /* Another member of Onboarding, who joins by the letter. */
-  const projectId = await page.evaluate(async (address) => {
+  /* Another member of Onboarding, who joins by the invitation. */
+  const { projectId, token } = await page.evaluate(async (address) => {
     const s = JSON.parse(localStorage.getItem('session') ?? '{}') as { access_token?: string }
     const h = { authorization: `Bearer ${s.access_token}`, 'x-api-version': '1', 'content-type': 'application/json' }
     const { projects } = (await (await fetch('/api/projects', { headers: h })).json()) as { projects: { id: string; name: string }[] }
@@ -33,11 +33,12 @@ test('Save draft keeps an announcement its author’s, and Publish gives it to t
       headers: h,
       body: JSON.stringify({ email: address, project_ids: [p.id] }),
     })
-    return invite.ok ? p.id : `invite ${invite.status}`
+    if (!invite.ok) return { projectId: `invite ${invite.status}`, token: undefined }
+    return { projectId: p.id, token: ((await invite.json()) as { token?: string }).token }
   }, email)
   expect(projectId).toMatch(/^[0-9a-f-]{36}$/)
   const them = await (await browser.newContext()).newPage()
-  await them.goto(await letterTo(email, 'invite'))
+  await them.goto(await invitationTo(email, token))
   await them.getByTestId('join-name').fill(`Lee ${stamp}`)
   await them.getByTestId('join-email').fill(email)
   await them.getByTestId('join-password').fill(PASSWORD)

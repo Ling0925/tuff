@@ -599,6 +599,27 @@ export async function drawnWhole(page: Page, selector: string, open: () => Promi
 }
 
 /**
+ * Whether the server under test sends no mail: a server of one's own with
+ * none set up, which `GET /auth/providers` says as `no_mail` (always false
+ * on the service). There an invitation's link is handed over by hand, and
+ * no confirmation or reset letter goes anywhere — as it should, so a test
+ * that follows a letter skips itself there and says why, rather than
+ * waiting ten seconds for a letter that was never going to be written.
+ * `invite-by-hand.spec.ts` is the test of that server, and runs only there.
+ * Asked once per worker: the answer does not change during a run.
+ */
+let mailless: Promise<boolean> | null = null
+export function withoutMail(): Promise<boolean> {
+  mailless ??= fetch(new URL('/auth/providers', test.info().project.use.baseURL ?? 'http://localhost:5180'))
+    .then((r) => r.json() as Promise<{ no_mail?: boolean }>)
+    .then((b) => b.no_mail === true)
+  return mailless
+}
+
+/** What a test that follows a letter says when it skips itself — `withoutMail`. */
+export const NEEDS_MAIL = 'follows a letter, and this server has no mail set up'
+
+/**
  * The link in the last letter to an address — `/reset/…`, `/verify/…` —
  * read from the file the server writes its letters to when `pnpm check` or
  * CI starts it (`MAIL_OUTBOX_FILE`, `server/src/mail.ts`). Waited for: the
@@ -624,6 +645,18 @@ export async function letterTo(email: string, path: string): Promise<string> {
     )
     .not.toBeNull()
   return link!
+}
+
+/**
+ * Where an invitation to an address is followed from: its letter, or the
+ * link the invitation's own answer carried (`token`), which is how a
+ * server with no mail hands it over instead of sending it
+ * (`invite-by-hand.spec.ts`). The service answers an invitation it mailed
+ * with no token. Either way, whoever follows it proves the address it was
+ * for, so a test that only needs somebody in by an invitation runs on both.
+ */
+export async function invitationTo(email: string, token: string | undefined): Promise<string> {
+  return token ? `/invite/${token}` : letterTo(email, 'invite')
 }
 
 /**

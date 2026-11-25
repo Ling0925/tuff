@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { letterTo, login, openProject, PASSWORD } from './helpers.js'
+import { invitationTo, login, openProject, PASSWORD } from './helpers.js'
 
 /*
  * An agent's announcement is changed by whoever connected the agent.
@@ -16,7 +16,8 @@ test('whoever connected an agent edits its announcement; a member who did not is
   const email = `kit${stamp}@example.com`
 
   /* A member onto Onboarding, invited by address — joining by the letter
-     proves it, and an unproved address connects no agent — holding nothing
+     (or by the link handed over, on a server with no mail) proves it, and
+     an unproved address connects no agent — holding nothing
      beyond being on it; and an announcement there by an agent the owner
      connected. */
   const made = await page.evaluate(
@@ -31,6 +32,7 @@ test('whoever connected an agent edits its announcement; a member who did not is
         body: JSON.stringify({ email, project_ids: [p.id], rights: [] }),
       })
       if (!invite.ok) return { error: `invite ${invite.status}` }
+      const { token: invitation } = (await invite.json()) as { token?: string }
       const agent = await fetch('/api/agents', {
         method: 'POST',
         headers: h,
@@ -48,19 +50,20 @@ test('whoever connected an agent edits its announcement; a member who did not is
         }),
       })
       if (!said.ok) return { error: `post ${said.status}` }
-      return { projectId: p.id, ownersAgent: agent_id, ownersTitle: title }
+      return { projectId: p.id, ownersAgent: agent_id, ownersTitle: title, invitation }
     },
     { n: stamp, email },
   )
   expect('error' in made, JSON.stringify(made)).toBe(false)
-  const { projectId, ownersAgent, ownersTitle } = made as {
+  const { projectId, ownersAgent, ownersTitle, invitation } = made as {
     projectId: string
     ownersAgent: string
     ownersTitle: string
+    invitation?: string
   }
 
   const them = await (await browser.newContext()).newPage()
-  await them.goto(await letterTo(email, 'invite'))
+  await them.goto(await invitationTo(email, invitation))
   await them.getByTestId('join-name').fill(`Kit ${stamp}`)
   await them.getByTestId('join-email').fill(email)
   await them.getByTestId('join-password').fill(PASSWORD)

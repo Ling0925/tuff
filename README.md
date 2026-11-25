@@ -386,7 +386,13 @@ pnpm web                          # the web app, http://localhost:5180
 `pnpm check` runs everything before a commit: the types, the lint, the
 permission matrix, the server's tests against the database, the build and
 the browser tests (Playwright: `pnpm exec playwright install chromium`
-once). `NO_E2E=1 pnpm check` leaves the browser out and says so.
+once). `NO_E2E=1 pnpm check` leaves the browser out and says so. It uses
+the Postgres already answering at `DATABASE_URL` if there is one, and
+starts the one in `docker-compose.dev.yml` only when nothing does. The
+seed makes its first account the server's owner and opens sign-up. With
+no mail set up, the browser tests that follow an email skip themselves
+and say so, and the test of handing an invitation over by hand runs
+instead.
 
 `pnpm dev:account`, `pnpm seed` and `pnpm load` make accounts whose
 password is in this repository, so they refuse to run with

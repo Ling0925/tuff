@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { add, login, make, openProject, openSettings } from './helpers.js'
+import { add, login, make, NEEDS_MAIL, openProject, openSettings, withoutMail } from './helpers.js'
 
 test('a webhook is turned off and on, sent only the events picked, tested, and deleted after asking', async ({ page }) => {
   await login(page)
@@ -108,7 +108,11 @@ test('an agent is renamed on its page and given a new token there, shown once', 
   expect(answers).toEqual([401, 200])
 })
 
-test('a pending invitation is sent again from its row, and a link is copied new', async ({ page }) => {
+/* By mail: a server with
+   none hands the link over instead, and the next test is the half that
+   holds there too. */
+test('a pending invitation is sent again from its row', async ({ page }) => {
+  test.skip(await withoutMail(), NEEDS_MAIL)
   await login(page)
   await page.getByTestId('nav-members').click()
   const stamp = Date.now()
@@ -131,7 +135,11 @@ test('a pending invitation is sent again from its row, and a link is copied new'
   expect((await resent).status()).toBe(200)
   await expect(out.locator('[data-invite-said]')).toHaveText('Sent again. The old link no longer works.')
   await expect(out).toHaveCount(1)
+})
 
+test('an invitation by link is copied new from its row, and the old one stops', async ({ page }) => {
+  await login(page)
+  await page.getByTestId('nav-members').click()
   // With no address: a new link, copied, the old one stopped.
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
   await page.getByTestId('members-add').click()
