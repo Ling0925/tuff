@@ -27,6 +27,8 @@ export type Block = {
       better — H1 is clearer than any drawing of a heading. */
   icon: IconName | string
   keys?: string
+  /** More words that find it when typed after the slash, beside `said`. */
+  find?: string
   run: (e: Tip) => void
 }
 
@@ -44,11 +46,26 @@ export const BLOCKS: Block[] = [
   /* Three by three with a header, the caret in the first cell: the size a
      table starts at and then grows from. */
   { id: 'table', said: W.table, icon: 'table', run: (e) => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
-  // These two are handled by the component, which owns the file input and
-  // the field a link is typed into.
+  // These three are handled by the component, which owns the file input,
+  // the field a link is typed into and the list # opens.
   { id: 'link', said: W.link, icon: 'link', run: () => {} },
+  /* The # list, opened from here for whoever does not know the #. */
+  { id: 'ref', said: W.linkTo, icon: 'doc', find: W.linkToFind, run: () => {} },
   { id: 'file', said: W.pictureOrFile, icon: 'clip', run: () => {} },
 ]
+
+/**
+ * What the list offers, narrowed by what follows the slash. A file and a
+ * link to a doc or task both need the project: a file is a row in it, and
+ * what can be linked is what it holds — a body written before its project
+ * is chosen is offered neither.
+ */
+export function offered(project: boolean, typed: string): Block[] {
+  const q = typed.toLowerCase()
+  return BLOCKS.filter((b) => project || (b.id !== 'file' && b.id !== 'ref')).filter(
+    (b) => q === '' || `${b.said} ${b.find ?? ''}`.toLowerCase().includes(q),
+  )
+}
 
 /**
  * The writing tools on a phone, docked on the keyboard as Notes has them.

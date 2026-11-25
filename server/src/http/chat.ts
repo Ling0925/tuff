@@ -1734,7 +1734,7 @@ chat.delete('/messages/:id/reactions/:emoji', async (c) => {
  * What # can name in some projects: their tasks, by a word of the title, a
  * number or a handle (`MYP-61`), and the documents written there, by name.
  */
-async function nameable(tx: Tx, projects: string[], raw: string, only?: string) {
+async function nameable(tx: Tx, projects: string[], raw: string, only?: string, shared = false) {
   if (projects.length === 0) return []
   const q = raw.trim().replace(/^#/, '').slice(0, 200)
   const like = `%${q.replace(/[\\%_]/g, (x) => `\\${x}`)}%`
@@ -1772,6 +1772,12 @@ async function nameable(tx: Tx, projects: string[], raw: string, only?: string) 
     where f.deleted_at is null and p.deleted_at is null
       and f.project_id = any(${projects}::uuid[])
       and f.body is not null and f.storage_key is null and f.url is null
+      ${
+        /* `?shared=1`: only what the project has, never somebody's own
+           draft — a document's body names it to every reader, and nothing
+           takes the title out there. */
+        shared ? tx`and f.audience = 'project'` : tx``
+      }
       ${q ? tx`and f.name ilike ${like}` : tx``}
     order by f.updated_at desc
     limit ${only === 'doc' ? 50 : q ? 10 : 5}`
@@ -1805,13 +1811,13 @@ chat.get('/conversations/:id/tasks', async (c) => {
   return c.json({ tasks: rows })
 })
 
-/** The same, for a task's comments: what its project can name. */
+/** The same, for a task's comments and for a body's # — what its project can name. */
 chat.get('/projects/:id/nameable', async (c) => {
   const ctx = c.get('ctx')
   const rows = await withActor(ctx.actorId, ctx.workspaceId, async (tx) => {
     const [ok] = await tx<{ ok: boolean }[]>`select in_project(${c.req.param('id')}) as ok`
     if (!ok?.ok) return null
-    return nameable(tx, [c.req.param('id')], c.req.query('q') ?? '', c.req.query('kind'))
+    return nameable(tx, [c.req.param('id')], c.req.query('q') ?? '', c.req.query('kind'), c.req.query('shared') === '1')
   })
   if (rows === null) return c.json(missing, 404)
   return c.json({ tasks: rows })

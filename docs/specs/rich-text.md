@@ -297,6 +297,9 @@ writing rather than helping it. Typing on narrows the list; the arrows walk
 it; Enter takes the one that is chosen and takes the `/quote` out with it,
 because the command is not part of what was written.
 
+**Link to a doc or task** in it writes a `#` and opens the list `#` opens
+— a doc or a task of the project, picked into a chip.
+
 Two heading levels and not six. A description is prose: the third level of
 heading in a paragraph of four sentences is a distinction nobody reading it
 can use.

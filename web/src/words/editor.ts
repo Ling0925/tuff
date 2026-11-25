@@ -28,6 +28,14 @@ export const EDITOR = say({
   table: ['Table', 'Tableau'],
   link: ['Link', 'Lien'],
   pictureOrFile: ['Picture or file', 'Image ou fichier'],
+  /* A chip for a doc or a task of the project.
+     Notion's "Link to page", with the chat's "doc"; the French a button's
+     infinitive, as "Mentionner un document" is. `linkToFind` is what else
+     typed after the slash finds it. */
+  linkTo: ['Link to a doc or task', 'Lier un document ou une tâche'],
+  linkToFind: ['page document mention', 'page lien mentionner'],
+  /* Under # when nothing in the project matches what was typed. */
+  noLinkable: ['No matching docs or tasks', 'Aucun document ni aucune tâche correspondant'],
   /* Two blocks that stand out and fold away. The
      words Notion uses for them in each language. */
   callout: ['Callout', 'Encadré'],
