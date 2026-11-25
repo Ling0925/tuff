@@ -505,13 +505,16 @@ test('an unverified address never takes an account, a verified one does, and no 
   const strong = await who(await signIn((n) => sign(claimsFor(n, { email: sure }))))
   assert.deepEqual(await proof(strong!.actor_id), { confirmed: true, weak: false })
 
-  /* No address: told so, nothing made. */
-  const before = (await owner<{ n: number }[]>`select count(*)::int as n from app_user`)[0]!.n
+  /* No address: told so, nothing made. Asked by the two subjects rather
+     than by counting every account: the other test files make accounts in
+     the same database while this one runs, and the count moved under it. */
   const none = await signIn((n) => sign(claimsFor(n, { sub: `none-${s}` })))
   assert.equal(none.location, '/signin?oauth=noaddress')
   const junk = await signIn((n) => sign(claimsFor(n, { sub: `junk-${s}`, email: 'not an address' })))
   assert.equal(junk.location, '/signin?oauth=noaddress')
-  assert.equal((await owner<{ n: number }[]>`select count(*)::int as n from app_user`)[0]!.n, before)
+  const madeFor = await owner`
+    select 1 from auth_identity where provider = 'oidc' and subject in (${`${ISSUER} none-${s}`}, ${`${ISSUER} junk-${s}`})`
+  assert.equal(madeFor.length, 0)
 })
 
 test('a provider that does not answer is said to be unreachable, in time, and nothing is spent', async () => {
