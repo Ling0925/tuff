@@ -21,6 +21,8 @@ export const AUTH_DEFINERS = [
   'auth_email_confirm',
   'auth_email_ticket',
   'auth_email_ticket_peek',
+  /* 321: an account a server's own provider made on an address it did not vouch for, held weakly. */
+  'auth_email_weak',
   'auth_end_session',
   /* 317: the account's hold for a password read, before a password is read. */
   'auth_hold_account',

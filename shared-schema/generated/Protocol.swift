@@ -5023,20 +5023,26 @@ public enum API {
     // MARK: - Providers
     public struct Providers: Codable, Sendable {
         public let apple, github, google, mail: Bool
-        public let noMail, signUp: Bool
+        public let noMail, oidc: Bool
+        public let oidcName: String?
+        public let signUp: Bool
 
         public enum CodingKeys: String, CodingKey {
             case apple, github, google, mail
             case noMail = "no_mail"
+            case oidc
+            case oidcName = "oidc_name"
             case signUp = "sign_up"
         }
 
-        public init(apple: Bool, github: Bool, google: Bool, mail: Bool, noMail: Bool, signUp: Bool) {
+        public init(apple: Bool, github: Bool, google: Bool, mail: Bool, noMail: Bool, oidc: Bool, oidcName: String?, signUp: Bool) {
             self.apple = apple
             self.github = github
             self.google = google
             self.mail = mail
             self.noMail = noMail
+            self.oidc = oidc
+            self.oidcName = oidcName
             self.signUp = signUp
         }
     }
@@ -6867,6 +6873,7 @@ public enum API {
         case apple = "apple"
         case github = "github"
         case google = "google"
+        case oidc = "oidc"
     }
 
     // MARK: - WayInAdded
@@ -6893,12 +6900,20 @@ public enum API {
     public struct WaysIn: Codable, Sendable {
         public let asks: AsksEnum
         public let offered: [Provider]
+        public let oidcName: String?
         public let password: Bool
         public let ways: [WayIn]
 
-        public init(asks: AsksEnum, offered: [Provider], password: Bool, ways: [WayIn]) {
+        public enum CodingKeys: String, CodingKey {
+            case asks, offered
+            case oidcName = "oidc_name"
+            case password, ways
+        }
+
+        public init(asks: AsksEnum, offered: [Provider], oidcName: String?, password: Bool, ways: [WayIn]) {
             self.asks = asks
             self.offered = offered
+            self.oidcName = oidcName
             self.password = password
             self.ways = ways
         }

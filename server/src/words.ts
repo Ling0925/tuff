@@ -468,6 +468,8 @@ export const ERRORS_FR_LIKE: [RegExp, (m: RegExpExecArray) => string][] = [
     /^You can have (\d+) tokens at a time\. Revoke one you don’t use to make another\.$/,
     (m) => `Vous pouvez avoir ${m[1]} jetons à la fois. Révoquez-en un que vous n’utilisez pas pour en créer un autre.`,
   ],
+  /* `waysIn.ts`: a server's own provider that could not be read, by its name (`OIDC_NAME`). */
+  [/^Couldn’t reach (.+)\. Try again later\.$/, (m) => `Impossible de joindre ${m[1]}. Réessayez plus tard.`],
 ]
 
 /* And the edition's own routes' (`edition.errorsFr`); on your own server,

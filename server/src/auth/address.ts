@@ -5,6 +5,7 @@ import { spendOn } from '../http/limits.js'
 import { randomInt } from 'node:crypto'
 import { generateToken, hashToken, verifyPassword } from './crypto.js'
 import { secondFactor } from './flows.js'
+import { oidcName } from './oidc.js'
 import { languageFor, say, type Language } from '../words.js'
 
 /**
@@ -196,7 +197,8 @@ export async function tellWayIn(
 ): Promise<void> {
   const email = (await emailOf(actorId)).email
   if (!email) return
-  const name = PROVIDER_NAMES[provider as keyof typeof PROVIDER_NAMES] ?? provider
+  /* A server's own provider by what its button calls it. */
+  const name = provider === 'oidc' ? oidcName() : (PROVIDER_NAMES[provider as keyof typeof PROVIDER_NAMES] ?? provider)
   const as = there ? ` (${there})` : ''
   const language = await languageFor(actorId)
   const w = say(

@@ -305,6 +305,11 @@ export const ACCOUNT = say({
   wayAdded: ['Connected. You can sign in with it now.', 'Connecté. Vous pouvez maintenant l’utiliser pour vous connecter.'],
   wayTaken: ['That account already signs in to another Tuff account.', 'Ce compte sert déjà à se connecter à un autre compte Tuff.'],
   wayFailed: ['Couldn’t connect. Try again.', 'Impossible de se connecter. Réessayez.'],
+  /* A server's own provider that could not be read. */
+  wayUnreachable: [
+    (name: string) => `Couldn’t reach ${name}. Try again in a few minutes.`,
+    (name: string) => `Impossible de joindre ${name}. Réessayez dans quelques minutes.`,
+  ],
   wayRemoved: ['Removed.', 'Retiré.'],
   wayLast: [
     'This is how you sign in. Set a password before removing it.',

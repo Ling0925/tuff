@@ -446,6 +446,11 @@ export const Providers = z.object({
   google: z.boolean(),
   apple: z.boolean(),
   github: z.boolean(),
+  /** A server's own OpenID Connect provider, and what its button calls it
+      (`OIDC_NAME`, else "SSO"); null when `oidc` is false. Never on the
+      service. */
+  oidc: z.boolean(),
+  oidc_name: z.string().nullable(),
   mail: z.boolean(),
   /** True only on a server of one's own with no mail set up: the screens
       say so instead of promising a letter. Always false on the service. */
@@ -566,12 +571,16 @@ export const InstanceLetter = z.object({ sent: z.boolean(), mail: z.boolean() })
     asks. */
 export const WayIn = z.object({
   id: z.uuid(),
-  provider: z.enum(['google', 'apple', 'github']),
+  /** `oidc` is a server's own provider. */
+  provider: z.enum(['google', 'apple', 'github', 'oidc']),
   email: z.string().nullable(),
   created_at: z.string(),
 })
 export const WaysIn = z.object({
-  offered: z.array(z.enum(['google', 'apple', 'github'])),
+  offered: z.array(z.enum(['google', 'apple', 'github', 'oidc'])),
+  /** What a server's own provider is called (`OIDC_NAME`, else "SSO") when
+      `offered` has it; null otherwise, and always on the service. */
+  oidc_name: z.string().nullable(),
   ways: z.array(WayIn),
   password: z.boolean(),
   asks: z.enum(['password', 'password_and_code', 'email']),
@@ -586,7 +595,7 @@ export type WayInStart = z.infer<typeof WayInStart>
 
 /** `POST /api/me/ways-in/:provider/finish`: the app's link, made, and
     the address of the account there, when the provider gave one. */
-export const WayInAdded = z.object({ provider: z.enum(['google', 'apple', 'github']), email: z.string().nullable() })
+export const WayInAdded = z.object({ provider: z.enum(['google', 'apple', 'github', 'oidc']), email: z.string().nullable() })
 export type WayInAdded = z.infer<typeof WayInAdded>
 
 /** Every refusal: `{ error: { code, message? } }` — `totp_required`,

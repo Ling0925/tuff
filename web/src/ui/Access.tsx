@@ -536,23 +536,41 @@ export function useNoMail(): boolean {
   return none
 }
 
-type Offered = { google: boolean; apple: boolean; github: boolean }
-const NONE: Offered = { google: false, apple: false, github: false }
+type Offered = { google: boolean; apple: boolean; github: boolean; oidc: boolean; oidc_name: string | null }
+const NONE: Offered = { google: false, apple: false, github: false, oidc: false, oidc_name: null }
 let asked: Promise<Offered> | null = null
 /** Which providers this deployment has keys for, as the server wrote them
-    into the page — there before anything is drawn. */
+    into the page — there before anything is drawn. A server's own
+    provider's name is beside them. */
 function written(): Offered | null {
   const said = document.querySelector('meta[name="tuff-providers"]')?.getAttribute('content')
   if (said == null) return null
   const ways = said.split(' ')
-  return { google: ways.includes('google'), apple: ways.includes('apple'), github: ways.includes('github') }
+  const oidc = ways.includes('oidc')
+  return {
+    google: ways.includes('google'),
+    apple: ways.includes('apple'),
+    github: ways.includes('github'),
+    oidc,
+    oidc_name: oidc ? (document.querySelector('meta[name="tuff-oidc-name"]')?.getAttribute('content') ?? null) : null,
+  }
 }
+/* What the dev server's answer said the provider is called, once asked. */
+let heardName: string | null = null
 /** Or asked, once a page, where nothing wrote them — the dev server. */
 function offered(): Promise<Offered> {
   asked ??= fetch('/auth/providers')
     .then((r) => (r.ok ? (r.json() as Promise<Offered>) : NONE))
+    .then((o) => {
+      heardName = o.oidc_name ?? null
+      return o
+    })
     .catch(() => NONE)
   return asked
+}
+/** What a server's own provider is called: its `OIDC_NAME`, else "SSO". */
+export function ownProviderName(): string {
+  return written()?.oidc_name || heardName || 'SSO'
 }
 
 export const GOOGLE = (
@@ -588,17 +606,39 @@ export const GITHUB = (
   </svg>
 )
 
+/* A plain key for a server's own provider: no logo means "your company's
+   sign-in". */
+export const KEY = (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    aria-hidden
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <circle cx="7.5" cy="15.5" r="4.5" />
+    <path d="M10.7 12.3 20 3" />
+    <path d="m15.5 7.5 3 3" />
+    <path d="m18 5 2.5 2.5" />
+  </svg>
+)
+
 /**
- * Google, Apple and GitHub, when this deployment has their keys — a button that
- * answers "not configured" is worse than no button. Each is a link: the
- * server sends the browser on to the provider and back.
+ * Google, Apple, GitHub and a server's own provider, when this deployment
+ * has their keys — a button that answers "not configured" is worse than no
+ * button. Each is a link: the server sends the browser on to the provider
+ * and back.
  */
 export function ProviderButtons({ invite }: { invite?: string } = {}) {
   const [on, setOn] = useState<Offered>(() => written() ?? NONE)
   useEffect(() => {
     if (!written()) void offered().then(setOn)
   }, [])
-  if (!on.google && !on.apple && !on.github) return null
+  if (!on.google && !on.apple && !on.github && !on.oidc) return null
   const look = 'flex h-11 items-center justify-center gap-3 rounded-full text-md font-medium transition-transform active:scale-[0.98]'
   /* Following an invitation, it goes with them to the provider and back,
      and they arrive in the workspace that asked. */
@@ -638,6 +678,13 @@ export function ProviderButtons({ invite }: { invite?: string } = {}) {
           {W.withGithub}
         </a>
       )}
+      {/* Last, as "Continue with SSO" is where the products people know put it. */}
+      {on.oidc && (
+        <a href={`/auth/oauth/oidc/start${carried}`} data-testid="with-oidc" className={look} style={fieldLook}>
+          {KEY}
+          {W.withOwn(on.oidc_name || 'SSO')}
+        </a>
+      )}
       <div className="my-2 flex items-center gap-3 text-sm text-ink-3">
         <span className="h-px flex-1 bg-line" />
         {W.orWithEmail}
@@ -652,6 +699,10 @@ export function providerTrouble(said: string | null): string | null {
   if (said === 'conflict') return W.troubleConflict
   if (said === 'github') return W.troubleGithub
   if (said === 'noemail') return W.troubleNoEmail
+  /* A server's own provider: not read, or
+     its account gave no address. */
+  if (said === 'unreachable') return W.troubleUnreachable(ownProviderName())
+  if (said === 'noaddress') return W.troubleNoAddress(ownProviderName())
   if (said === 'expired') return W.troubleExpired
   if (said === 'off') return W.troubleOff
   if (said === 'failed') return W.troubleFailed

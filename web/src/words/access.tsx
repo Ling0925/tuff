@@ -113,6 +113,8 @@ export const ACCESS = say({
   withGoogle: ['Continue with Google', 'Continuer avec Google'],
   withApple: ['Continue with Apple', 'Continuer avec Apple'],
   withGithub: ['Continue with GitHub', 'Continuer avec GitHub'],
+  /* A server's own provider, by its `OIDC_NAME` or "SSO". */
+  withOwn: [(name: string) => `Continue with ${name}`, (name: string) => `Continuer avec ${name}`],
   orWithEmail: ['or with email', 'ou par e-mail'],
   troubleConflict: [
     'An account with that email already exists, and the provider didn’t confirm it’s yours. Sign in with your password instead.',
@@ -125,6 +127,14 @@ export const ACCESS = say({
   troubleNoEmail: [
     'Your GitHub account has no verified email. Add one on GitHub, or sign up with your email.',
     'Votre compte GitHub n’a aucune adresse e-mail vérifiée. Ajoutez-en une sur GitHub, ou inscrivez-vous avec votre adresse e-mail.',
+  ],
+  troubleUnreachable: [
+    (name: string) => `Couldn’t reach ${name}. Try again in a few minutes.`,
+    (name: string) => `Impossible de joindre ${name}. Réessayez dans quelques minutes.`,
+  ],
+  troubleNoAddress: [
+    (name: string) => `Your ${name} account has no email address. Ask whoever manages it to add one.`,
+    (name: string) => `Votre compte ${name} n’a pas d’adresse e-mail. Demandez à la personne qui le gère d’en ajouter une.`,
   ],
   troubleExpired: ['That took too long. Try again.', 'Le délai est dépassé. Réessayez.'],
   troubleOff: ['This sign-in method isn’t set up.', 'Ce mode de connexion n’est pas configuré.'],

@@ -44,9 +44,14 @@ process.env.DATABASE_URL = at(shared)
 process.env.DATABASE_URL_APP = at(process.env.DATABASE_URL_APP ?? shared)
 if (process.env.DATABASE_URL_WORKER) process.env.DATABASE_URL_WORKER = at(process.env.DATABASE_URL_WORKER)
 if (process.env.DATABASE_URL_AUTH) process.env.DATABASE_URL_AUTH = at(process.env.DATABASE_URL_AUTH)
-/* GitHub sign-in on, before anything reads the environment. */
+/* GitHub sign-in on, and a server's own provider — never asked here, as
+   nothing below starts a sign-in through it — before anything reads the
+   environment. */
 process.env.GITHUB_SIGNIN_CLIENT_ID = 'signin-id'
 process.env.GITHUB_SIGNIN_CLIENT_SECRET = 'signin-secret'
+process.env.OIDC_ISSUER = 'https://sso.invalid/realms/acme'
+process.env.OIDC_CLIENT_ID = 'tuff'
+process.env.OIDC_CLIENT_SECRET = 'oidc-secret'
 
 const { edition } = await import('../src/edition.js')
 const { edition: community } = await import('../src/edition.js')
@@ -414,9 +419,18 @@ test('after the claim, sign-up is closed on every path', async () => {
   assert.equal(r.body.error.code, 'sign_up_closed')
   assert.equal(await accountOf(`ines${s}@example.com`), null)
 
-  for (const p of ['google', 'apple', 'github'] as const) {
+  /* A server's own provider both as it comes when it does not vouch for
+     the address (`owns` false, the account it would make a weak one) and
+     when it does. */
+  for (const [p, owns] of [
+    ['google', true],
+    ['apple', true],
+    ['github', false],
+    ['oidc', false],
+    ['oidc', true],
+  ] as const) {
     const email = `${p}${uid()}@example.com`
-    await assert.rejects(whoIs(p, `${p}-${uid()}`, email, true, 'New'), SignUpClosed)
+    await assert.rejects(whoIs(p, `${p}-${uid()}`, email, true, 'New', owns), SignUpClosed)
     assert.equal(await accountOf(email), null)
   }
   /* `register_owner` called straight, as the sign-in role: refused, and
@@ -581,6 +595,16 @@ test('the owner opens sign-up, names and removes owners, never the last, and tes
   const unproved = await call('/api/instance/owners', { token, body: { email: `ines${pending}@example.com` } })
   assert.equal(unproved.status, 409)
   assert.equal(unproved.body.error.code, 'unconfirmed')
+  /* Nor one a server's own provider made on an address it did not vouch
+     for: signed in, and weakly proved. */
+  await call('/api/instance', { method: 'PATCH', token, body: { sign_up_open: true } })
+  const weakEmail = `weak${uid()}@example.com`
+  const weak = await whoIs('oidc', `https://sso.invalid/realms/acme w-${uid()}`, weakEmail, true, 'Weak', false)
+  assert.ok(weak && weak !== 'conflict')
+  await call('/api/instance', { method: 'PATCH', token, body: { sign_up_open: false } })
+  const weakOwner = await call('/api/instance/owners', { token, body: { email: weakEmail } })
+  assert.equal(weakOwner.status, 409)
+  assert.equal(weakOwner.body.error.code, 'unconfirmed')
   const otherEmail = (await owner<{ e: string }[]>`select email::text as e from app_user where actor_id = ${other.actor_id}`)[0]!.e
   const added = await call('/api/instance/owners', { token, body: { email: otherEmail } })
   assert.equal(added.status, 201)
@@ -710,8 +734,13 @@ test('a provider never claims a server nobody owns: not a new account, not an ap
     JSON.stringify(results.map((r) => r.status)),
   )
   for (const e of emails) assert.equal(await accountOf(e), null)
-  for (const p of ['apple', 'github'] as const) {
-    await assert.rejects(whoIs(p, `${p}-prov-${uid()}`, `prov${uid()}@example.com`, true, 'Prov'), SignUpClosed)
+  for (const [p, owns] of [
+    ['apple', true],
+    ['github', false],
+    ['oidc', false],
+    ['oidc', true],
+  ] as const) {
+    await assert.rejects(whoIs(p, `${p}-prov-${uid()}`, `prov${uid()}@example.com`, true, 'Prov', owns), SignUpClosed)
   }
   assert.deepEqual(await owners(), [])
   assert.equal(await claimed(), false)
@@ -886,7 +915,7 @@ const hasPassword = async (id: string) =>
   (await owner<{ p: boolean }[]>`select password_hash is not null as p from app_user where actor_id = ${id}`)[0]!.p
 const providers = async () => {
   const p = (await call('/auth/providers')).body
-  return { google: p.google, apple: p.apple, github: p.github, sign_up: p.sign_up }
+  return { google: p.google, apple: p.apple, github: p.github, oidc: p.oidc, sign_up: p.sign_up }
 }
 
 test('OWNER_EMAIL is read as one address, trimmed and lowercased; empty is unset; anything else refuses to start', () => {
@@ -930,7 +959,7 @@ test('with OWNER_EMAIL set, a stranger cannot sign up on an unclaimed server, an
   try {
     /* The form is still drawn — the owner comes in by it — but no
        provider's button: none of them can claim. */
-    assert.deepEqual(await providers(), { google: false, apple: false, github: false, sign_up: true })
+    assert.deepEqual(await providers(), { google: false, apple: false, github: false, oidc: false, sign_up: true })
     assert.equal(await serverClaimed(), false)
 
     /* A stranger: refused in the words closed sign-up uses, nothing made. */
@@ -975,7 +1004,7 @@ test('with OWNER_EMAIL set, a stranger cannot sign up on an unclaimed server, an
     assert.equal((await call('/auth/login', { body: { email: `owner${s}@example.com`, password: 'the-owners-own-password' } })).status, 200)
     assert.equal(await serverClaimed(), true)
     /* Claimed: the buttons come back, sign-up is closed as after any claim. */
-    assert.deepEqual(await providers(), { google: false, apple: false, github: true, sign_up: false })
+    assert.deepEqual(await providers(), { google: false, apple: false, github: true, oidc: true, sign_up: false })
   } finally {
     await startWith(undefined)
   }
@@ -1010,7 +1039,7 @@ test('with OWNER_EMAIL empty the first confirmed sign-up claims the server, as b
     lines.some((l) => /No mail is set up\. Sign up, then run/.test(l)),
     lines.join('\n'),
   )
-  assert.deepEqual(await providers(), { google: false, apple: false, github: false, sign_up: true })
+  assert.deepEqual(await providers(), { google: false, apple: false, github: false, oidc: false, sign_up: true })
   const s = uid()
   assert.equal((await register(s)).status, 202)
   assert.equal((await confirm(`ines${s}@example.com`)).status, 200)
@@ -1045,7 +1074,7 @@ test('on the service OWNER_EMAIL changes nothing: sign-up open, every button dra
   await owner`update instance_setting set community = false, claimed_at = null, owner_email = ${process.env.OWNER_EMAIL}`
   try {
     assert.equal(await serverClaimed(), true)
-    assert.deepEqual(await providers(), { google: false, apple: false, github: true, sign_up: true })
+    assert.deepEqual(await providers(), { google: false, apple: false, github: true, oidc: true, sign_up: true })
     const s = uid()
     assert.equal((await register(s)).status, 202)
     assert.equal((await confirm(`ines${s}@example.com`)).status, 200)

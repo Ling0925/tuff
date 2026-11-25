@@ -27,6 +27,7 @@ import { letter, mailOn, send } from '../mail.js'
 import { heard, languageFor, say } from '../words.js'
 import { clientOf, guess, metaOf, onThisMachine, spendOn } from './limits.js'
 import { isClosed, orClosed, serverClaimed, SignUpClosed, signUpOpen } from '../instance.js'
+import { checkIdToken, oidcName, oidcOn, provider as ownProvider, tradeCode, whoTheTokenSays } from '../auth/oidc.js'
 
 /**
  * Getting in by Google or Apple, and back in when a password is forgotten.
@@ -36,8 +37,8 @@ import { isClosed, orClosed, serverClaimed, SignUpClosed, signUpOpen } from '../
  */
 export const access = new Hono()
 
-type Provider = 'google' | 'apple' | 'github'
-const ALL = ['google', 'apple', 'github'] as const
+type Provider = 'google' | 'apple' | 'github' | 'oidc'
+const ALL = ['google', 'apple', 'github', 'oidc'] as const
 
 const PROVIDERS = {
   google: {
@@ -69,7 +70,8 @@ const GITHUB = {
   api: 'https://api.github.com',
 }
 
-const isOn = (p: string): p is Provider => (p === 'github' ? GITHUB.on() : p === 'google' || p === 'apple' ? PROVIDERS[p].on() : false)
+const isOn = (p: string): p is Provider =>
+  p === 'github' ? GITHUB.on() : p === 'oidc' ? oidcOn() : p === 'google' || p === 'apple' ? PROVIDERS[p].on() : false
 
 /* Its own key, not `JWT_SECRET` itself — `auth/keys.ts`. */
 const secret = keyFor('oauth-state')
@@ -135,7 +137,7 @@ export const fromBrowser = (c: Context) => Boolean(c.req.header('origin') || c.r
  * is never taken by the other's path.
  */
 function linkBinding(binding: string | null | undefined): { p: string; sid: string; challenge: string | null } | null {
-  const m = /^(google|apple|github):([0-9a-f-]{36})(?::app:([\w-]{43}))?$/.exec(binding ?? '')
+  const m = /^(google|apple|github|oidc):([0-9a-f-]{36})(?::app:([\w-]{43}))?$/.exec(binding ?? '')
   return m ? { p: m[1]!, sid: m[2]!, challenge: m[3] ?? null } : null
 }
 
@@ -174,6 +176,19 @@ export async function providersNow(): Promise<Provider[]> {
   return (await serverClaimed().catch(() => false)) ? ALL.filter(isOn) : []
 }
 
+/** Text for an attribute of the page: `&`, `<`, `>` and both quotes as entities. */
+const attr = (s: string) => s.replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]!)
+
+/**
+ * The providers to draw, said in the page — `tuff-providers` — and, when a
+ * server's own provider is one of them, what its button calls it
+ * (`tuff-oidc-name`), so the buttons draw with the page.
+ */
+export function providersMeta(on: readonly string[]): string {
+  const ways = `<meta name="tuff-providers" content="${attr(on.join(' '))}" />`
+  return on.includes('oidc') ? `${ways}<meta name="tuff-oidc-name" content="${attr(oidcName())}" />` : ways
+}
+
 /* And whether somebody without an invitation may sign up — false only on
    your own server with sign-up closed. */
 access.get('/providers', async (c) => {
@@ -182,6 +197,9 @@ access.get('/providers', async (c) => {
     google: on.includes('google'),
     apple: on.includes('apple'),
     github: on.includes('github'),
+    /* A server's own provider, and what its button calls it. */
+    oidc: on.includes('oidc'),
+    oidc_name: on.includes('oidc') ? oidcName() : null,
     mail: await mailOn(),
     /* Your own server with no mail: the screens say so instead of promising
        a letter. False on the service. */
@@ -199,6 +217,11 @@ access.get('/providers', async (c) => {
 access.get('/oauth/:provider/start', async (c) => {
   const p = c.req.param('provider')
   if (!isOn(p)) return c.redirect('/signin?oauth=off')
+  /* A server's own provider is read first, before anything is spent on
+     the way to it: one that cannot be read, or is not what `OIDC_ISSUER`
+     says, is "couldn't reach", said where the press was. */
+  const own = p === 'oidc' ? await ownProvider() : null
+  if (p === 'oidc' && !own) return c.redirect(await unreachableFrom(c))
   const state = b64url(randomBytes(16))
   const nonce = b64url(randomBytes(16))
   const verifier = b64url(randomBytes(32))
@@ -304,6 +327,20 @@ access.get('/oauth/:provider/start', async (c) => {
     })
     return c.redirect(`${GITHUB.authorize}?${q}`)
   }
+  /* The flow Google's is: a code, PKCE, the state and the nonce. Onto
+     whatever the document's endpoint already carries in its query. */
+  if (p === 'oidc') {
+    const to = new URL(own!.authorize)
+    to.searchParams.set('client_id', env.oidcClientId)
+    to.searchParams.set('redirect_uri', callbackOf(c, p))
+    to.searchParams.set('response_type', 'code')
+    to.searchParams.set('scope', 'openid email profile')
+    to.searchParams.set('state', state)
+    to.searchParams.set('nonce', nonce)
+    to.searchParams.set('code_challenge', b64url(createHash('sha256').update(verifier).digest()))
+    to.searchParams.set('code_challenge_method', 'S256')
+    return c.redirect(to.href)
+  }
   const conf = PROVIDERS[p]
   const q = new URLSearchParams({
     client_id: conf.clientId(),
@@ -323,6 +360,28 @@ access.get('/oauth/:provider/start', async (c) => {
   }
   return c.redirect(`${conf.authorize}?${q}`)
 })
+
+/**
+ * Where a start goes back to when a server's own provider could not be
+ * reached: the invitation it was pressed on, Account's ways in, or the
+ * sign-in screen — each of which says so.
+ */
+async function unreachableFrom(c: Context): Promise<string> {
+  const asked = c.req.query('invite') ?? ''
+  if (asked && asked.length <= 200 && /^[\w.~-]+$/.test(asked)) return `/invite/${encodeURIComponent(asked)}?oauth=unreachable`
+  if (c.req.query('link') === 'app') return '/signin?ways=failed'
+  if (c.req.query('link')) {
+    const ticket = readCookie(c, LINK)
+    const [t] = ticket
+      ? await asAuth((tx) => tx<{ workspace_id: string | null }[]>`select workspace_id from auth_ticket_peek(${hashToken(ticket)}, 'link')`)
+      : []
+    const [w] = t?.workspace_id
+      ? await asAuth((tx) => tx<{ slug: string | null }[]>`select auth_workspace_slug(${t.workspace_id}) as slug`)
+      : []
+    return w?.slug ? `/${encodeURIComponent(w.slug)}/account?ways=unreachable` : '/'
+  }
+  return '/signin?oauth=unreachable'
+}
 
 /** Apple's client secret is a short JWT signed with the team's key. */
 async function appleSecret(): Promise<string> {
@@ -375,7 +434,13 @@ async function callback(c: Context, p: Provider, params: { code?: string; state?
     return c.redirect(`/invite/${encodeURIComponent(invite)}${why ? `?oauth=${why}` : ''}`)
   }
 
-  const said = p === 'github' ? await fromGithub(c, params.code, bound.verifier) : await fromOidc(c, p, params, bound)
+  const said =
+    p === 'github'
+      ? await fromGithub(c, params.code, bound.verifier)
+      : p === 'oidc'
+        ? await fromOwn(c, params.code, bound)
+        : await fromOidc(c, p, params, bound)
+  if (said === 'unreachable') return back('unreachable')
   if (!said) return back('failed')
   const { subject, email, verified, name, owns } = said
 
@@ -384,7 +449,7 @@ async function callback(c: Context, p: Provider, params: { code?: string; state?
      was itself the proof that put its previous holder out, when the person
      here is its new holder (`seen.claimed`). Migration 317. */
   const since = await checkedNow()
-  const seen = { claimed: false }
+  const seen: Seen = { claimed: false }
   let who: Awaited<ReturnType<typeof joinByProvider>> | Awaited<ReturnType<typeof whoIs>>
   try {
     who = invite
@@ -393,15 +458,22 @@ async function callback(c: Context, p: Provider, params: { code?: string; state?
   } catch (e) {
     /* A new account on your own server with sign-up closed. */
     if (isClosed(e)) return back('closed')
+    /* An account that should have held its address weakly and does not:
+       made nothing, signed nobody in. */
+    if (e instanceof NotWeak) return back('failed')
     throw e
   }
+  /* Found by its address and given a new way in: the address is told, as
+     it is when a way in is added from Account. */
+  if (seen.byAddress && who && typeof who === 'object') await tellWayIn(origin(c), who.actorId, 'added', p, email || null)
   /* GitHub never links by address, so an address with an account here is
      told the way to link it, not that the provider did not confirm it. */
   if (who === 'conflict') return back(p === 'github' ? 'github' : 'conflict')
   if (who === 'gone') return back(null)
   if (who === 'full') return back('full')
   if (who === 'elsewhere') return back('elsewhere')
-  if (!who) return back(p === 'github' && !verified ? 'noemail' : 'failed')
+  /* A server's own provider that gave no address: told so, nothing made. */
+  if (!who) return back(p === 'github' && !verified ? 'noemail' : p === 'oidc' && !email ? 'noaddress' : 'failed')
 
   const ticket = generateToken('hof')
   let binding: string
@@ -456,7 +528,7 @@ async function linked(
   if (!t) return c.redirect(app ? '/signin?ways=failed' : '/')
   const [w] =
     !app && t.workspace_id ? await asAuth((tx) => tx<{ slug: string | null }[]>`select auth_workspace_slug(${t.workspace_id}) as slug`) : []
-  const back = (why: 'added' | 'taken' | 'failed') =>
+  const back = (why: 'added' | 'taken' | 'failed' | 'unreachable') =>
     c.redirect(app ? '/signin?ways=failed' : w?.slug ? `/${w.slug}/account?ways=${why}` : '/')
 
   /* Still the session that asked: a password reset or signing out
@@ -468,7 +540,13 @@ async function linked(
   const [alive] = await asAuth((tx) => tx<{ ok: boolean }[]>`select auth_session_alive(${b.sid}) as ok`)
   if (!alive?.ok) return back('failed')
 
-  const said = p === 'github' ? await fromGithub(c, params.code ?? '', bound.verifier) : await fromOidc(c, p, params, bound)
+  const said =
+    p === 'github'
+      ? await fromGithub(c, params.code ?? '', bound.verifier)
+      : p === 'oidc'
+        ? await fromOwn(c, params.code ?? '', bound)
+        : await fromOidc(c, p, params, bound)
+  if (said === 'unreachable') return back('unreachable')
   if (!said) return back('failed')
 
   if (app) {
@@ -650,6 +728,22 @@ async function fromOidc(
   return { subject: claims.sub, email, verified, name, owns }
 }
 
+/**
+ * A server's own provider's answer: the
+ * code traded with its verifier at the token endpoint its document names,
+ * and the ID token checked against its keys. `unreachable` when the
+ * provider could not be read or did not answer.
+ */
+async function fromOwn(c: Context, code: string, bound: { nonce: string; verifier: string }): Promise<Said | 'unreachable' | null> {
+  const p = await ownProvider()
+  if (!p) return 'unreachable'
+  const idToken = await tradeCode(p, code, callbackOf(c, 'oidc'), bound.verifier)
+  if (idToken === 'unreachable') return 'unreachable'
+  if (!idToken) return null
+  const claims = await checkIdToken(p, idToken, bound.nonce)
+  return claims ? whoTheTokenSays(claims) : null
+}
+
 /*
  * GitHub's answer: the code traded with its verifier, then who the token
  * is and which address GitHub has verified as their primary — and the
@@ -743,7 +837,7 @@ export async function whoIs(
   /** The provider is the authority for the address, not only saw it checked once. */
   owns = verified,
   /** Told whether finding the account proved its address and put its previous holder out. */
-  seen: { claimed: boolean } = { claimed: false },
+  seen: Seen = { claimed: false },
 ): Promise<{ actorId: string; workspaceId: string | null } | 'conflict' | null> {
   const found = await knownActor(p, subject, email, owns, seen)
   if (found === 'conflict') return 'conflict'
@@ -768,6 +862,7 @@ export async function whoIs(
       asAuth(async (tx) => {
         const [s] = await tx<{ slug: string }[]>`select free_workspace_slug(${wsName}) as slug`
         await tx`select register_owner(${id}, ${who}, ${email}, ${null}, ${workspaceId}, ${wsName}, ${s!.slug}, true, true)`
+        if (weakly(p, owns)) await weaken(tx, id)
       }),
     )
     await planNewWorkspace(id, workspaceId)
@@ -780,6 +875,43 @@ export async function whoIs(
 }
 
 /**
+ * Whether an account a provider makes holds its address only weakly
+ * (`email_by_hand`, migration 321): a server's own provider that did not
+ * vouch for the address. Such a token may
+ * make an account, and the address's real owner proving it later takes
+ * that account, as a handed invitation's would be (migration 210).
+ */
+const weakly = (p: Provider, owns: boolean) => p === 'oidc' && !owns
+
+/** An account that was to hold its address weakly and was not made so. */
+class NotWeak extends Error {
+  constructor() {
+    super('not_weak')
+  }
+}
+
+/**
+ * The account just made in this transaction, held weakly — or the
+ * transaction refused, and the account with it: never left fully
+ * confirmed without anybody noticing. `auth_email_weak` answers false only
+ * for an account it did not just make or one already not confirmed, which
+ * these callers never hand it; if it ever does, nothing is made.
+ */
+async function weaken(tx: Parameters<Parameters<typeof asAuth>[0]>[0], actorId: string): Promise<void> {
+  const [r] = await tx<{ ok: boolean }[]>`select auth_email_weak(${actorId}) as ok`
+  if (r?.ok !== true) throw new NotWeak()
+}
+
+/**
+ * What the callback is told about how the account was found: whether
+ * finding it proved its address and put its previous holder out
+ * (`claimed`), and whether it was found by its address rather than by
+ * this provider's own subject (`byAddress`) — a new way in, which the
+ * address is told of.
+ */
+type Seen = { claimed: boolean; byAddress?: boolean }
+
+/**
  * The account a provider's answer is, if there is one: somebody seen this
  * way before, else the account with that email — but only when the provider
  * is the authority for the email, or a provider account claiming somebody's
@@ -790,7 +922,7 @@ async function knownActor(
   subject: string,
   email: string,
   verified: boolean,
-  seen: { claimed: boolean } = { claimed: false },
+  seen: Seen = { claimed: false },
 ): Promise<string | 'conflict' | null> {
   const known = await asAuth(async (tx) => {
     const [r] = await tx<{ actor: string | null }[]>`select auth_identity_actor(${p}, ${subject}) as actor`
@@ -802,9 +934,22 @@ async function knownActor(
        took those it found). Not a way in by itself: only when this
        provider vouches for the account's own address, which is a proof and
        goes through `auth_claim_email` like any other. */
-    if (await confirmed(known)) return known
-    const [acc] = await asAuth((tx) => tx<{ email: string | null }[]>`select auth_email_of(${known}) as email`)
-    if (!verified || !email || acc?.email?.toLowerCase() !== email.toLowerCase()) return 'conflict'
+    const [acc] = await asAuth(
+      (tx) => tx<{ email: string | null; weak: boolean | null }[]>`
+        select auth_email_of(${known}) as email, auth_email_by_hand(${known}) as weak`,
+    )
+    const itsOwn = verified && Boolean(email) && acc?.email?.toLowerCase() === email.toLowerCase()
+    if (await confirmed(known)) {
+      /* Made weakly by a server's own provider that did not vouch for the
+         address, and vouching for it now: the proof it lacked, which puts
+         out anybody else the account let in meanwhile. */
+      if (p === 'oidc' && acc?.weak === true && itsOwn) {
+        await orClosed(asAuth((tx) => tx`select auth_claim_email(${known})`))
+        seen.claimed = true
+      }
+      return known
+    }
+    if (!itsOwn) return 'conflict'
     await orClosed(asAuth((tx) => tx`select auth_claim_email(${known})`))
     seen.claimed = true
     return known
@@ -823,6 +968,7 @@ async function knownActor(
      claims the server or is refused (`instance_confirming`). */
   await orClosed(asAuth((tx) => tx`select auth_claim_email(${existing})`))
   seen.claimed = true
+  seen.byAddress = true
   return existing
 }
 
@@ -851,7 +997,7 @@ export async function joinByProvider(
   verified: boolean,
   name: string,
   owns = verified,
-  seen: { claimed: boolean } = { claimed: false },
+  seen: Seen = { claimed: false },
 ): Promise<{ actorId: string; workspaceId: string | null; press?: true } | 'conflict' | 'gone' | 'full' | 'elsewhere' | null> {
   const tokenHash = hashToken(invite)
   const found = await knownActor(p, subject, email, owns, seen)
@@ -865,12 +1011,15 @@ export async function joinByProvider(
   } else {
     if (!email || !verified) return null
     try {
-      const [row] = await asAuth(
-        (tx) => tx<{ workspace_id: string; actor_id: string }[]>`
+      const [row] = await asAuth(async (tx) => {
+        const rows = await tx<{ workspace_id: string; actor_id: string; created_account: boolean }[]>`
           select * from accept_invite(${tokenHash}::text, ${uuidv7()}::uuid,
                                       ${name.trim() || email.split('@')[0]!}::text, ${email}::citext, null::text,
-                                      true)`,
-      )
+                                      true)`
+        /* Weakly, in the transaction that made it — `weakly`. */
+        if (rows[0]?.created_account && weakly(p, owns)) await weaken(tx, rows[0].actor_id)
+        return rows
+      })
       if (!row) return 'gone'
       joined = { actorId: row.actor_id, workspaceId: row.workspace_id }
       await tellInviter(row.workspace_id, row.actor_id)
@@ -893,6 +1042,7 @@ export async function joinByProvider(
 
 access.get('/oauth/google/callback', (c) => callback(c, 'google', { code: c.req.query('code') ?? '', state: c.req.query('state') ?? '' }))
 access.get('/oauth/github/callback', (c) => callback(c, 'github', { code: c.req.query('code') ?? '', state: c.req.query('state') ?? '' }))
+access.get('/oauth/oidc/callback', (c) => callback(c, 'oidc', { code: c.req.query('code') ?? '', state: c.req.query('state') ?? '' }))
 access.post('/oauth/apple/callback', async (c) => {
   const form = await c.req.parseBody().catch(() => ({}) as Record<string, string>)
   return callback(c, 'apple', {

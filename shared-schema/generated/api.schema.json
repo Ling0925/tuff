@@ -3724,6 +3724,15 @@
         "github": {
           "type": "boolean"
         },
+        "oidc": {
+          "type": "boolean"
+        },
+        "oidc_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "mail": {
           "type": "boolean"
         },
@@ -3738,6 +3747,8 @@
         "google",
         "apple",
         "github",
+        "oidc",
+        "oidc_name",
         "mail",
         "no_mail",
         "sign_up"
@@ -4085,7 +4096,8 @@
           "enum": [
             "google",
             "apple",
-            "github"
+            "github",
+            "oidc"
           ]
         },
         "email": {
@@ -4116,9 +4128,16 @@
             "enum": [
               "google",
               "apple",
-              "github"
+              "github",
+              "oidc"
             ]
           }
+        },
+        "oidc_name": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "ways": {
           "type": "array",
@@ -4140,6 +4159,7 @@
       },
       "required": [
         "offered",
+        "oidc_name",
         "ways",
         "password",
         "asks"
@@ -4166,7 +4186,8 @@
           "enum": [
             "google",
             "apple",
-            "github"
+            "github",
+            "oidc"
           ]
         },
         "email": {

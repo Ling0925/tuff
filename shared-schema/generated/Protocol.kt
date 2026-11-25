@@ -3636,6 +3636,11 @@ data class Providers (
     @SerialName("no_mail")
     val noMail: Boolean,
 
+    val oidc: Boolean,
+
+    @SerialName("oidc_name")
+    val oidcName: String? = null,
+
     @SerialName("sign_up")
     val signUp: Boolean
 )
@@ -4892,7 +4897,8 @@ data class WayIn (
 enum class Provider(val value: String) {
     @SerialName("apple") Apple("apple"),
     @SerialName("github") Github("github"),
-    @SerialName("google") Google("google");
+    @SerialName("google") Google("google"),
+    @SerialName("oidc") Oidc("oidc");
 }
 
 @Serializable
@@ -4910,6 +4916,10 @@ data class WayInStart (
 data class WaysIn (
     val asks: AsksEnum,
     val offered: List<Provider>,
+
+    @SerialName("oidc_name")
+    val oidcName: String? = null,
+
     val password: Boolean,
     val ways: List<WayIn>
 )
