@@ -84,7 +84,7 @@ function hosts(): Map<string, string[]> {
     for (const f of files(join(root, dir))) {
       if (!ships(f)) continue
       for (const m of uncommented(readFileSync(f, 'utf8')).matchAll(/https?:\/\/([a-z0-9-]+(?:\.[a-z0-9-]+)+)/gi)) {
-        const h = m[1].toLowerCase()
+        const h = m[1]!.toLowerCase()
         const where = relative(root, f)
         const had = found.get(h) ?? []
         if (!had.includes(where)) found.set(h, [...had, where])
