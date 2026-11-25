@@ -411,6 +411,12 @@ The iPhone and Android apps only connect to usetuff.com. On your own
 server, install the web app instead: it works as an app on phones and
 computers, with push notifications.
 
+Your own server sends us nothing: no analytics and no counts. Once a day it
+asks GitHub whether a new release is out, and `UPDATE_CHECK=off` stops that.
+It reaches other services only when you set them up, like mail, Google
+sign-in or GIFs. The full list is in
+[What leaves your server](docs/self-hosting.md#what-leaves-your-server).
+
 ## License, support and contributing
 
 Tuff is licensed under [AGPL-3.0-only](LICENSE). **The name Tuff and its

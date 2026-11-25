@@ -319,7 +319,7 @@ make yourself. Without them, Settings says they are not set up here.
 | -------- | ------- | ------- |
 | `PURGE_AFTER_DAYS` | `30` | How long a deleted thing can be restored before the worker removes it for good. At least 1; empty or not a number is the default. |
 | `PG_POOL_MAX` | `20` | Database connections each process keeps. |
-| `KLIPY_API_KEY` | none | A [KLIPY](https://klipy.com) key, for the GIF button in chat. |
+| `KLIPY_API_KEY` | none | A [KLIPY](https://klipy.com) key, for the GIF button in chat. The browser then asks KLIPY itself: see [What leaves your server](#what-leaves-your-server). |
 | `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | none | Cloudflare Turnstile keys. A project's public feedback page refuses every message without them. |
 | `ORIGIN_SECRET` | none | Only if Cloudflare is in front: see the proxy notes below. |
 | `TUFF_IMAGE` | `ghcr.io/usetuff/tuff` | Where the image is pulled from, for a registry of your own that mirrors it. |
@@ -332,6 +332,45 @@ The compose file sets `DATABASE_URL`, `DATABASE_URL_APP`,
 `DATABASE_URL_WORKER`, `NODE_ENV`, `STORAGE_DIR`, `WEB_DIR`,
 `MIGRATE_ON_START`, `BACKUP_DIR` and `PORT` itself, and a line in `.env`
 with one of those names is ignored.
+
+## What leaves your server
+
+Your server sends us nothing. Nothing is counted, and the page has no
+analytics script.
+
+With nothing set up, the server makes one request of its own: once a day it
+asks `api.github.com` whether a new release is out. `UPDATE_CHECK=off` stops
+it ([Hearing of a new version](#hearing-of-a-new-version)).
+
+Everything else goes out only once you set it up:
+
+| Where | When | What goes there |
+| ----- | ---- | --------------- |
+| `api.resend.com` | `RESEND_API_KEY` is set | The emails Tuff sends. With `SMTP_URL`, they go to your SMTP server instead. |
+| `accounts.google.com`, `oauth2.googleapis.com`, `www.googleapis.com` | Google sign-in is set up | Signing in, and fetching Google's keys to check it. |
+| `appleid.apple.com` | Apple sign-in is set up | Signing in, and fetching Apple's keys to check it. |
+| `github.com`, `api.github.com` | GitHub sign-in or the GitHub App is set up | Signing in, and a linked repository's issues and pull requests. |
+| `slack.com` | The Slack app is set up | What a project posts to Slack. |
+| `api.push.apple.com`, `api.sandbox.push.apple.com` | `APNS_KEY` is set | Pushes to iPhones. |
+| `fcm.googleapis.com`, `oauth2.googleapis.com` | `FCM_SERVICE_ACCOUNT` is set | Pushes to Android phones. |
+| `challenges.cloudflare.com` | The Turnstile keys are set | A project's public feedback page loads Turnstile there, and the server checks each message with it. |
+| `api.klipy.com` | `KLIPY_API_KEY` is set | Sent by the browser, not the server, when somebody uses the GIF button: what they type, a random id kept in that browser (not the account), and which GIF they sent. The GIFs load from `static.klipy.com`. |
+| `api.linear.app`, `app.asana.com`, `api.github.com`, your Jira site | Somebody imports from there | Requests made with the token that person pastes, during the import only. |
+
+And to addresses that people on your server give it:
+
+- links posted in chat, read for a preview, as `TuffBot/1.0 (+APP_URL)`;
+- a project's webhooks, and a Claude Code routine's URL on
+  `api.anthropic.com` when an agent is one;
+- the push service a browser names when somebody turns on notifications;
+- your bucket (`STORAGE_S3_ENDPOINT`) and your SMTP server.
+
+The page's security policy holds the browser to the same list. It connects
+to your server, and to KLIPY when GIFs are on. Pictures load from any https
+address, because people post links to them.
+
+`server/test/what-leaves.test.ts` keeps this list true. It fails when an
+outside address appears in the code and is not named here.
 
 ## Behind a proxy of your own
 
