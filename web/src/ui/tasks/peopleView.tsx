@@ -181,7 +181,7 @@ export type PeopleMoves = ReturnType<typeof usePeopleMoves>
 /**
  * The tasks as people: the board, with a column for each assignee instead
  * of each list. On a desk only — the option is not offered under 1024 and
- * `?view=people` draws the list there.
+ * `?view=members` draws the list there.
  */
 export function peopleView({
   projectId,

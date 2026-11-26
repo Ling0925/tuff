@@ -39,11 +39,11 @@ export function useTaskData({
   /*
    * Which drawing: the list, the board, or the board with a column per
    * assignee. The people view wants the width
-   * of a desk, so a narrower window draws the list for `?view=people` and
+   * of a desk, so a narrower window draws the list for `?view=members` and
    * leaves the address as it is: widen the window and the columns come back.
    */
   const wide = useWide()
-  const view: 'list' | 'board' | 'people' = mode === 'board' ? 'board' : mode === 'people' && wide ? 'people' : 'list'
+  const view: 'list' | 'board' | 'people' = mode === 'board' ? 'board' : mode === 'members' && wide ? 'people' : 'list'
   /* What a row or a card shows is kept for the list and the board; the
      people view draws the board's cards, so it shares the board's answers. */
   const drawing = view === 'list' ? 'list' : 'board'

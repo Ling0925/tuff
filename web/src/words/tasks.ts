@@ -41,8 +41,9 @@ export const TASKS = say({
   /* The bar over the work. */
   board: ['Board', 'Tableau'],
   /* The third drawing: the board with a column for each assignee.
-     Slack and Asana's "People", "Personnes". */
-  people: ['People', 'Personnes'],
+     Members, as the project's own people are
+     called on its Settings and in Linear's and Asana's grouping. */
+  people: ['Members', 'Membres'],
 
   /* A column in the people view. */
   notOnProject: ['Not on this project', 'Hors du projet'],

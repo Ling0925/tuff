@@ -2,7 +2,7 @@ import { test, expect, type Page, type Locator } from '@playwright/test'
 import { login, drawnWhole, make } from './helpers.js'
 
 /**
- * Tasks by person. On a desk, a third option
+ * Tasks by person. On a desk, a third option, Members,
  * beside List and Board draws the board with a column for each assignee:
  * the head is the face, the name, the open count and a +; the cards are the
  * board's, with the task's list where the board draws the face; a task
@@ -10,7 +10,7 @@ import { login, drawnWhole, make } from './helpers.js'
  * work is counted, not drawn. The + makes a task given to that column's
  * person; a card carried to another column is given to that person
  * instead, and to No assignee is given to nobody. On a phone the option is
- * not there and `?view=people` draws the list. `PEOPLE_VIEW_SHOTS` names a
+ * not there and `?view=members` draws the list. `PEOPLE_VIEW_SHOTS` names a
  * folder to keep a picture of the columns in.
  */
 const SHOTS = process.env.PEOPLE_VIEW_SHOTS
@@ -93,14 +93,14 @@ async function carry(page: Page, card: Locator, column: Locator) {
   await page.mouse.up()
 }
 
-test('on a desk, People is the board with a column per assignee, and its + and its drag give the work', async ({ page }) => {
+test('on a desk, Members is the board with a column per assignee, and its + and its drag give the work', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 })
   await login(page)
   const s = await stage(page, Date.now())
 
   await page.goto(`/${s.ws}/${s.slug}/tasks?view=list`)
   await expect(page.locator('[data-open-task]').filter({ hasText: s.tasks.mine.title })).toBeVisible({ timeout: 15_000 })
-  const option = page.getByTestId('view-people')
+  const option = page.getByTestId('view-members')
   await expect(option).toBeVisible()
 
   /* Drawn whole: a card appears at its height and keeps it. */
@@ -108,7 +108,7 @@ test('on a desk, People is the board with a column per assignee, and its + and i
   const cards = (key: string) => column(key).locator('[data-card]')
   const heights = await drawnWhole(page, `[data-person-column="${s.me}"] [data-card]`, () => option.click())
   expect(heights.length, `a card's heights: ${heights.join(', ')}`).toBe(1)
-  await expect(page).toHaveURL(/[?&]view=people/)
+  await expect(page).toHaveURL(/[?&]view=members/)
 
   /* The heads: people, then agents, then No assignee, always last. */
   const keys = await page.locator('[data-person-column]').evaluateAll((els) => els.map((e) => e.getAttribute('data-person-column')))
@@ -134,7 +134,7 @@ test('on a desk, People is the board with a column per assignee, and its + and i
   /* The + in the agent's column makes a task given to the agent. */
   const made = `Made for the helper ${Date.now()}`
   await make(page, page.getByTestId(`add-for-${s.agent}`), made)
-  await expect(page).toHaveURL(/[?&]view=people/)
+  await expect(page).toHaveURL(/[?&]view=members/)
   await expect(cards(s.agent).filter({ hasText: made })).toHaveCount(1, { timeout: 15_000 })
 
   /* Carried from my column to the agent's: I am taken off, the agent put on. */
@@ -166,7 +166,7 @@ test('on a desk, People is the board with a column per assignee, and its + and i
   await expect(page).toHaveURL(new RegExp(`/tasks/${s.tasks.mine.number}(\\?|$)`))
   await expect(page.getByTestId('task-title')).toHaveValue(s.tasks.mine.title, { timeout: 15_000 })
   await page.goBack()
-  await expect(page).toHaveURL(/[?&]view=people/)
+  await expect(page).toHaveURL(/[?&]view=members/)
   await expect(cards(s.agent).filter({ hasText: s.tasks.mine.title })).toHaveCount(1)
 })
 
@@ -176,7 +176,7 @@ test('dark, for the picture', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'dark' })
   await login(page)
   const s = await stage(page, Date.now())
-  await page.goto(`/${s.ws}/${s.slug}/tasks?view=people`)
+  await page.goto(`/${s.ws}/${s.slug}/tasks?view=members`)
   await expect(page.locator(`[data-person-column="${s.me}"] [data-card]`)).toHaveCount(2, { timeout: 15_000 })
   /* Past the window's own arrival, which fades in. */
   await page.waitForTimeout(1500)
@@ -186,14 +186,14 @@ test('dark, for the picture', async ({ page }) => {
 test.describe('on a phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
 
-  test('People is not offered, and ?view=people draws the list', async ({ page }) => {
+  test('Members is not offered, and ?view=members draws the list', async ({ page }) => {
     await login(page)
     const s = await stage(page, Date.now())
-    await page.goto(`/${s.ws}/${s.slug}/tasks?view=people`)
+    await page.goto(`/${s.ws}/${s.slug}/tasks?view=members`)
     await expect(page.locator('[data-open-task]').filter({ hasText: s.tasks.mine.title })).toBeVisible({ timeout: 15_000 })
-    await expect(page.getByTestId('view-people')).toHaveCount(0)
+    await expect(page.getByTestId('view-members')).toHaveCount(0)
     await expect(page.locator('[data-person-column]')).toHaveCount(0)
     /* The address is left as it was. */
-    await expect(page).toHaveURL(/[?&]view=people/)
+    await expect(page).toHaveURL(/[?&]view=members/)
   })
 })
