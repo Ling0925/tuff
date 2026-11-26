@@ -11,7 +11,7 @@
  * does not touch a row that is already there.
  */
 create or replace function join_sample() returns uuid
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   p uuid;
 begin
