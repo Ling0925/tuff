@@ -136,6 +136,8 @@ test('on a desk, the board’s Columns choice draws a column per member, and its
   await expect(page.getByTestId('view-columns-list')).toHaveAttribute('aria-checked', 'true')
   await expect(page.getByTestId('view-columns-list')).toHaveText('Status')
   await expect(page.getByTestId('view-columns-members')).toHaveText('Members')
+  /* The board of lists offers the Assignee switch; the board of members does not. */
+  await expect(page.getByTestId('shows-who')).toBeVisible()
   if (SHOTS) {
     /* Once the panel has slid in. */
     await page.waitForTimeout(500)
@@ -151,6 +153,7 @@ test('on a desk, the board’s Columns choice draws a column per member, and its
   expect(heights.length, `a card's heights: ${heights.join(', ')}`).toBe(1)
   await expect(page).toHaveURL(/[?&]view=board/)
   await expect(page).toHaveURL(/[?&]group=who/)
+  await expect(page.getByTestId('shows-who')).toHaveCount(0)
   await viewAnswers(page, false)
 
   /* The heads: No assignee first, then people, then agents. */

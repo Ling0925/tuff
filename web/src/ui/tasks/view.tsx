@@ -499,7 +499,12 @@ function ViewAnswers({ on, group, sort, dir, who, labels, people, meId, allLabel
             ...((bare ? [] : [['labels', FACTS.labels]]) as ['labels', string][]),
             ...((bare ? [] : [['id', W.number]]) as ['id', string][]),
             ...((bare ? [] : [['due', W.dueDate]]) as ['due', string][]),
-            ['who', FACTS.assignee],
+            /* Not on the board of members: its columns are the assignees,
+               and a card there shows whoever else has it whatever this
+               says — the one thing the column cannot. A switch that
+               turns nothing off is a control that means nothing where it
+               lands. */
+            ...((!arranging && desk && byMembers ? [] : [['who', FACTS.assignee]]) as ['who', string][]),
             ...((bare ? [] : [['cycle', FACTS.cycle]]) as ['cycle', string][]),
             /*
              * When it was made and when it last moved — on the board only,

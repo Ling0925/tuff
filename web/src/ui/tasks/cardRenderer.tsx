@@ -66,11 +66,11 @@ export function cardRenderer({
   /**
    * The board of members' head: whoever else the task is given to, as
    * faces, where the board draws the face — the column already says whose
-   * it is. Nothing when it is nobody else's, and nothing with the Assignee
-   * switch off, as the face goes on the board.
+   * it is. Nothing when it is nobody else's. Not under the Assignee switch,
+   * which this board does not offer: the column already says the one face
+   * the switch would hide.
    */
   function cardOthers(t: Task, whose: string) {
-    if (!shows.who) return null
     const shown = whoOf(t)
       .filter((id) => id !== whose)
       .map((id) => people.find((p) => p.actor_id === id))
