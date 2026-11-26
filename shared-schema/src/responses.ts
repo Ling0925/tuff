@@ -675,6 +675,9 @@ export const MeWorkspace = z.object({
   icon_url: SignedLink.nullable().optional(),
   /** The brand this workspace wears, or null — the tab's icon and title. */
   brand: Brand.nullable().optional(),
+  /** Where the workspace's own links point: its connected domain on a
+      branded plan, else null for this server's own address. */
+  origin: z.string().nullable().optional(),
 })
 export const Me = z.object({
   actor: MeActor,
@@ -687,6 +690,9 @@ export const Me = z.object({
   /** Your own server's version and a newer release — to its owners only,
       absent for everybody else and always on the service. */
   server: ServerVersion.optional(),
+  /** The workspace's own domain this session was made on, when it was.
+      Such a session sees this workspace only. */
+  host: z.string().nullable().optional(),
 })
 
 /** `GET /api/projects`. */
@@ -1923,6 +1929,8 @@ export const SessionRow = z.object({
   expires_at: z.string().nullable().optional(),
   sessions: Count.optional(),
   current: z.boolean().optional(),
+  /** The workspace's own domain the session was made on — "Safari on iPhone · projects.agency.com". */
+  host: z.string().nullable().optional(),
 })
 export const Sessions = z.object({ sessions: z.array(SessionRow) })
 
@@ -2024,6 +2032,10 @@ export const PushTried = z.object({ devices: z.array(PushTriedDevice) })
 
 /** Six digits sent to the account's address — `POST /api/me/inbox-code`; the address masked. */
 export const InboxCodeSent = z.object({ sent_to: z.string() })
+
+/** A sign-in code asked for on a workspace's own domain — `POST /auth/code`.
+    The same answer whoever the address is. */
+export const SignInCodeAsked = z.object({ sent: z.boolean() })
 
 
 /** A direct conversation made, or the one these people already had — `POST /api/conversations/direct`. */

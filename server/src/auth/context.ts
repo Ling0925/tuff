@@ -112,6 +112,13 @@ export type AuthContext = {
    * the write leaves it ended.
    */
   checkedAt?: Date
+  /**
+   * The workspace's own domain the session was made on.
+   * From the signed token, never a header:
+   * `can` refuses it `NEVER_ON_A_HOST` wherever it is used, and on a host
+   * nothing else is let in (`host.ts`, `usableHere`).
+   */
+  host?: string
 }
 
 type Row = {
@@ -277,6 +284,7 @@ export async function authenticate(header: string | undefined): Promise<AuthCont
         ...ctx,
         within,
         ...(claims.sid ? { sessionId: claims.sid } : {}),
+        ...(claims.host ? { host: claims.host } : {}),
         ...(claims.via === 'github' ? { viaGithub: true } : {}),
         ...(claims.via === 'import' && claims.imp ? { viaImport: claims.imp } : {}),
         ...(claims.via === 'feedback' ? { feedbackPage: true, feedbackProjectId: feedbackProject! } : {}),
@@ -391,6 +399,8 @@ export function allow(ctx: AuthContext, action: z.infer<typeof Action>, about: P
     /* And nothing a handler says makes an unproved address a proved one. */
     unproved: ctx.unproved === true,
     byHand: ctx.byHand === true,
+    /* And nothing a handler says lifts what a host's session may not do. */
+    onAHost: Boolean(ctx.host),
   })
 }
 

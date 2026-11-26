@@ -40,6 +40,10 @@ workspaces.get('/workspaces', async (c) => {
          /* A token made for some projects is a key to them, in this
             workspace: which others its person is in is not its to know. */
          ${ctx.tokenProjectIds.length > 0 ? tx`and w.id = ${ctx.workspaceId}` : tx``}
+         /* Nor a session made on a workspace's own domain: whoever controls
+            that domain's DNS tomorrow does not learn which other companies
+            its person works with. */
+         ${ctx.host ? tx`and w.id = ${ctx.workspaceId}` : tx``}
        order by w.name`,
   )
   /*

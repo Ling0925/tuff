@@ -8,6 +8,7 @@
  * from the start.
  */
 export const AUTH_DEFINERS = [
+  /* 325: a session's workspace domain carried through a refresh, and the codes that sign in on a host. */
   'accept_invite',
   'agent_end_tokens',
   'agent_oauth_end',
@@ -42,6 +43,7 @@ export const AUTH_DEFINERS = [
   'auth_refresh_again',
   'auth_revoke_others',
   'auth_revoke_session',
+  'auth_session_host',
   'auth_set_password',
   'auth_spend_refresh',
   'auth_ticket_binding',
@@ -62,6 +64,9 @@ export const AUTH_DEFINERS = [
   'digest_off',
   'github_person_retoken',
   'github_person_token',
+  'host_code_make',
+  'host_code_spend',
+  'host_code_try',
   'instance_add_owner',
   'instance_mail_clear',
   'instance_mail_write',

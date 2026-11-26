@@ -28,6 +28,7 @@ import { heard, languageFor, say } from '../words.js'
 import { clientOf, guess, metaOf, onThisMachine, spendOn } from './limits.js'
 import { isClosed, orClosed, serverClaimed, SignUpClosed, signUpOpen } from '../instance.js'
 import { checkIdToken, oidcName, oidcOn, provider as ownProvider, tradeCode, whoTheTokenSays } from '../auth/oidc.js'
+import { hostOf } from '../host.js'
 
 /**
  * Getting in by Google or Apple, and back in when a password is forgotten.
@@ -100,6 +101,20 @@ const HANDOFF = '__Host-tuff_handoff'
 /* The ticket that adds a way to sign in, carried from Account settings to
    the start. */
 export const LINK = '__Host-tuff_link'
+/* A provider's sign-in begun on a workspace's own domain — set there, and
+   the ticket that comes back is good only beside it. */
+export const BEGIN = '__Host-tuff_begin'
+const handoffKey = keyFor('host-handoff')
+const sha = (s: string) => createHash('sha256').update(s).digest('base64url')
+
+/**
+ * Where a host's sign-in is to go back to: a connected domain on a branded
+ * plan, by the id our own server sealed, read from the row and never from a
+ * parameter — so there is no open redirect to make. Null for anything else.
+ */
+async function hostBack(domainId: string): Promise<{ hostname: string; workspaceId: string } | null> {
+  return edition.hosts ? edition.hosts.byId(domainId) : null
+}
 
 /*
  * The same ticket made for an app, which no cookie reaches.
@@ -217,6 +232,37 @@ access.get('/providers', async (c) => {
 access.get('/oauth/:provider/start', async (c) => {
   const p = c.req.param('provider')
   if (!isOn(p)) return c.redirect('/signin?oauth=off')
+  /* On a workspace's own domain: a cookie of the host's own, and off to
+     usetuff.com's start with the domain and that cookie's hash sealed —
+     a provider takes a fixed list of return addresses, and a hundred
+     agencies are not on it. No invitation, no app, no linking from here. */
+  const host = hostOf(c)
+  if (host) {
+    if (p === 'oidc') return c.redirect('/signin?oauth=off')
+    const begin = b64url(randomBytes(32))
+    const sealedFor = await new SignJWT({ d: host.domainId, h: sha(begin) })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setExpirationTime('10m')
+      .sign(handoffKey)
+    c.header('set-cookie', `${BEGIN}=${begin}; Path=/; Max-Age=600; HttpOnly; Secure; SameSite=Lax`, { append: true })
+    return c.redirect(`${origin(c)}/auth/oauth/${p}/start?for=${encodeURIComponent(sealedFor)}`)
+  }
+  /* Begun on a host: only our own server can have sealed `for`, and the
+     domain must still be connected. Its ticket goes back there, bound to
+     the host's cookie. */
+  let forHost: string | undefined
+  if (c.req.query('for') !== undefined) {
+    let said: JWTPayload
+    try {
+      said = (await jwtVerify(c.req.query('for') ?? '', handoffKey)).payload
+    } catch {
+      return c.redirect('/signin?oauth=expired')
+    }
+    const d = typeof said.d === 'string' ? said.d : ''
+    const h = typeof said.h === 'string' ? said.h : ''
+    if (!/^[\w-]{43}$/.test(h) || !(await hostBack(d))) return c.redirect('/signin?oauth=failed')
+    forHost = `host:${d}:${h}`
+  }
   /* A server's own provider is read first, before anything is spent on
      the way to it: one that cannot be read, or is not what `OIDC_ISSUER`
      says, is "couldn't reach", said where the press was. */
@@ -242,13 +288,14 @@ access.get('/oauth/:provider/start', async (c) => {
   const challenge = c.req.query('app_challenge')
   if (challenge !== undefined && !/^[\w-]{43}$/.test(challenge)) return c.redirect('/signin?oauth=failed')
   const sheet = c.req.header('sec-fetch-site') === 'none'
-  const bind = sheet && challenge ? `app:${challenge}` : 'web'
+  const bind = forHost ?? (sheet && challenge ? `app:${challenge}` : 'web')
   /* Adding a way to sign in rather than signing in: the ticket only from
      the cookie Account settings left, sealed into the state this browser
      carries. */
   let link: string | undefined
   let linkApp = false
   let startMark: string | undefined
+  if (forHost && (invite || c.req.query('link') || challenge)) return c.redirect('/signin?oauth=failed')
   if (c.req.query('link') === 'app') {
     /* From an app's sheet only, with the challenge its ticket was made
        for. From a page's link it is
@@ -396,6 +443,19 @@ async function appleSecret(): Promise<string> {
     .sign(key)
 }
 
+/** What a provider's start sealed into the cookie its callback reads. */
+type OAuthBound = {
+  state: string
+  nonce: string
+  verifier: string
+  p: string
+  bind?: string
+  invite?: string
+  link?: string
+  linkApp?: boolean
+  startMark?: string
+}
+
 /** Who the provider says this is, once its answer has been checked. */
 type Said = { subject: string; email: string; verified: boolean; name: string; owns: boolean }
 
@@ -406,17 +466,7 @@ async function callback(c: Context, p: Provider, params: { code?: string; state?
   }
   if (!isOn(p) || !params.code || !params.state) return fail('failed')
 
-  let bound: {
-    state: string
-    nonce: string
-    verifier: string
-    p: string
-    bind?: string
-    invite?: string
-    link?: string
-    linkApp?: boolean
-    startMark?: string
-  }
+  let bound: OAuthBound
   try {
     const sealed = readCookie(c, COOKIE) ?? ''
     bound = (await unsealState(sealed)) as unknown as typeof bound
@@ -425,6 +475,7 @@ async function callback(c: Context, p: Provider, params: { code?: string; state?
   }
   if (bound.state !== params.state || bound.p !== p) return fail('failed')
   if (bound.link) return linked(c, p, params, bound, bound.link, bound.linkApp === true)
+  if (bound.bind?.startsWith('host:')) return toHost(c, p, params, bound)
   /* From here on, a sign-in that went wrong on the way to an invitation
      goes back to the invitation, which says what happened there. */
   const invite = bound.invite
@@ -1053,6 +1104,52 @@ access.post('/oauth/apple/callback', async (c) => {
 })
 
 /**
+ * A provider's answer for a sign-in begun on a workspace's own domain.
+ * Exactly `sign-in.md`'s who-is-this, with
+ * one difference: nobody new is made, since a host signs up nobody. The
+ * account must be in that workspace. The ticket is bound to the domain and
+ * the host's cookie, and goes to the hostname read from the row.
+ */
+async function toHost(c: Context, p: Provider, params: { code?: string; state?: string; user?: string }, bound: OAuthBound) {
+  const [, d = '', h = ''] = (bound.bind ?? '').split(':')
+  const back = await hostBack(d)
+  c.header('set-cookie', `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=None`, { append: true })
+  if (!back) return c.redirect('/signin?oauth=failed')
+  const there = (q: string) => c.redirect(`https://${back.hostname}/signin?${q}`)
+  const said =
+    p === 'github' ? await fromGithub(c, params.code!, bound.verifier) : p === 'oidc' ? null : await fromOidc(c, p, params, bound)
+  if (!said) return there('oauth=failed')
+  const since = await checkedNow()
+  const seen: Seen = { claimed: false }
+  const found = await knownActor(p, said.subject, said.email, said.owns, seen).catch((e: unknown) => {
+    if (isClosed(e)) return null
+    throw e
+  })
+  if (found === 'conflict') return there('oauth=conflict')
+  if (!found) return there('oauth=notin')
+  const member = await withActorEverywhere(found, async (tx) => {
+    const [m] = await tx<{ ok: boolean }[]>`
+      select true as ok from membership
+      where actor_id = ${found} and workspace_id = ${back.workspaceId}
+        and deleted_at is null and joined_at is not null and role in ('owner', 'member')`
+    return m?.ok === true
+  })
+  if (!member) return there('oauth=notin')
+  await asAuth((tx) => tx`select auth_identity_link(${found}, ${p}, ${said.subject}, ${said.email || null})`)
+  const ticket = generateToken('hof')
+  const made = await asAuth(async (tx) => {
+    await tx`select auth_not_put_out_since(${found}, ${seen.claimed ? null : since}::timestamptz)`
+    await tx`select auth_ticket_make_bound(${hashToken(ticket)}, 'handoff', ${found}, ${back.workspaceId}, interval '2 minutes', ${`host:${d}:${h}`})`
+    return true
+  }).catch((e: { code?: string }) => {
+    if (e.code === '28000') return false
+    throw e
+  })
+  if (!made) return there('oauth=failed')
+  return there(`handoff=${encodeURIComponent(ticket)}`)
+}
+
+/**
  * The page trades the ticket the callback left in its address for a
  * session. An account with a second factor is asked for it first, and the
  * ticket stays good until it is spent or runs out.
@@ -1111,6 +1208,11 @@ access.post('/oauth/exchange', async (c) => {
     return c.json(NO_WORKSPACE_YET, 403)
   }
   c.header('set-cookie', `${HANDOFF}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`, { append: true })
+  const host = hostOf(c)
+  if (host) {
+    c.header('set-cookie', `${BEGIN}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`, { append: true })
+    if (workspaceId !== host.workspaceId) return c.json({ error: { code: 'unauthorized' } }, 401)
+  }
   return c.json(await startSession(t.actor_id, workspaceId, metaOf(c), 'provider'))
 })
 
@@ -1127,6 +1229,19 @@ access.post('/oauth/exchange', async (c) => {
 async function broughtBy(c: Context, hash: string, verifier: string | undefined): Promise<'ok' | 'refuse' | 'burn'> {
   const [row] = await asAuth((tx) => tx<{ binding: string | null }[]>`select auth_ticket_binding(${hash}, 'handoff') as binding`)
   const binding = row?.binding
+  /* Begun on a workspace's own domain: traded only through that domain,
+     beside the cookie its start set there — and spent by the first
+     exchange that fails that, whichever way. A ticket from anywhere else
+     is never traded on a host. */
+  const host = hostOf(c)
+  if (binding?.startsWith('host:') || host) {
+    if (!binding?.startsWith('host:') || !host) return 'burn'
+    const [, d, h] = binding.split(':')
+    const begin = readCookie(c, BEGIN)
+    if (d !== host.domainId || !begin) return 'burn'
+    const brought = sha(begin)
+    return brought.length === h!.length && timingSafeEqual(Buffer.from(brought), Buffer.from(h!)) ? 'ok' : 'burn'
+  }
   const browser = Boolean(c.req.header('origin') || c.req.header('sec-fetch-site'))
   /* None is made bound to nothing any more; one from before is no
      request's to trade, and a page that brings one is spent. */

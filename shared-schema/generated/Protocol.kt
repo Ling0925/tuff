@@ -531,6 +531,9 @@ data class Contract (
     @SerialName("SharedProject")
     val sharedProject: SharedProject? = null,
 
+    @SerialName("SignInCodeAsked")
+    val signInCodeAsked: SignInCodeAsked? = null,
+
     @SerialName("SlackChannel")
     val slackChannel: SlackChannel? = null,
 
@@ -2587,6 +2590,7 @@ data class ListsInProject (
 data class Me (
     val actor: MeActor,
     val can: List<String>,
+    val host: String? = null,
     val plan: String? = null,
     val role: String,
     val server: ServerVersion? = null,
@@ -2655,6 +2659,7 @@ data class MeWorkspace (
     val markTint: Long? = null,
 
     val name: String,
+    val origin: String? = null,
     val slug: String
 )
 
@@ -3964,6 +3969,7 @@ data class SessionRow (
     @SerialName("expires_at")
     val expiresAt: String? = null,
 
+    val host: String? = null,
     val id: String,
     val ip: String? = null,
 
@@ -3994,6 +4000,11 @@ data class SetupState (
 
     @SerialName("owner_email")
     val ownerEmail: String? = null
+)
+
+@Serializable
+data class SignInCodeAsked (
+    val sent: Boolean
 )
 
 @Serializable

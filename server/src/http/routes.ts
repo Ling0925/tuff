@@ -87,6 +87,8 @@ import { slackApi, slackHooks, slackReturns } from './slack.js'
 import { watching } from '../watchdog.js'
 import { onlyLocalhost } from '../tryLocalhost.js'
 import { usedAs } from './used.js'
+import { hostOf, usableHere } from '../host.js'
+import { verifyAccessToken } from '../auth/tokens.js'
 
 type Vars = { ctx: AuthContext }
 
@@ -163,6 +165,14 @@ app.use('*', async (c, next) => {
   if (!fromOurEdge(c)) return c.text('Not found', 404)
   return next()
 })
+
+/*
+ * A workspace's own domain, on the service.
+ * A request the Worker signed for a connected name is that workspace's and
+ * meets its allow-list; one for a name that went is sent to the same path
+ * here. Anything else, whatever its headers say, is an ordinary request.
+ */
+edition.hosts?.mount(app)
 
 /* No credentials across origins: sign-in is a bearer header, and nothing a
    page elsewhere could send with this site's cookies should be allowed to. */
@@ -425,6 +435,10 @@ const Register = z.object({
    another `{ email, approve }` — `Pending` in `shared-schema`. */
 const pending = (email: string) => ({ pending: true, email, approve: false })
 
+const PASSWORD_NOT_HERE = {
+  error: { code: 'password_not_here', message: 'Passwords aren’t used here. Sign in with a code sent to your email.' },
+} as const
+
 /*
  * Signing up.
  * An account with no password and its workspace, and no session: a letter
@@ -489,6 +503,11 @@ app.post('/auth/register', async (c) => {
 })
 
 app.post('/auth/login', async (c) => {
+  /* No password is typed on a workspace's own domain: whoever controls its
+     DNS could serve a copy of this page there. A code to the address, or a
+     provider through usetuff.com. Decided by
+     the signed host, never by the page. */
+  if (hostOf(c)) return c.json(PASSWORD_NOT_HERE, 403)
   const body = z
     .object({ email: z.email(), password: z.string(), totp: z.string().optional(), nowhere: z.boolean().optional() })
     .safeParse(await c.req.json().catch(() => ({})))
@@ -537,6 +556,16 @@ app.post('/auth/refresh', async (c) => {
   if (!body.success) return c.json({ error: { code: 'invalid' } }, 400)
   const session = await refresh(body.data.refresh_token, metaOf(c))
   if (!session) return c.json({ error: { code: 'unauthorized' } }, 401)
+  /* On a workspace's own domain, only a session made on it, in its
+     workspace: anything else asked here is nobody — `host.ts`. */
+  const host = hostOf(c)
+  if (host && 'access_token' in session) {
+    const claims = await verifyAccessToken(session.access_token)
+    if (!claims || claims.host !== host.hostname || claims.workspace_id !== host.workspaceId) {
+      await logout(session.refresh_token)
+      return c.json({ error: { code: 'unauthorized' } }, 401)
+    }
+  }
   /* Removed from the workspace the session was in: said, with which one,
      so the device clears what it kept of it and tells them —
      `docs/specs/removing-someone.md`, "On their devices". */
@@ -619,6 +648,14 @@ app.use('/api/*', async (c, next) => {
   if (edition.openApi(c.req.path)) return next()
   const ctx = await authenticate(c.req.header('authorization'))
   if (!ctx) return c.json({ error: { code: 'unauthorized' } }, 401)
+  /* On a workspace's own domain, a session made there for its workspace
+     and nothing else: any other token is as one that has ended. */
+  if (!usableHere(c, ctx)) return c.json({ error: { code: 'unauthorized' } }, 401)
+  /* And a session made on a host never reaches what belongs to the
+     account rather than the workspace: the password, the address, the
+     second factor, the devices signed in, the ways in, an agent's
+     connection, the account's data and its deletion — wherever it is used. */
+  if (ctx.host && ACCOUNT_ONLY.test(c.req.path)) return c.json(NOT_ON_A_HOST, 403)
   /* A token held back by the edition does nothing, and says why, to the
      agent holding it — which says it to the person. On your own server,
      never. */
@@ -631,6 +668,12 @@ app.use('/api/*', async (c, next) => {
      request makes as its person. */
   await bounded(ctx, next)
 })
+
+/* What belongs to the account, never to a session made on a host. */
+const ACCOUNT_ONLY = /^\/api\/(me\/(password|email|inbox-code|ways-in|delete|export)|2fa|sessions|oauth\/authorize)(\/|$)/
+const NOT_ON_A_HOST = {
+  error: { code: 'not_on_a_host', message: 'Open Tuff at usetuff.com to change this.' },
+} as const
 
 // After authentication, because who is asking is what the ceiling is per.
 app.use('/api/*', rateLimit)
@@ -754,6 +797,9 @@ app.get('/api/me', async (c) => {
           /* Its own name and mark, worn in Tuff's place where its plan
              says so — the tab's icon and title, Settings' line. */
           brand: await brandHere(tx, ws.id),
+          /* Where its own links point: its domain, when it has one on a
+             branded plan. */
+          origin: edition.hosts ? await edition.hosts.originOf(tx, ws.id) : null,
         }
       : ws
     return { actor: actor ? faced(actor) : actor, workspace }
@@ -771,6 +817,8 @@ app.get('/api/me', async (c) => {
        Absent for everybody else, and always on the service, where
        `instance` is nobody's. */
     ...(allow(ctx, 'instance') ? { server: await serverVersion(ctx.actorId, ctx.workspaceId) } : {}),
+    /* The domain this session was made on: it sees this workspace only. */
+    host: ctx.host ?? null,
   })
 })
 

@@ -269,16 +269,20 @@ export function clientOf(c: Asking): string {
  * (`x-device`) — so its tabs and workspaces are one line in the list of
  * places you are signed in.
  */
-export function metaOf(c: { req: { header: (name: string) => string | undefined } }): {
+export function metaOf(c: { req: { header: (name: string) => string | undefined }; get?: (k: never) => unknown }): {
   ip: string
   userAgent: string | null
   device: string | null
+  host: string | null
 } {
   const device = c.req.header('x-device') ?? ''
   return {
     ip: clientOf(c),
     userAgent: c.req.header('user-agent')?.slice(0, 400) ?? null,
     device: /^[A-Za-z0-9-]{8,64}$/.test(device) ? device : null,
+    /* The workspace's own domain this came in on, set only by the edition
+       from a signed pair — every session made here is bound to it. */
+    host: ((c.get?.('host' as never) as { hostname?: string } | undefined)?.hostname ?? null) as string | null,
   }
 }
 

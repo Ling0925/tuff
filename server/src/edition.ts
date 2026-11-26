@@ -125,6 +125,8 @@ export const edition: Edition = {
   /* Never: every workspace here is unlimited, and the product's name at the
      foot of a shared page is how the open-source project is found. */
   brands: false,
+  /* None: a server of one's own already has an address of its own. */
+  hosts: null,
   errorsFr: {},
   errorsFrLike: [],
   operators: false,

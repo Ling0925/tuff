@@ -23,6 +23,14 @@ export const Action = z.enum([
   'workspace.transfer',
   'workspace.delete',
   /*
+   * The workspace's own address. The
+   * owner's, as billing is: the domain comes with the plan and is the
+   * company's face. Never through a token, an agent, an unproved address or
+   * a session made on a host, and only where the edition has plans — the
+   * community edition has no domains, and is never told a plan.
+   */
+  'workspace.domain',
+  /*
    * Leaving the session's workspace yourself.
    * A member's, in person: never the owner, who hands the workspace over
    * first, never an agent, never through a token.
@@ -461,6 +469,13 @@ export type PermissionInput = {
   /** Whether the project asked about is that page's own: the only one its
       actor may file into, whatever it holds elsewhere. */
   onItsPage?: boolean
+  /**
+   * Whether the session was made on a workspace's own domain.
+   * Its token sits where whoever controls
+   * that domain's DNS can read it, so it does nothing that outlives it or
+   * reaches past its workspace (`NEVER_ON_A_HOST`), wherever it is used.
+   */
+  onAHost?: boolean
 }
 
 /**
@@ -479,6 +494,7 @@ export const NEVER_VIA_MCP: readonly Action[] = [
   'workspace.billing',
   'workspace.transfer',
   'workspace.delete',
+  'workspace.domain',
   'people.invite',
   'people.role',
   'token.revoke.any',
@@ -566,7 +582,7 @@ const NEVER_AN_AGENT: readonly Action[] = [
  */
 const NEVER_A_LIMITED_TOKEN: readonly Action[] = [
   'workspace.create', 'workspace.enter', 'workspace.confirm',
-  'workspace.billing', 'workspace.transfer', 'workspace.delete',
+  'workspace.billing', 'workspace.transfer', 'workspace.delete', 'workspace.domain',
   'people.invite', 'people.role', 'members.read',
   'project.create', 'channel.create.workspace',
   'agent.connect', 'agent.manage', 'agent.remove', 'agent.work.read',
@@ -601,8 +617,22 @@ export const ON_A_FEEDBACK_PAGE: readonly Action[] = ['task.create', 'content.cr
  */
 export const NEVER_UNPROVED: readonly Action[] = [
   'workspace.create', 'workspace.enter', 'workspace.confirm', 'workspace.billing', 'workspace.transfer', 'workspace.delete',
-  'people.invite', 'people.role', 'token.issue.own', 'token.revoke.any', 'audit.read',
+  'workspace.domain', 'people.invite', 'people.role', 'token.issue.own', 'token.revoke.any', 'audit.read',
   'agent.connect', 'agent.manage', 'agent.remove', 'feedback.manage', 'operator', 'instance', 'hook.manage',
+]
+
+/*
+ * What a session made on a workspace's own domain never does, at
+ * usetuff.com or on the host. Whoever
+ * controls that domain's DNS can read what the browser keeps there, so
+ * nothing here: another workspace, money, the workspace itself, the domain,
+ * a token for an agent, or anybody's token ended.
+ */
+export const NEVER_ON_A_HOST: readonly Action[] = [
+  'workspace.create', 'workspace.enter', 'workspace.confirm',
+  'workspace.billing', 'workspace.transfer', 'workspace.delete', 'workspace.domain',
+  'token.issue.own', 'token.revoke.any', 'agent.connect', 'agent.manage',
+  'operator', 'instance',
 ]
 
 export function can(action: Action, input: PermissionInput): boolean {
@@ -619,6 +649,7 @@ export function can(action: Action, input: PermissionInput): boolean {
     if (role === 'owner') role = 'member'
   }
   if (input.byHand && action === 'workspace.transfer') return false
+  if (input.onAHost && NEVER_ON_A_HOST.includes(action)) return false
 
   if (input.viaMcp && NEVER_VIA_MCP.includes(action)) return false
   if (input.agent && NEVER_AN_AGENT.includes(action)) return false
@@ -631,6 +662,9 @@ export function can(action: Action, input: PermissionInput): boolean {
   if (input.tokenLimited && (input.outsideToken || NEVER_A_LIMITED_TOKEN.includes(action))) return false
 
   if (action === 'agent.use') return true
+  /* Only where a plan is said at all: the community edition never says
+     one, and has no domains to set. An agent is never an owner. */
+  if (action === 'workspace.domain') return role === 'owner' && input.plan !== undefined && input.agent !== true
   if (action === 'agent.connect') return role === 'owner' || (role === 'member' && input.mayConnectAgents === true)
   /* Not the plan's: an agent on a workspace whose plan no longer has
      agents is still somebody's to disconnect. */

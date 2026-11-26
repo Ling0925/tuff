@@ -477,6 +477,7 @@ policies; `workspace_brand(id)` is the worker's alone (migrations 323,
 324).
 
 
+
 | Method | Path | Action |
 | --- | --- | --- |
 | GET | `/api/me` | — ; `workspace` carries its mark: `mark_icon`, `mark_tint`, `icon_url`, and `brand` — the brand it wears, or null (above) |
@@ -2661,13 +2662,13 @@ actor it sets, an operator's or a server owner's included.
 `auth_lookup_user`, `auth_membership_answer`,
 `auth_not_put_out_since`, `auth_password_hash`, `auth_recovery_replace`, `auth_recovery_spend`,
 `auth_refresh_again`, `auth_revoke_others`, `auth_revoke_session`, `auth_set_password`,
-`auth_spend_refresh`, `auth_ticket_binding`, `auth_ticket_make`,
+`auth_session_host` (325), `auth_spend_refresh`, `auth_ticket_binding`, `auth_ticket_make`,
 `auth_ticket_make_bound`, `auth_ticket_peek`, `auth_ticket_recent`,
 `auth_ticket_spend`, `auth_ticket_start`, `auth_ticket_started`,
 `auth_totp_begin`, `auth_totp_disable`, `auth_totp_enable`,
 `auth_totp_secret`, `auth_totp_secret_for`, `auth_totp_spend`,
 `delete_my_account`, `digest_off`, `github_person_retoken`,
-`github_person_token`, `instance_add_owner`, `instance_mail_clear`,
+`github_person_token`, `host_code_make`, `host_code_spend`, `host_code_try` (325), `instance_add_owner`, `instance_mail_clear`,
 `instance_mail_write`, `instance_remove_owner`, `instance_setup_owner`,
 `nowhere_session_end`, `oauth_agent_link`, `oauth_code_make`,
 `oauth_code_take`, `oauth_refresh_take`, `oauth_token_bind`,
