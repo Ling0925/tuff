@@ -139,6 +139,19 @@ test('a line carries a colleague’s face only for whoever may speak for them, a
   assert.deepEqual(await authors(token, team), [[mallory.actorId, null]], 'on the project: their face')
   assert.deepEqual(await authors(token, outside), [[null, 'Mallory']], 'not in the room: their name')
 
+  // Running a project is not speaking for people. Whoever starts one runs it,
+  // so Mallory, who may start projects, would put
+  // the owner's face on a line in a room of her own making in two requests.
+  const made = await asked(asMallory, '/projects', 'POST', { name: `Mallory's ${stamp().slice(0, 4)}` })
+  assert.equal(made.status, 201)
+  const { id: hers } = (await made.json()) as { id: string }
+  const [main] = await withActor(ctx.actorId, (tx) => tx<{ id: string }[]>`select id from conversation where project_id = ${hers}`)
+  const runs = await asked(asMallory, `/conversations/${main!.id}/import`, 'POST', {
+    messages: [{ key: '1', name: 'The owner', email: owner!.email, text: 'I approve the transfer', at: '2026-01-15T10:00:00Z' }],
+  })
+  assert.equal(runs.status, 200)
+  assert.deepEqual(await authors(asMallory, main!.id), [[null, 'The owner']], 'her own project: still a name')
+
   // Nothing said after now, and no reply hung off another room's message.
   const later = new Date(Date.now() + 86_400_000).toISOString()
   const empty = await room([])

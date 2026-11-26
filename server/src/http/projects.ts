@@ -10,7 +10,7 @@ import {
   ProjectTemplate,
   PROJECT_TEMPLATES,
   RIGHTS_ON_JOINING,
-  RIGHTS_OF_ITS_MAKER,
+  rightsOfItsMaker,
   STARTING_LISTS,
 } from '@tracker/shared-schema'
 import { withActor, type Tx } from '../db.js'
@@ -244,7 +244,7 @@ export async function projectWithItsPlaces(
   // default, it is a broken one.
   await tx`
     insert into project_member (id, workspace_id, project_id, actor_id, added_by, rights)
-    values (${uuidv7()}, ${ctx.workspaceId}, ${id}, ${ctx.actorId}, ${ctx.actorId}, ${[...RIGHTS_OF_ITS_MAKER]})`
+    values (${uuidv7()}, ${ctx.workspaceId}, ${id}, ${ctx.actorId}, ${ctx.actorId}, ${rightsOfItsMaker(ctx.role)})`
 
   /*
    * Where it now lives, read inside the same request.
@@ -360,7 +360,7 @@ projects.post('/projects/sample', async (c) => {
                 ${['posts', 'tasks', 'files', 'messages']}::tool_kind[], true)`
       await tx`
         insert into project_member (id, workspace_id, project_id, actor_id, added_by, rights)
-        values (${uuidv7()}, ${ctx.workspaceId}, ${id}, ${ctx.actorId}, ${ctx.actorId}, ${[...RIGHTS_OF_ITS_MAKER]})`
+        values (${uuidv7()}, ${ctx.workspaceId}, ${id}, ${ctx.actorId}, ${ctx.actorId}, ${rightsOfItsMaker(ctx.role)})`
       const room = uuidv7()
       await tx`
         insert into conversation (id, workspace_id, project_id, name)

@@ -326,6 +326,15 @@ export const RIGHTS_ON_JOINING: readonly Right[] = ['task.create', 'channel.crea
  */
 export const RIGHTS_OF_ITS_MAKER: readonly Right[] = Right.options
 
+/**
+ * The rights a project's maker is stored with. The owner holds every right
+ * everywhere by being the owner, so a row of all six would decide nothing
+ * while they are — and would outlive a handover: `transfer_workspace` leaves
+ * rows it finds, and the former owner would run every project they ever
+ * started. The owner's own row says the ordinary two, as migration 119 meant.
+ */
+export const rightsOfItsMaker = (role: string): Right[] => [...(role === 'owner' ? RIGHTS_ON_JOINING : RIGHTS_OF_ITS_MAKER)]
+
 /** What `manage` carries, because those powers are about the project itself. */
 const MANAGING: readonly Action[] = ['project.archive', 'project.member.remove', 'project.tools', 'time.any', 'feedback.manage']
 

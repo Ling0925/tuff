@@ -659,4 +659,60 @@ test('a member who starts a project holds every right on it, and nobody else gai
     (tx: Tx) => tx<{ rights: string[] }[]>`select rights from project_member where project_id = ${room} and actor_id = ${ann.actorId}`,
   )
   assert.deepEqual([...there[0]!.rights].sort(), ['channel.create', 'task.create'])
+
+  // A copy and the sample are made too, and their maker runs them; whoever
+  // joins the sample after arrives with the ordinary two.
+  const rightsOn = async (project: string, actor: string) =>
+    (
+      await inWorkspace(
+        ctx.actorId,
+        workspaceId,
+        (tx: Tx) =>
+          tx<
+            { rights: string[] }[]
+          >`select rights from project_member where project_id = ${project} and actor_id = ${actor} and deleted_at is null`,
+      )
+    )[0]?.rights
+      .slice()
+      .sort()
+  const all = ['channel.create', 'channel.delete', 'edit.any', 'manage', 'task.create', 'task.delete']
+  const copied = await app.request(`/api/projects/${id}/copy`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${benT}` },
+    body: JSON.stringify({ name: 'Ben’s copy' }),
+  })
+  assert.equal(copied.status, 201)
+  const { id: copy } = (await copied.json()) as { id: string }
+  assert.deepEqual(await rightsOn(copy, ben.actorId), all)
+
+  const sample = await app.request('/api/projects/sample', { method: 'POST', headers: { authorization: `Bearer ${annT}` } })
+  assert.equal(sample.status, 201)
+  const { id: s } = (await sample.json()) as { id: string }
+  assert.deepEqual(await rightsOn(s, ann.actorId), all)
+  const joined = await app.request('/api/projects/sample', { method: 'POST', headers: { authorization: `Bearer ${benT}` } })
+  assert.equal(joined.status, 200)
+  assert.deepEqual(await rightsOn(s, ben.actorId), ['channel.create', 'task.create'])
+})
+
+/*
+ * The owner holds every right by being the owner; their own row says the
+ * ordinary two, so a handover leaves them running nothing they did not run.
+ */
+test('the owner who starts a project is stored with the ordinary two, and holds everything on it by being the owner', async () => {
+  const { ctx, workspaceId, token: owner } = await makeOwner()
+  const made = await app.request('/api/projects', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${owner}` },
+    body: JSON.stringify({ name: 'The owner’s own' }),
+  })
+  assert.equal(made.status, 201)
+  const { id } = (await made.json()) as { id: string }
+  const held = await inWorkspace(
+    ctx.actorId,
+    workspaceId,
+    (tx: Tx) => tx<{ rights: string[] }[]>`select rights from project_member where project_id = ${id} and actor_id = ${ctx.actorId}`,
+  )
+  assert.deepEqual([...held[0]!.rights].sort(), ['channel.create', 'task.create'])
+  // Still the owner, so still everything on it.
+  assert.equal(await call('PATCH', `/api/projects/${id}`, owner, { tools: ['tasks', 'messages'] }), 200)
 })

@@ -1021,13 +1021,18 @@ chat.post('/conversations/:id/import', async (c) => {
     /*
      * Whose face a line is drawn with. Whoever brings the room across is
      * the author of their own lines; somebody else's are theirs only when
-     * the one bringing them may change what other people said — the owner,
-     * whoever runs the project — and only for somebody who can read the
-     * room. Everybody else keeps the name they were said under, *from
-     * Slack* beside it. A member could otherwise put any colleague's face
-     * on any line, in a room that colleague would never open.
+     * the owner brings them, and only for somebody who can read the room.
+     * Everybody else keeps the name they were said under, *from Slack*
+     * beside it. A member could otherwise put any colleague's face on any
+     * line, in a room that colleague would never open.
+     *
+     * It was the owner or whoever runs the project. Since whoever starts a
+     * project runs it, running one is a right a
+     * member can give themselves in one press — and then the owner's face
+     * on "I approve the transfer", dated last January, was one import
+     * away. Speaking for somebody is not a right of the project.
      */
-    const vouches = allowIn(ctx, 'content.edit.said', room.project_id, { isAuthor: false })
+    const vouches = ctx.role === 'owner'
     const others = [...new Set(byEmail.values())].filter((a) => a !== ctx.actorId)
     const here = new Set(
       vouches && others.length

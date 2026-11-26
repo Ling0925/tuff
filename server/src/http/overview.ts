@@ -1,4 +1,4 @@
-import { RIGHTS_OF_ITS_MAKER } from '@tracker/shared-schema'
+import { rightsOfItsMaker } from '@tracker/shared-schema'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { v7 as uuidv7 } from 'uuid'
@@ -414,7 +414,7 @@ overview.post('/projects/:id/copy', async (c) => {
               ${source.tools}::tool_kind[])`
     await tx`
       insert into project_member (id, workspace_id, project_id, actor_id, added_by, rights)
-      values (${uuidv7()}, ${ctx.workspaceId}, ${newId}, ${ctx.actorId}, ${ctx.actorId}, ${[...RIGHTS_OF_ITS_MAKER]})`
+      values (${uuidv7()}, ${ctx.workspaceId}, ${newId}, ${ctx.actorId}, ${ctx.actorId}, ${rightsOfItsMaker(ctx.role)})`
     /*
      * The source's labels, not the starting three: a copy brings the plan,
      * and the words its work is filed under are part of it. The trigger has

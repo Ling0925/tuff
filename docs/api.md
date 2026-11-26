@@ -978,7 +978,7 @@ and null at `0.0.0`. Null once an owner dismisses it
 | --- | --- | --- |
 | GET | `/api/projects` | membership; cursor paged; each row carries `can` for that project, and `sample` |
 | POST | `/api/projects` | `project.create`; `template?: launch \| client \| sprint` makes its first tasks too — on the maker, the first in Todo and the rest in Backlog, subscribed — its document, and its mark; one feed line, the project's. `mark_icon?`, `mark_tint?` set the mark it is made with, over the template's. The plans are `PROJECT_TEMPLATES` in `shared-schema` |
-| POST | `/api/projects/sample` | `project.create`, never through a token; a sample to look around in — `201` made, or `200` and the workspace's existing one with the asker put on it. One per workspace. Nothing in it is on anybody, it is left out of `/api/my/tasks`, and making it writes no feed lines, notifications or subscriptions |
+| POST | `/api/projects/sample` | `project.create`, never through a token; a sample to look around in — `201` made, its maker holding every right on it, or `200` and the workspace's existing one with the asker put on it holding the ordinary two (`join_sample`, migration 322). One per workspace. Nothing in it is on anybody, it is left out of `/api/my/tasks`, and making it writes no feed lines, notifications or subscriptions |
 | DELETE | `/api/projects/:id/sample` | on the project, never through a token; the sample out for good at once, through `purge_project_rows` like Delete for good (`drop_sample`) — `404` for a project that is not one. A sample never has a repository to take with it: `PUT /api/projects/:id/github` refuses one |
 | GET | `/api/projects/:id` | membership; returns `can` — what the caller may do **in this project**, which `/api/me` cannot answer — and `for_agents`, the project's instructions for agents: `{ id, number, name }` of the one written document marked so, or `null` (absent from a server before migration 310) |
 | PATCH | `/api/projects/:id` | membership; `project.tools` to change the tools |
@@ -1513,10 +1513,14 @@ name, avatar_url }]` beside the first one's `assignee_name` and
 `assignee_avatar_url`.
 
 **`POST /api/projects`** answers `{ id, name, tools, slug, key }`. Whoever
-makes a project — by `POST /api/projects`, the sample, a copy, or an import
-from Slack or Linear — is put on it holding every right
-(`RIGHTS_OF_ITS_MAKER`: `manage` and the five it carries); people an import
-puts on it arrive with the ordinary two. The slug
+makes a project — by `POST /api/projects`, the sample, a copy
+(`POST /api/projects/:id/copy`), saving a scratch board as a project, or an
+import (Linear, Jira and Asana; the Trello, Asana and Basecamp import where
+it is open) — is put on it holding every right (`RIGHTS_OF_ITS_MAKER`:
+`manage` and the five it carries), the owner excepted: the owner holds
+everything by being the owner, and their own row says the ordinary two, so
+a handover leaves them running nothing they did not run before. People an
+import puts on it arrive with the ordinary two. The slug
 and the key are filled by the database — what is free depends on what is
 already there — so answering with the id alone meant a second request before
 anybody could open what they had just made.
