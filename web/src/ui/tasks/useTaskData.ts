@@ -45,7 +45,8 @@ export function useTaskData({
    * address as it is — widen the window and the members come back.
    */
   const wide = useWide()
-  const view: 'list' | 'board' | 'people' = mode === 'board' ? (group === 'who' && wide ? 'people' : 'board') : 'list'
+  const view: 'list' | 'board' | 'people' | 'labels' =
+    mode === 'labels' && wide ? 'labels' : mode === 'board' ? (group === 'who' && wide ? 'people' : 'board') : 'list'
   /* What a row or a card shows is kept for the list and the board; the
      people view draws the board's cards, so it shares the board's answers. */
   const drawing = view === 'list' ? 'list' : 'board'

@@ -255,7 +255,7 @@ export function useColumnPanes({
     ? []
     : view === 'board'
       ? lists.filter((l) => !isShut(l.id)).flatMap((l) => byColumn.get(l.id) ?? [])
-      : view === 'people'
+      : view === 'people' || view === 'labels'
         ? peopleWalk
         : walkable
   const here = open ? pagesThrough.findIndex((t) => t.id === open) : -1
