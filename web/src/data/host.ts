@@ -14,7 +14,7 @@ export function onHost(): OnHost | null {
   if (read !== undefined) return read
   const meta = (n: string) => document.querySelector(`meta[name="${n}"]`)?.getAttribute('content') ?? ''
   const slug = typeof document === 'undefined' ? '' : meta('tuff-host')
-  read = slug ? { slug, name: meta('tuff-host-name') || slug, home: meta('tuff-home') || 'https://usetuff.com' } : null
+  read = slug ? { slug, name: meta('tuff-host-name') || slug, home: meta('tuff-home') } : null
   return read
 }
 

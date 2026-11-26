@@ -264,7 +264,9 @@ workspaces.post('/workspaces/:id/enter', async (c) => {
   const session = await startSession(
     ctx.actorId,
     id,
-    { ...metaOf(c), since: ctx.checkedAt ?? null },
+    /* A session made on a workspace's own domain stays one, wherever it is
+       renewed this way. */
+    { ...metaOf(c), host: ctx.host ?? metaOf(c).host, since: ctx.checkedAt ?? null },
     id !== ctx.workspaceId ? 'switch' : null,
   )
   return c.json(session)

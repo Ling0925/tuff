@@ -578,7 +578,14 @@ export async function joinAsMe(c: Context<{ Variables: Vars }>) {
   }
   if (took === 'full') return c.json(fullRefusal('invited'), 413)
   if (took === 'gone') return c.json({ error: { code: 'not_found', message: 'This link is no longer valid.' } }, 404)
-  return c.json(await startSession(ctx.actorId, took.workspaceId, { ...metaOf(c), since: ctx.checkedAt ?? null }, 'invite'))
+  return c.json(
+    await startSession(
+      ctx.actorId,
+      took.workspaceId,
+      { ...metaOf(c), host: ctx.host ?? metaOf(c).host, since: ctx.checkedAt ?? null },
+      'invite',
+    ),
+  )
 }
 invites.post('/invite/:token/join', joinAsMe)
 

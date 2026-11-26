@@ -670,7 +670,7 @@ app.use('/api/*', async (c, next) => {
 })
 
 /* What belongs to the account, never to a session made on a host. */
-const ACCOUNT_ONLY = /^\/api\/(me\/(password|email|inbox-code|ways-in|delete|export)|2fa|sessions|oauth\/authorize)(\/|$)/
+const ACCOUNT_ONLY = /^\/api\/(me\/(password|email|inbox-code|ways-in|delete|export)|2fa|sessions|oauth\/authorize|invite)(\/|$)/
 const NOT_ON_A_HOST = {
   error: { code: 'not_on_a_host', message: 'Open Tuff at usetuff.com to change this.' },
 } as const

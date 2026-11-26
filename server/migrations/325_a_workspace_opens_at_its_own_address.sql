@@ -302,7 +302,7 @@ drop function auth_sessions(uuid);
 create function auth_sessions(p_actor uuid)
 returns table (id uuid, device text, user_agent text, ip text, created_at timestamptz,
                last_used_at timestamptz, expires_at timestamptz, sessions int, host text)
-language sql stable security definer set search_path = public as $$
+language sql stable security definer set search_path = public, pg_temp as $$
   with live as (
     select s.*, coalesce(s.device, s.id::text) as line
     from refresh_session s

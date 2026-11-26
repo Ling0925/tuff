@@ -74,6 +74,10 @@ export const one = (n: number, language: Language): boolean => (language === 'fr
  * fails on one this table has not heard of.
  */
 export const ERRORS_FR: Record<string, string> = {
+  /* A workspace's own domain, and a session made on it. */
+  'Passwords aren’t used here. Sign in with a code sent to your email.':
+    'Les mots de passe ne sont pas utilisés ici. Connectez-vous avec un code envoyé par e-mail.',
+  'Open Tuff at usetuff.com to change this.': 'Ouvrez Tuff sur usetuff.com pour modifier ceci.',
   /* A project's feedback page. */
   'This page doesn’t exist.': 'Cette page n’existe pas.',
   'This page is paused. Try again later.': 'Cette page est en pause. Réessayez plus tard.',

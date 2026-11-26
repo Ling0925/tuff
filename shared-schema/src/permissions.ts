@@ -629,7 +629,7 @@ export const NEVER_UNPROVED: readonly Action[] = [
  * a token for an agent, or anybody's token ended.
  */
 export const NEVER_ON_A_HOST: readonly Action[] = [
-  'workspace.create', 'workspace.enter', 'workspace.confirm',
+  'workspace.create', 'workspace.enter', 'workspace.confirm', 'workspace.leave',
   'workspace.billing', 'workspace.transfer', 'workspace.delete', 'workspace.domain',
   'token.issue.own', 'token.revoke.any', 'agent.connect', 'agent.manage',
   'operator', 'instance',
