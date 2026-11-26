@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto'
 import { v7 as uuidv7 } from 'uuid'
 import { withActor, withoutActor } from '../db.js'
 import { allowIn, feedbackContext, type AuthContext } from '../auth/context.js'
+import { brandOf } from '../brand.js'
 import { feedbackHeld } from '../ceilings.js'
 import { edition } from '../edition.js'
 import { hashToken } from '../auth/crypto.js'
@@ -310,6 +311,10 @@ feedbackPublic.use('*', async (c, next) => {
 feedbackPublic.get('/:slug', async (c) => {
   const page = await pageBySlug(c.req.param('slug'))
   if (!page) return c.json(ERR.missing, 404)
+  /* The workspace's own name and mark at the foot, where its plan wears
+     them; null, and the page says nothing
+     of the workspace, anywhere else. */
+  const brand = edition.brands ? await withoutActor((tx) => brandOf(tx, page.workspace_id)) : null
   return c.json({
     slug: page.slug,
     name: page.name,
@@ -317,6 +322,7 @@ feedbackPublic.get('/:slug', async (c) => {
     mark: markFor(page),
     available: page.available,
     turnstile_site_key: env.turnstileSiteKey || null,
+    brand,
     ...(page.moved_to ? { moved_to: page.moved_to } : {}),
   })
 })

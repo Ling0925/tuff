@@ -19,6 +19,7 @@ import { digestOffValid } from '../digest.js'
 import { COMMIT, VERSION } from '../version.js'
 import { chose } from '../presence.js'
 import { cookieHeaders, faced, linkFor, FILE_COOKIE, fileCookie, put, readFileCookie, whereBytesGo, whereLinksGo } from '../storage.js'
+import { brandOf } from '../brand.js'
 import { UNPROVED, authenticate, allow, allowedActions, planSaid, type AuthContext } from '../auth/context.js'
 import { agentsHeld } from '../ceilings.js'
 import {
@@ -750,6 +751,9 @@ app.get('/api/me', async (c) => {
           mark_icon: ws.mark_icon,
           mark_tint: ws.mark_tint,
           icon_url: ws.icon_key ? linkFor(ws.icon_key) : null,
+          /* Its own name and mark, worn in Tuff's place where its plan
+             says so — the tab's icon and title, Settings' line. */
+          brand: await brandOf(tx, ws.id),
         }
       : ws
     return { actor: actor ? faced(actor) : actor, workspace }

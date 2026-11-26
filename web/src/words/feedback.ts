@@ -40,7 +40,6 @@ export const FEEDBACK = say({
   confirmedBody: ['Thanks. The team will see it.', 'Merci. L’équipe la verra.'],
   linkGone: ['This link has expired or was already used.', 'Ce lien a expiré ou a déjà été utilisé.'],
   backToPage: ['Go to the page', 'Aller à la page'],
-  madeWith: ['Made with Tuff', 'Fait avec Tuff'],
 
   /* The project's settings. */
   head: ['Feedback page', 'Page de retours'],

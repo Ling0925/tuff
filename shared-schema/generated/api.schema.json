@@ -4448,6 +4448,16 @@
             "string",
             "null"
           ]
+        },
+        "brand": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Brand"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -6646,6 +6656,16 @@
         },
         "moved_to": {
           "type": "string"
+        },
+        "brand": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Brand"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -6655,6 +6675,104 @@
         "mark",
         "available",
         "turnstile_site_key"
+      ]
+    },
+    "Brand": {
+      "title": "Brand",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "icon_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mark_icon": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mark_tint": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "name",
+        "icon_url",
+        "mark_icon",
+        "mark_tint"
+      ]
+    },
+    "PublicDocument": {
+      "title": "PublicDocument",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "body": {
+          "anyOf": [
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "updated_at": {
+          "type": "string"
+        },
+        "pictures": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string"
+              },
+              "display_url": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "url",
+              "display_url"
+            ]
+          }
+        },
+        "brand": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Brand"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "body",
+        "updated_at",
+        "pictures"
       ]
     },
     "RoomHook": {
@@ -7398,6 +7516,16 @@
             "string",
             "null"
           ]
+        },
+        "brand": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Brand"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -7427,6 +7555,16 @@
           "type": [
             "string",
             "null"
+          ]
+        },
+        "brand": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Brand"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "you": {

@@ -8,6 +8,7 @@ import { watchKeyboard } from './data/keyboard.js'
 import { guardDrops } from './ui/DropFiles.jsx'
 import { now } from './data/words.js'
 import { edition } from './edition.jsx'
+import { wearKept } from './data/brand.js'
 watchKeyboard()
 guardDrops()
 /* The page says which language it is in, for a screen reader's voice and
@@ -62,10 +63,23 @@ const invited = /^\/invite\/([^/?#]+)/.exec(location.pathname)?.[1]
    connected. Everything else is the app, which asks for a sign-in where it
    needs one — and on your own server that is what `/` is. */
 const path = here
+const edition_ = edition.page(path, Boolean(stored()))
+const app =
+  !invited &&
+  !edition_ &&
+  !settingUp &&
+  !['/signup', '/forgot', '/oauth/authorize'].includes(path) &&
+  !shared &&
+  !feedbackAt &&
+  !resetting &&
+  !confirming
+/* A branded workspace's icon and name, as the tab last wore them, before
+   the server has said again — `data/brand.ts`. */
+if (app) wearKept(stored()?.workspace_id)
 const page = invited ? (
   <Join token={decodeURIComponent(invited)} />
 ) : (
-  (edition.page(path, Boolean(stored())) ??
+  (edition_ ??
   (settingUp ? (
     <Setup />
   ) : path === '/signup' ? (

@@ -650,6 +650,22 @@ export const MeActor = z.object({
   chosen: z.string().nullable().optional(),
   avatar_url: SignedLink.nullable().optional(),
 })
+/**
+ * A workspace's own name and mark, worn in Tuff's place on what it shows to
+ * people. The server works it out from the
+ * plan at every read; null wherever it is not worn, which on your own
+ * server is everywhere. `mark_tint` is never null here: a colour nobody
+ * chose is the one the workspace's id gives, worked out by the server so a
+ * public page needs no id to draw it.
+ */
+export const Brand = z.object({
+  name: z.string(),
+  icon_url: SignedLink.nullable(),
+  mark_icon: z.string().nullable(),
+  mark_tint: z.number().int(),
+})
+export type Brand = z.infer<typeof Brand>
+
 export const MeWorkspace = z.object({
   id: Uuid,
   name: z.string(),
@@ -657,6 +673,8 @@ export const MeWorkspace = z.object({
   mark_icon: z.string().nullable().optional(),
   mark_tint: z.number().int().nullable().optional(),
   icon_url: SignedLink.nullable().optional(),
+  /** The brand this workspace wears, or null — the tab's icon and title. */
+  brand: Brand.nullable().optional(),
 })
 export const Me = z.object({
   actor: MeActor,
@@ -2044,7 +2062,10 @@ export const InvitePreview = z.object({
   workspace_name: z.string().nullable().optional(),
   role: z.string().nullable().optional(),
   email: z.string().nullable().optional(),
+  /** The workspace's mark above "Join", where its plan wears one. */
+  brand: Brand.nullable().optional(),
 })
+export type InvitePreview = z.infer<typeof InvitePreview>
 /** The same invitation, seen while signed in — `GET /api/invite/:token`. */
 export const InviteForMe = InvitePreview.extend({
   you: z.object({ name: z.string(), email: z.string().nullable().optional() }).optional(),
@@ -2257,8 +2278,28 @@ export const FeedbackPublic = z.object({
   /** Turnstile's site key, or null where this deployment has none. */
   turnstile_site_key: z.string().nullable(),
   moved_to: z.string().optional(),
+  /** The workspace's name and mark at the foot in place of "Made with
+      Tuff", where its plan wears them; null, and nothing about the
+      workspace, anywhere else. */
+  brand: Brand.nullable().optional(),
 })
 export type FeedbackPublic = z.infer<typeof FeedbackPublic>
+
+/**
+ * A document shared to the web, read with no session —
+ * `GET /api/public/docs/:token`. Its title,
+ * its body without what belongs to the people on the project, when it last
+ * changed, a link for each picture it names, and the workspace's brand
+ * where its plan wears one — otherwise null, and nothing about who.
+ */
+export const PublicDocument = z.object({
+  name: z.string(),
+  body: z.record(z.string(), z.unknown()).nullable(),
+  updated_at: z.string(),
+  pictures: z.record(z.string(), z.object({ url: SignedLink, display_url: SignedLink.nullable() })),
+  brand: Brand.nullable().optional(),
+})
+export type PublicDocument = z.infer<typeof PublicDocument>
 
 /**
  * A room's incoming webhook, as its settings list it — never its secret,

@@ -90,6 +90,12 @@ export type Edition = {
   /** What a workspace is held to; null for nothing at all — `Ceilings`. */
   ceilings: Ceilings | null
   /**
+   * Whether a workspace on a plan that says so wears its own name and mark
+   * on what it shows to people. Off, the
+   * database is never asked and every answer's `brand` is null.
+   */
+  brands: boolean
+  /**
    * The French of the messages only this edition's own routes send, beside
    * the core's (`words.ts`): exact, and matched whole with a number in it.
    */

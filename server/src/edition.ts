@@ -122,6 +122,9 @@ export const edition: Edition = {
   plans: false,
   /* Nothing is held back: as many people, bytes and agents as the owner likes. */
   ceilings: null,
+  /* Never: every workspace here is unlimited, and the product's name at the
+     foot of a shared page is how the open-source project is found. */
+  brands: false,
   errorsFr: {},
   errorsFrLike: [],
   operators: false,

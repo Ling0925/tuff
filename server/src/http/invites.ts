@@ -3,6 +3,7 @@ import { send, note, mailOn } from '../mail.js'
 import { edition } from '../edition.js'
 import { fullRefusal, workspaceFull } from '../ceilings.js'
 import { emailOf } from '../auth/address.js'
+import { brandOf, brandOfInvite } from '../brand.js'
 import { oneLine } from '../text.js'
 import { origin, sendChoosePassword } from './access.js'
 import { guess, metaOf, spendOn } from './limits.js'
@@ -411,7 +412,7 @@ async function mailInvite(
   inv: { id: string; email: string; project_ids: string[]; ttl_hours: number },
   token: string,
 ): Promise<boolean> {
-  const [who, projects] = await withActor(
+  const [who, projects, brand] = await withActor(
     ctx.actorId,
     ctx.workspaceId,
     async (tx) =>
@@ -434,6 +435,9 @@ async function mailInvite(
             )
               .map((r) => oneLine(r.name))
               .filter(Boolean),
+        /* The workspace's own name in Tuff's place, where its plan wears
+           it. */
+        await brandOf(tx, ctx.workspaceId),
       ] as const,
   )
   const url = `${origin(c)}/invite/${encodeURIComponent(token)}`
@@ -454,11 +458,19 @@ async function mailInvite(
       /* A person's note, not an announcement: "You're invited" is how
            a sale opens, and Gmail reads the subject too. */
       subject: ['Invitation to join a workspace on Tuff', 'Invitation à rejoindre un espace de travail sur Tuff'],
+      /* A branded workspace's: the same, with nobody's name — the
+         workspace's least of all, which is what a stranger would type
+         to look like somebody else. */
+      subjectBranded: ['Invitation to join a workspace', 'Invitation à rejoindre un espace de travail'],
       someone: ['Someone', 'Quelqu’un'],
       theirs: ['their workspace', 'son espace de travail'],
       invited: [
         (sender: string, ws: string) => `${sender} invited you to join “${ws}” on Tuff.`,
         (sender: string, ws: string) => `${sender} vous invite à rejoindre « ${ws} » sur Tuff.`,
+      ],
+      invitedBranded: [
+        (sender: string, ws: string) => `${sender} invited you to join “${ws}”.`,
+        (sender: string, ws: string) => `${sender} vous invite à rejoindre « ${ws} ».`,
       ],
       project: [
         (names: string[]) =>
@@ -486,13 +498,17 @@ async function mailInvite(
    * from "Tuff" went to Promotions; a short note with one link
    * from a person is what Primary holds.
    */
+  /* Branded: "Ana via Acme", and the letter says the workspace's name
+     and not the product's. The address is ours either way. */
+  const invited = brand ? w.invitedBranded : w.invited
   const sent = await send({
     to: inv.email,
-    subject: w.subject,
+    subject: brand ? w.subjectBranded : w.subject,
     ...(name ? { fromName: name } : {}),
+    ...(brand ? { via: brand.name } : {}),
     ...(from ? { replyTo: from } : {}),
     ...note(
-      [w.invited(sender, oneLine(who?.workspace ?? '') || w.theirs), ...(projects.length > 0 ? [w.project(projects)] : [])],
+      [invited(sender, oneLine(who?.workspace ?? '') || w.theirs), ...(projects.length > 0 ? [w.project(projects)] : [])],
       { label: w.join, url },
       [w.expires(days)],
       language,
@@ -517,14 +533,16 @@ invites.get('/invite/:token', async (c) => {
       select * from preview_invite(${hash})`,
   )
   if (!row || row.state === 'revoked') return c.json({ state: 'invalid' })
-  const [seen, me, { email }] = await Promise.all([
+  const [seen, me, { email }, brand] = await Promise.all([
     withActor(ctx.actorId, ctx.workspaceId, (tx) => tx<{ workspace_id: string; member: boolean }[]>`select * from invite_for_me(${hash})`),
     withActor(ctx.actorId, ctx.workspaceId, (tx) => tx<{ name: string }[]>`select name from actor where id = ${ctx.actorId}`),
     emailOf(ctx.actorId),
+    edition.brands ? withoutActor((tx) => brandOfInvite(tx, hash)) : null,
   ])
   const member = seen[0]?.member === true
   return c.json({
     ...row,
+    brand,
     you: { name: me[0]?.name ?? '', email },
     member,
     ...(member ? { workspace_id: seen[0]!.workspace_id } : {}),
@@ -579,7 +597,9 @@ publicInvites.get('/invite/:token', async (c) => {
   if (!row || row.state === 'revoked') {
     return c.json({ state: 'invalid' })
   }
-  return c.json(row)
+  /* The workspace's own mark above "Join", where its plan wears it. */
+  const brand = edition.brands ? await withoutActor((tx) => brandOfInvite(tx, hashToken(c.req.param('token')))) : null
+  return c.json({ ...row, brand })
 })
 
 publicInvites.post('/invite/:token/accept', async (c) => {

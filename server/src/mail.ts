@@ -32,6 +32,12 @@ export type Mail = {
    * only when it says so where the inbox looks.
    */
   fromName?: string
+  /**
+   * Whose name the From says the letter comes through: Tuff, unless it is a
+   * workspace that wears its own — "Ana via Acme", or "Acme" alone when no
+   * person sends it. The address stays ours.
+   */
+  via?: string
 }
 
 /**
@@ -63,11 +69,21 @@ export function personName(name: string): string {
  * they typed, so it keeps to one line, has nothing that could close the
  * quotes or pass for an address, and is short; "via Tuff" says whose
  * address it is. Nothing left of it, and the mail is from the product.
+ *
+ * `via` is a branded workspace's name in Tuff's place, kept the same way:
+ * "Ana via Acme", and with no person, "Acme"
+ * alone at our address.
  */
-export function fromPerson(name: string, from: string = mailFrom()): string {
+export function fromPerson(name: string, from: string = mailFrom(), via?: string): string {
   const address = /<([^>]+)>/.exec(from)?.[1] ?? from
-  const clean = personName(name)
-  return clean ? `"${clean} via Tuff" <${address}>` : from
+  const [clean, through] = fromNames(name, via)
+  if (clean) return `"${clean} via ${through}" <${address}>`
+  return via && through !== 'Tuff' ? `"${through}" <${address}>` : from
+}
+
+/** A person's name and whose it comes through, each made safe for a From line. */
+function fromNames(name: string, via?: string): [string, string] {
+  return [personName(name), (via && personName(via)) || 'Tuff']
 }
 
 /**
@@ -330,7 +346,7 @@ export async function send(mail: Mail): Promise<boolean> {
       method: 'POST',
       headers: { authorization: `Bearer ${way.key}`, 'content-type': 'application/json' },
       body: JSON.stringify({
-        from: mail.fromName ? fromPerson(mail.fromName, way.from) : way.from,
+        from: mail.fromName || mail.via ? fromPerson(mail.fromName ?? '', way.from, mail.via) : way.from,
         to: [mail.to],
         subject: mail.subject,
         text: mail.text,
@@ -496,7 +512,7 @@ async function sendSmtp(mail: Mail, smtp: SmtpWay): Promise<boolean> {
     console.error('[mail] not sent: an address is not a plain one')
     return false
   }
-  const person = mail.fromName ? personName(mail.fromName) : ''
+  const [person, through] = fromNames(mail.fromName ?? '', mail.via)
   const headers = mail.headers
     ? Object.fromEntries(
         Object.entries(mail.headers)
@@ -507,7 +523,10 @@ async function sendSmtp(mail: Mail, smtp: SmtpWay): Promise<boolean> {
   try {
     const t = await smtpTransport(smtp.key, smtp.options)
     const info = await t.sendMail({
-      from: { name: person ? `${person} via Tuff` : smtp.from.name, address: smtp.from.address },
+      from: {
+        name: person ? `${person} via ${through}` : mail.via && through !== 'Tuff' ? through : smtp.from.name,
+        address: smtp.from.address,
+      },
       to: [mail.to],
       ...(mail.replyTo ? { replyTo: [mail.replyTo] } : {}),
       subject: oneLine(mail.subject),

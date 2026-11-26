@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react'
 import { acceptInvite, api, previewInvite, setSession, stored, type Session } from '../data/api.js'
 import { AuthShell, PasswordField, ProviderButtons, field, fieldLook, primaryLook, providerTrouble, useNoMail } from './Access.jsx'
 import { JOIN as W } from '../words/join.js'
+import type { Brand } from '@tracker/shared-schema'
+import { WorkspaceMark } from './WorkspaceMark.jsx'
+import { wearBrand } from '../data/brand.js'
 
 /**
  * Following an invitation.
@@ -16,14 +19,16 @@ import { JOIN as W } from '../words/join.js'
  * code when it has one.
  */
 type Seen = {
-  workspace_name?: string
+  workspace_name?: string | null | undefined
   state: string
   /** The address it was sent to, when it was sent to one. */
-  email?: string | null
+  email?: string | null | undefined
   /** Signed in: who they are, and whether they are in it already. */
   you?: { name: string; email: string }
   member?: boolean
   workspace_id?: string
+  /** The workspace's own name and mark, where its plan wears them. */
+  brand?: Brand | null | undefined
 }
 
 export function Join({ token }: { token: string }) {
@@ -48,6 +53,11 @@ export function Join({ token }: { token: string }) {
       const read = mine?.state ? mine : await previewInvite(token)
       setSeen(read)
       if (read.email) setEmail(read.email)
+      /* The workspace's name on the tab, and its mark, where it wears them. */
+      if (read.brand) {
+        document.title = W.docTitleIn(read.brand.name)
+        wearBrand(read.brand)
+      }
     })
   }, [token])
   /* The same face as signing up, which is what this is for somebody new. */
@@ -102,10 +112,18 @@ export function Join({ token }: { token: string }) {
     }
   }
 
-  if (seen === null) return <AuthShell title="">{null}</AuthShell>
+  /* Whose mark stands above: nobody's until the link is read, then the
+     workspace's where it wears one, else Tuff's. */
+  if (seen === null)
+    return (
+      <AuthShell title="" mark={null}>
+        {null}
+      </AuthShell>
+    )
+  const mark = seen.brand ? <WorkspaceMark look={seen.brand} size={56} /> : undefined
   if (seen.state !== 'open')
     return (
-      <AuthShell title={W.noLonger}>
+      <AuthShell title={W.noLonger} mark={mark}>
         <p data-join className="text-center text-md leading-[1.5] text-ink-2">
           {W.noLongerBody}
         </p>
@@ -119,7 +137,7 @@ export function Join({ token }: { token: string }) {
     const you = seen.you
     if (seen.member)
       return (
-        <AuthShell title={W.alreadyIn(where)}>
+        <AuthShell title={W.alreadyIn(where)} mark={mark}>
           <div data-join className="flex flex-col gap-3">
             <p className={`${line} text-ink-2`}>{W.signedInAnd(you.name, where)}</p>
             {said && (
@@ -140,7 +158,7 @@ export function Join({ token }: { token: string }) {
         </AuthShell>
       )
     return (
-      <AuthShell title={W.join(where)}>
+      <AuthShell title={W.join(where)} mark={mark}>
         <div data-join className="flex flex-col gap-3">
           <p data-join-as className={`${line} text-ink-2`}>
             {W.signedInAs(you.name, you.email)}
@@ -171,7 +189,7 @@ export function Join({ token }: { token: string }) {
   }
 
   return (
-    <AuthShell title={W.join(where)}>
+    <AuthShell title={W.join(where)} mark={mark}>
       {/* A form, so a password manager offers the account it keeps for this
           address, or to keep the new one. */}
       <form

@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
+import type { Brand, PublicDocument } from '@tracker/shared-schema'
+import { wearBrand } from '../data/brand.js'
 import { seedLinks } from '../data/files.js'
 import { readTheme, writeTheme, type Theme } from '../data/theme.js'
 import { Doc } from './Doc.jsx'
 import { Icon, type IconName } from './glyphs.jsx'
 import { dayMonthLong } from '../data/words.js'
 import { PUBLIC_DOC as W } from '../words/publicDoc.js'
+import { WorkspaceMark } from './WorkspaceMark.jsx'
 
 /* The reader's own choice, as the app's: what the system says, light or
    dark — kept on this browser, the same key the app keeps it under. */
@@ -47,21 +50,40 @@ export function Looks() {
 }
 
 /**
+ * What stands at the foot of a public page: "Made with Tuff" and the way in,
+ * or — where the workspace's plan wears its own brand — the workspace's mark
+ * and name, and nothing of Tuff's.
+ *
+ * Drawn only once the page knows which, so the foot never says Tuff and then
+ * changes its mind; the theme control beside it holds the row's height.
+ */
+export function MadeBy({ known, brand, from }: { known: boolean; brand: Brand | null | undefined; from?: string }) {
+  if (!known) return null
+  if (brand)
+    return (
+      <span data-brand className="flex items-center gap-2 text-ink-2">
+        <WorkspaceMark look={brand} size={16} />
+        <span data-brand-name>{brand.name}</span>
+      </span>
+    )
+  return (
+    <a href={from ? `/?from=${from}` : '/'} className="flex items-center gap-2 text-ink-2">
+      <img src="/favicon.png" alt="" draggable={false} width={16} height={16} style={{ borderRadius: 4 }} />
+      {W.madeWith}
+    </a>
+  )
+}
+
+/**
  * A document anybody can read, by its link.
  *
  * No session and nothing around it: the title, the words, the pictures, when
- * it last changed, and the way to Tuff under it. Read-only, in the product's
- * own reading style, light or dark as the reader's system is.
+ * it last changed, and the way to Tuff under it — or the workspace's own
+ * name and mark, where its plan wears them. Read-only, in the product's own
+ * reading style, light or dark as the reader's system is.
  */
-type Shared = {
-  name: string
-  body: unknown
-  updated_at: string
-  pictures: Record<string, { url: string; display_url: string | null }>
-}
-
 export function PublicDoc({ token }: { token: string }) {
-  const [doc, setDoc] = useState<Shared | null>(null)
+  const [doc, setDoc] = useState<PublicDocument | null>(null)
   const [missing, setMissing] = useState(false)
   useEffect(() => {
     let alive = true
@@ -69,7 +91,7 @@ export function PublicDoc({ token }: { token: string }) {
       .then(async (r) => {
         if (!alive) return
         if (!r.ok) return setMissing(true)
-        const got = (await r.json()) as Shared
+        const got = (await r.json()) as PublicDocument
         /* Its pictures' links, given with it: a reader here has no session
            to ask for them one by one. */
         seedLinks(got.pictures)
@@ -81,7 +103,9 @@ export function PublicDoc({ token }: { token: string }) {
     }
   }, [token])
   useEffect(() => {
-    document.title = doc ? `${doc.name} — Tuff` : missing ? W.notSharedTitle : 'Tuff'
+    document.title = doc ? `${doc.name} — ${doc.brand?.name ?? 'Tuff'}` : missing ? W.notSharedTitle : 'Tuff'
+    /* And the tab's icon: the workspace's mark where it wears one. */
+    wearBrand(doc?.brand ?? null)
   }, [doc, missing])
 
   return (
@@ -107,10 +131,7 @@ export function PublicDoc({ token }: { token: string }) {
           {doc && <span>{W.updated(dayMonthLong(new Date(doc.updated_at), true))}</span>}
           <span className="ml-auto flex items-center gap-4">
             <Looks />
-            <a href="/" className="flex items-center gap-2 text-ink-2">
-              <img src="/favicon.png" alt="" draggable={false} width={16} height={16} style={{ borderRadius: 4 }} />
-              {W.madeWith}
-            </a>
+            <MadeBy known={Boolean(doc) || missing} brand={doc?.brand} />
           </span>
         </footer>
       </main>

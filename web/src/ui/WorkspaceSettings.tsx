@@ -22,7 +22,16 @@ import { WorkspaceMark } from './WorkspaceMark.jsx'
  * product that read as a database's.
  */
 
-type Look = { id: string; name: string; slug: string; mark_icon?: string | null; mark_tint?: number | null; icon_url?: string | null }
+type Look = {
+  id: string
+  name: string
+  slug: string
+  mark_icon?: string | null
+  mark_tint?: number | null
+  icon_url?: string | null
+  /** Worn in Tuff's place on what the workspace shows to people. */
+  brand?: unknown
+}
 
 /** A setting as a line of the lists: what it is and a sentence on the left, the control on the right. */
 export function Line({
@@ -247,6 +256,17 @@ export function Identity({ look, onChanged }: { look: Look; onChanged: () => Pro
             </div>
           </>
         )}
+        {/* What the plan does with the name and mark, said once, where they
+            are changed — so an owner knows strangers read them now.
+            Nothing on a plan that does not; the plan cards say which do. */}
+        {look.brand ? (
+          <>
+            <Hairline inset={16} />
+            <p data-testid="workspace-branded" className="px-4 py-3 text-sm text-ink-3">
+              {W.branded}
+            </p>
+          </>
+        ) : null}
       </Panel>
     </section>
   )

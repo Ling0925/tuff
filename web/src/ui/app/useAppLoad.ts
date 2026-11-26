@@ -1,5 +1,6 @@
 import { edition } from '../../edition.jsx'
 import { setZone } from '../../data/zone.js'
+import { wearBrand } from '../../data/brand.js'
 import { useCallback, useState, useRef } from 'react'
 import { readTongue, now, chooseTongue } from '../../data/words.js'
 import { api, setSession, type Session, everyPage, stored } from '../../data/api.js'
@@ -50,6 +51,9 @@ export function useAppLoad({
     const m = await api<Me>('/me')
     /* Whose shelf this session's answers go on — `docs/specs/offline.md`. */
     scopeTo(`${m.actor.id}:${m.workspace.id}`)
+    /* The workspace's own icon and name on the tab, where its plan wears
+       them, and Tuff's where it does not. */
+    wearBrand(m.workspace.brand ?? null, m.workspace.id)
     /*
      * The address says which workspace, the session proves you may be in it.
      *

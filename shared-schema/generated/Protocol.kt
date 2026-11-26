@@ -102,6 +102,9 @@ data class Contract (
     @SerialName("BlockerAdded")
     val blockerAdded: BlockerAdded? = null,
 
+    @SerialName("Brand")
+    val brand: Brand? = null,
+
     @SerialName("Comment")
     val comment: Comment? = null,
 
@@ -428,6 +431,9 @@ data class Contract (
 
     @SerialName("Providers")
     val providers: Providers? = null,
+
+    @SerialName("PublicDocument")
+    val publicDocument: PublicDocument? = null,
 
     @SerialName("PublicShare")
     val publicShare: PublicShare? = null,
@@ -1247,6 +1253,20 @@ data class TaskRelated (
 )
 
 @Serializable
+data class Brand (
+    @SerialName("icon_url")
+    val iconURL: String? = null,
+
+    @SerialName("mark_icon")
+    val markIcon: String? = null,
+
+    @SerialName("mark_tint")
+    val markTint: Long,
+
+    val name: String
+)
+
+@Serializable
 data class Comment (
     @SerialName("author_id")
     val authorID: String,
@@ -1617,6 +1637,7 @@ data class DocVersionRestored (
 @Serializable
 data class FeedbackPublic (
     val available: Boolean,
+    val brand: Brand? = null,
     val intro: String? = null,
     val mark: Mark,
 
@@ -2370,6 +2391,7 @@ enum class Role(val value: String) {
 
 @Serializable
 data class InviteForMe (
+    val brand: Brand? = null,
     val email: String? = null,
     val member: Boolean? = null,
     val role: String? = null,
@@ -2432,6 +2454,7 @@ data class InviteMade (
 
 @Serializable
 data class InvitePreview (
+    val brand: Brand? = null,
     val email: String? = null,
     val role: String? = null,
     val state: String,
@@ -2618,6 +2641,8 @@ enum class Who(val value: String) {
 
 @Serializable
 data class MeWorkspace (
+    val brand: Brand? = null,
+
     @SerialName("icon_url")
     val iconURL: String? = null,
 
@@ -3643,6 +3668,25 @@ data class Providers (
 
     @SerialName("sign_up")
     val signUp: Boolean
+)
+
+@Serializable
+data class PublicDocument (
+    val body: JsonObject? = null,
+    val brand: Brand? = null,
+    val name: String,
+    val pictures: Map<String, Picture>,
+
+    @SerialName("updated_at")
+    val updatedAt: String
+)
+
+@Serializable
+data class Picture (
+    @SerialName("display_url")
+    val displayURL: String? = null,
+
+    val url: String
 )
 
 @Serializable

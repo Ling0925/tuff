@@ -6,29 +6,38 @@
  * for me". Basecamp's dot is the answer people already know: the same mark,
  * a red dot in its corner, and nothing at all when there is nothing.
  *
- * Drawn on a canvas from the icon the page already has, once per change, and
- * put back exactly as it was when the dot goes.
+ * Drawn on a canvas from the icon the tab wears, once per change, and put
+ * back exactly as it was when the dot goes.
+ *
+ * The icon worn is Tuff's, or a branded workspace's mark while that
+ * workspace is open (`faviconWorn`, `data/brand.ts`): the dot is drawn over whichever it is.
  */
 let base: HTMLImageElement | null = null
+let baseFor: string | null = null
 let plain: string | null = null
+let worn: string | null = null
 let shown = false
 
 function link(): HTMLLinkElement | null {
   return document.querySelector<HTMLLinkElement>('link[rel="icon"]')
 }
 
-export function faviconDot(on: boolean): void {
-  if (typeof document === 'undefined' || on === shown) return
+/** The icon under the dot: the workspace's when one is worn, else the page's own. */
+function under(el: HTMLLinkElement): string {
+  plain ??= el.href
+  return worn ?? plain
+}
+
+function paint(): void {
   const el = link()
   if (!el) return
-  plain ??= el.href
-  shown = on
-  if (!on) {
-    el.href = plain
+  const icon = under(el)
+  if (!shown) {
+    if (el.href !== icon) el.href = icon
     return
   }
   const draw = () => {
-    if (!shown || !base) return
+    if (!shown || !base || baseFor !== under(el)) return
     const size = 64
     const c = document.createElement('canvas')
     c.width = size
@@ -50,10 +59,36 @@ export function faviconDot(on: boolean): void {
     g.beginPath()
     g.arc(x, y, r, 0, Math.PI * 2)
     g.fill()
-    el.href = c.toDataURL('image/png')
+    try {
+      el.href = c.toDataURL('image/png')
+    } catch {
+      /* A picture from another origin that would not be read back: the
+         icon without its dot, rather than no icon. */
+      el.href = under(el)
+    }
   }
-  if (base?.complete) return draw()
+  if (base && baseFor === icon && base.complete) return draw()
   base = new Image()
+  baseFor = icon
+  base.crossOrigin = 'anonymous'
   base.onload = draw
-  base.src = plain
+  base.src = icon
+}
+
+export function faviconDot(on: boolean): void {
+  if (typeof document === 'undefined' || on === shown) return
+  shown = on
+  paint()
+}
+
+/**
+ * The icon the tab wears under any dot: a workspace's mark, drawn as an
+ * image's address, or null for the page's own — `data/brand.ts`.
+ */
+export function faviconWorn(href: string | null): void {
+  if (typeof document === 'undefined' || href === worn) return
+  const el = link()
+  if (el) plain ??= el.href
+  worn = href
+  paint()
 }
