@@ -43,10 +43,14 @@ export const BoardCard = memo(function BoardCard({
   col,
   taken,
   fns,
+  slot = t.id,
 }: {
   t: Task
   col: string
   taken: boolean
+  /** What the drag knows it by, where one task is drawn in two columns —
+      the people view's `column/task`. The task's own id everywhere else. */
+  slot?: string
   /** Changes when anything a card draws changes; read by `memo`, not here. */
   look: object
   /** Its parts' count, which lives outside the task. */
@@ -60,8 +64,8 @@ export const BoardCard = memo(function BoardCard({
         e.preventDefault()
         fns.current.setOnTask({ id: t.id, x: e.clientX, y: e.clientY })
       }}
-      data-slot={t.id}
-      data-card={t.id}
+      data-slot={slot}
+      data-card={slot}
       /* Read ahead, as a row in the list does: under the
          pointer on a desk, on the first touch on a phone. */
       onPointerEnter={() => near(t.id)}

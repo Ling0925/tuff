@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import { ACTS, HEADS, MAKE } from '../data/words.js'
 import { TASKS as W } from '../words/tasks.js'
 import { NewButton } from './New.jsx'
@@ -9,13 +9,14 @@ import { UndoBar } from './UndoToast.jsx'
 import { View } from './tasks/view.jsx'
 import { boardView } from './tasks/boardView.jsx'
 import { listView } from './tasks/listView.jsx'
-import { peopleView, personCards, peopleWalk } from './tasks/peopleView.jsx'
+import { peopleView, personColumns, peopleWalk, usePeopleMoves } from './tasks/peopleView.jsx'
 import { takenBar } from './tasks/takenBar.jsx'
 import { taskMenu } from './tasks/taskMenu.jsx'
 import { useColumnPanes } from './tasks/useColumnPanes.js'
 import { useTaskKeys } from './tasks/useTaskKeys.js'
 import { rowRenderer } from './tasks/rowRenderer.jsx'
 import { cardRenderer } from './tasks/cardRenderer.jsx'
+import { type CardFns } from './tasks/board.jsx'
 import { useListShape } from './tasks/useListShape.js'
 import { useTaskActions } from './tasks/useTaskActions.js'
 import { useUndoOffer } from '../data/undo.js'
@@ -272,13 +273,20 @@ export function Tasks({
     take,
     card,
   })
-  /* Each assignee's open work, from the board's own columns — only while
-     the people view is on the screen. */
-  const cards = useMemo(
-    () => (view === 'people' ? personCards({ lists, byColumn, people, who, meId }) : []),
+  /* Each assignee's open work as a column, from the board's own columns —
+     only while the people view is on the screen. */
+  const columns = useMemo(
+    () => (view === 'people' ? personColumns({ lists, byColumn, people, who, meId }) : []),
     [view, lists, byColumn, people, who, meId],
   )
-  const walk = useMemo(() => peopleWalk(cards), [cards])
+  const walk = useMemo(() => peopleWalk(columns), [columns])
+  /* The board's drag with a drop of its own: carried to a column, a card
+     is given to that person. */
+  const peopleMoves = usePeopleMoves({ canWrite, tasks, patch, undone, people })
+  /* The board card's handlers, drawing each card for the column it is in,
+     with its status where the board draws the face. */
+  const peopleFns = useRef<CardFns>(null as unknown as CardFns)
+  peopleFns.current = { ...cardFns.current, card: (t, col) => card(t, col, col) }
   const { columnPane, paneNode, paneReady, pane, before, after, pageTo } = useColumnPanes({
     projectId,
     mode,
@@ -399,9 +407,9 @@ export function Tasks({
           that starts forty pixels further down for no answer it gives.
         */}
         {/*
-          And People, on a desk: each assignee's open work as a card.
+          And People, on a desk: the board with a column per assignee.
           Not offered below 1024, where a
-          wall of cards has no room to be one; `?view=people` draws the
+          board of people has no room to be one; `?view=people` draws the
           list there and keeps the address.
         */}
         <Segments
@@ -505,6 +513,8 @@ export function Tasks({
       })}
 
       {peopleView({
+        projectId,
+        canMake,
         view,
         wide,
         panel,
@@ -512,8 +522,7 @@ export function Tasks({
         setShows,
         people,
         lists,
-        setOpen,
-        tasks,
+        load,
         group,
         sort,
         dir,
@@ -523,10 +532,14 @@ export function Tasks({
         meId,
         onNavigate,
         allLabels,
-        cards,
-        pane,
-        paneNode,
-        paneReady,
+        columns,
+        columnPane,
+        taken,
+        look,
+        partsSaid,
+        card,
+        fns: peopleFns,
+        moves: peopleMoves,
       })}
 
       {boardView({

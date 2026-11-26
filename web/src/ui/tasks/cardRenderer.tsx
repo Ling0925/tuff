@@ -1,7 +1,7 @@
 import { workingAgent, underWay } from '../../data/agentWorking.js'
 import { HEADS } from '../../data/words.js'
 import { TASKS as W } from '../../words/tasks.js'
-import { WhoPick, whoOf, PriorityPick, LabelChip, RepeatMark, AgentDoing } from '../kit.jsx'
+import { WhoPick, whoOf, PriorityPick, LabelChip, RepeatMark, AgentDoing, Avatar, Status } from '../kit.jsx'
 import { useWorkingOn } from '../../data/working.js'
 import type { PersonInWorkspace } from '@tracker/shared-schema'
 import { Icon } from '../glyphs.jsx'
@@ -63,7 +63,43 @@ export function cardRenderer({
    * in the layer that follows the pointer. Two copies that can disagree is
    * how a dragged card ends up a different size from the one let go of.
    */
-  function card(t: Task, col: string) {
+  /**
+   * The people view's head: the others it is given to, then the list it is
+   * in — its ring, which is the control that moves it, as the face is the
+   * control that gives it on the board, and the list's name beside it so
+   * the status reads without a legend.
+   */
+  function cardStatus(t: Task, whose: string) {
+    const l = lists.find((x) => x.id === t.list_id)
+    const others = whoOf(t).filter((id) => id !== whose)
+    const shown = shows.who ? others.map((id) => people.find((p) => p.actor_id === id)).filter((p) => p !== undefined) : []
+    return (
+      <span data-no-drag data-card-status className="ml-auto flex min-w-0 shrink-0 items-center gap-2" style={{ maxWidth: '60%' }}>
+        {shown.length > 0 && (
+          <span data-card-others className="flex shrink-0 items-center" title={shown.map((p) => p.name).join(', ')}>
+            {shown.slice(0, 2).map((p, i) => (
+              <span key={p.actor_id} className="flex rounded-full" style={{ marginLeft: i ? -4 : 0, boxShadow: '0 0 0 2px var(--card)' }}>
+                <Avatar id={p.actor_id} name={p.name} url={p.avatar_url} size={20} />
+              </span>
+            ))}
+            {shown.length > 2 && <span className="pl-1 text-sm tabular-nums text-ink-3">+{shown.length - 2}</span>}
+          </span>
+        )}
+        <span className="flex min-w-0 items-center gap-1">
+          <span className="truncate text-sm text-ink-3" style={{ letterSpacing: 'var(--track-body)' }}>
+            {l?.name}
+          </span>
+          <Status lists={lists} value={t.list_id} said={t.title} disabled={!canWrite} onPick={(into) => move(t, into)} />
+        </span>
+      </span>
+    )
+  }
+  /**
+   * `whose` is the people view's column — an actor's id, or `~` / `?` —
+   * and turns the head's face into the task's status: the column already
+   * says whose it is.
+   */
+  function card(t: Task, col: string, whose?: string) {
     return (
       <>
         {/*
@@ -96,7 +132,8 @@ export function cardRenderer({
               anybody has given it. Fading it in on hover left a hole where
               the ring would be and made the card's head change width under
               the pointer. */}
-          {shows.who && (
+          {whose !== undefined && cardStatus(t, whose)}
+          {whose === undefined && shows.who && (
             <span data-no-drag className="ml-auto flex shrink-0 items-center">
               <WhoPick
                 people={people}

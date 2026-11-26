@@ -37,15 +37,15 @@ export function useTaskData({
      see `data/memory.ts`. */
   const [tasks, setTasks] = useState<Task[] | null>(() => recall(`tasks:${projectId}`))
   /*
-   * Which drawing: the list, the board, or each assignee's work as a card.
-   * The people view wants the width of a desk,
-   * so a narrower window draws the list for `?view=people` and leaves the
-   * address as it is: widen the window and the cards come back.
+   * Which drawing: the list, the board, or the board with a column per
+   * assignee. The people view wants the width
+   * of a desk, so a narrower window draws the list for `?view=people` and
+   * leaves the address as it is: widen the window and the columns come back.
    */
   const wide = useWide()
   const view: 'list' | 'board' | 'people' = mode === 'board' ? 'board' : mode === 'people' && wide ? 'people' : 'list'
   /* What a row or a card shows is kept for the list and the board; the
-     people view draws neither, and keeps the board's answers untouched. */
+     people view draws the board's cards, so it shares the board's answers. */
   const drawing = view === 'list' ? 'list' : 'board'
   /* What a row carries beside its title. On this machine — see `View`. */
   /*

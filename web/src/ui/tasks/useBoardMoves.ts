@@ -2,7 +2,7 @@ import { useRef, useCallback, useState, useEffect } from 'react'
 import { api } from '../../data/api.js'
 import { isKey } from '../../data/keys.js'
 import { type Spot, columnAt, slid, useBoardDrag } from '../useDrag.js'
-import { type Task, chainKeys, takenBy } from './model.jsx'
+import { type Task, chainKeys, takenBy, given } from './model.jsx'
 import { type TasksProps } from '../Tasks.jsx'
 import { type TaskData } from './useTaskData.js'
 
@@ -249,7 +249,10 @@ export function useBoardMoves({
    * cards, delete one" undid the move and the delete at once. One stack and
    * one key: the press takes back the last thing done, whichever it was.
    */
-  type Step = { kind: 'move'; back: Back[] } | { kind: 'delete'; ids: string[] }
+  /* And a card carried to another person in the people view: taken back,
+     the task is given to whoever had it before, through the same `PATCH`
+     the face's picker sends. */
+  type Step = { kind: 'move'; back: Back[] } | { kind: 'delete'; ids: string[] } | { kind: 'assign'; id: string; before: string[] }
   const undone = useRef<Step[]>([])
   /** The last delete, while the toast still offers it back. */
   const [undo, setUndo] = useState<{ ids: string[]; said: string } | null>(null)
@@ -398,6 +401,10 @@ export function useBoardMoves({
     if (step.kind === 'delete') {
       setUndo((u) => (u && u.ids.join() === step.ids.join() ? null : u))
       void Promise.all(step.ids.map(back)).then(() => load())
+      return true
+    }
+    if (step.kind === 'assign') {
+      void patch(step.id, given(step.before), given(step.before))
       return true
     }
     const last = step.back

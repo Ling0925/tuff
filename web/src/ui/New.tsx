@@ -198,7 +198,9 @@ export function NewDialog({
         ...(project !== was.project ? OF_THE_PROJECT : {}),
         project,
         list: what.list ?? '',
-        assignees: what.who ? [what.who] : project === was.project ? was.assignees : [],
+        /* Empty is said too: the people view's No assignee column asks for
+           nobody, not for whoever the last task was given to. */
+        assignees: what.who !== undefined ? (what.who ? [what.who] : []) : project === was.project ? was.assignees : [],
       }
     })
   }, [open])
