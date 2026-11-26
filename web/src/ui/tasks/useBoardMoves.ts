@@ -249,10 +249,14 @@ export function useBoardMoves({
    * cards, delete one" undid the move and the delete at once. One stack and
    * one key: the press takes back the last thing done, whichever it was.
    */
-  /* And a card carried to another person in the people view: taken back,
-     the task is given to whoever had it before, through the same `PATCH`
-     the face's picker sends. */
-  type Step = { kind: 'move'; back: Back[] } | { kind: 'delete'; ids: string[] } | { kind: 'assign'; id: string; before: string[] }
+  /* And a card carried on the board of members: taken back, the task is
+     given to whoever had it before and, when the drop placed it, put back
+     after the card that was above it in its list — one `PATCH`, the one
+     the drop sent. */
+  type Step =
+    | { kind: 'move'; back: Back[] }
+    | { kind: 'delete'; ids: string[] }
+    | { kind: 'assign'; id: string; before: string[]; after?: string | null; key?: string }
   const undone = useRef<Step[]>([])
   /** The last delete, while the toast still offers it back. */
   const [undo, setUndo] = useState<{ ids: string[]; said: string } | null>(null)
@@ -404,7 +408,12 @@ export function useBoardMoves({
       return true
     }
     if (step.kind === 'assign') {
-      void patch(step.id, given(step.before), given(step.before))
+      const placed = step.after !== undefined
+      void patch(
+        step.id,
+        { ...given(step.before), ...(placed && step.key ? { sort_key: step.key } : {}) },
+        { ...given(step.before), ...(placed ? { after: step.after } : {}) },
+      )
       return true
     }
     const last = step.back

@@ -46,6 +46,9 @@ export const TASKS = say({
   columns: ['Columns', 'Colonnes'],
   columnsLists: ['Lists', 'Listes'],
   columnsMembers: ['Members', 'Membres'],
+  /* The ring before a card's title on the board of members, for whoever
+     cannot see it: the list the task is in. */
+  statusIs: [(list: string) => `Status: ${list}`, (list: string) => `Statut : ${list}`],
 
   /* A column in the people view. */
   notOnProject: ['Not on this project', 'Hors du projet'],

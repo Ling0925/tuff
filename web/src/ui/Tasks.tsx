@@ -276,13 +276,13 @@ export function Tasks({
   /* Each assignee's open work as a column, from the board's own columns —
      only while the people view is on the screen. */
   const columns = useMemo(
-    () => (view === 'people' ? personColumns({ lists, byColumn, people, who, meId }) : []),
-    [view, lists, byColumn, people, who, meId],
+    () => (view === 'people' ? personColumns({ lists, byColumn, people, who, meId, sort, dir }) : []),
+    [view, lists, byColumn, people, who, meId, sort, dir],
   )
   const walk = useMemo(() => peopleWalk(columns), [columns])
   /* The board's drag with a drop of its own: carried to a column, a card
      is given to that person. */
-  const peopleMoves = usePeopleMoves({ canWrite, tasks, patch, undone, people })
+  const peopleMoves = usePeopleMoves({ canWrite, sort, tasks, patch, undone, people, lists, columns, EDGE })
   /* The board card's handlers, drawing each card for the column it is in,
      with its status where the board draws the face. */
   const peopleFns = useRef<CardFns>(null as unknown as CardFns)

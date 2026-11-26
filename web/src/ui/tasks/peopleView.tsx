@@ -1,13 +1,13 @@
-import { useCallback } from 'react'
+import { useCallback, useLayoutEffect, useRef } from 'react'
 import type { PersonInWorkspace } from '@tracker/shared-schema'
 import { MAKE } from '../../data/words.js'
 import { TASKS as W } from '../../words/tasks.js'
 import { useWorkingOf } from '../../data/working.js'
-import { columnAt, useBoardDrag, type Spot } from '../useDrag.js'
+import { columnAt, useBoardDrag, slid, stopSlides, type Drag, type Spot } from '../useDrag.js'
 import { Avatar, Fluid, doingSaid, whoOf } from '../kit.jsx'
 import { Icon } from '../glyphs.jsx'
 import { NewButton, type What } from '../New.jsx'
-import { type Task, type List, given } from './model.jsx'
+import { type Task, type List, given, inOrder, inKeyOrder, chainKeys } from './model.jsx'
 import { ViewPanel } from './view.jsx'
 import { ListBar } from './listBar.jsx'
 import { BoardCard, BoardBar, ColumnFade, type CardFns } from './board.jsx'
@@ -50,14 +50,20 @@ const partsOf = (slot: string) => {
  * `byColumn` is the board's: narrowed by whose and by labels, and each list
  * in the order asked for — so a column cannot hold a task the board or the
  * list would leave out. A task given to two people is in both columns; one
- * given to nobody is in No assignee, which is always there and always last,
- * because it is where a card goes to be given to nobody. Whose narrows the
- * columns too: "mine" is my column, not every column that shares a task
- * with me.
+ * given to nobody is in No assignee, which is always there and always first:
+ * it is the work nobody has taken, read before anybody's, and where a card
+ * goes to be given to nobody. Not on this project is last, the leftovers of
+ * people who left. Whose narrows the columns too: "mine" is my column, not
+ * every column that shares a task with me.
  *
  * In the project's order of people (people first, the agents under them,
  * each by name), never by how much they hold: a column does not change
  * places because somebody finished a task.
+ *
+ * Inside a column, Manual is the board's order — list by list, each list as
+ * its cards were placed — because a task's place is kept within its list
+ * and means nothing against another list's. Any other Ordering sorts the
+ * whole column by it.
  */
 export function personColumns({
   lists,
@@ -65,12 +71,16 @@ export function personColumns({
   people,
   who,
   meId,
+  sort,
+  dir,
 }: {
   lists: List[]
   byColumn: Map<string, Task[]>
   people: Member[]
   who: string
   meId: string
+  sort: string
+  dir: string
 }): PersonColumn[] {
   const known = new Map(people.map((p, at) => [p.actor_id, at]))
   const columns = new Map<string, PersonColumn>()
@@ -95,10 +105,11 @@ export function personColumns({
       }
     }
   }
+  if (sort !== 'manual') for (const c of columns.values()) c.open = inOrder(c.open, sort, dir)
   const only = who === 'all' ? null : who === 'mine' ? meId : who === 'none' ? NOBODY : who
-  const rank = (k: string) => known.get(k) ?? (k === GONE ? people.length : people.length + 1)
+  const rank = (k: string) => known.get(k) ?? people.length
   const shown = [...columns.values()].filter((c) => c.key !== NOBODY && c.open.length > 0 && (only === null || c.key === only))
-  return [...shown.sort((a, b) => rank(a.key) - rank(b.key)), columns.get(NOBODY) ?? { key: NOBODY, person: null, open: [], done: 0 }]
+  return [columns.get(NOBODY) ?? { key: NOBODY, person: null, open: [], done: 0 }, ...shown.sort((a, b) => rank(a.key) - rank(b.key))]
 }
 
 /** Every open task once, in the order the columns draw them — what ← and → page through. */
@@ -128,53 +139,227 @@ export function reassigned(was: string[], from: string, to: string, known: Set<s
 }
 
 /**
- * Carrying a card to another person — the board's drag, with a different
- * drop.
+ * Carrying a card to another person, or to another place in a column — the
+ * board's drag, with a different drop.
  *
  * The board's machinery picks the card up, follows the pointer, scrolls the
  * board at its edges and flies the copy home; what is different is the
  * question a drop answers. On the board it is which list and where in it;
- * here it is only whose. Where in a column is not anybody's to choose — a
- * column is in the lists' order — so the card's own slot stays open while it
- * is carried, the column under the pointer lights as a whole, and a card let
- * go in its own column simply goes back.
+ * here it is whose, and — with Manual ordering — where among that person's
+ * cards of the task's own list. A task's manual place is kept within its
+ * list (`sort_key`, compared only within a list on the server), so a card is
+ * placed among the cards of its list in the column it lands in: the gap
+ * opens there and nowhere else, and the drop keeps its list, which the ring
+ * before its title changes.
  *
- * Through the same `PATCH` the face's picker sends, optimistic: the card is
- * in its new column before the server answers, and a refusal puts it back
- * (`patch`). One step on ⌘Z's history, beside the board's moves.
+ * With any other Ordering there is no place to choose: the card's own slot
+ * stays open while it is carried, the column under the pointer lights as a
+ * whole, and a card let go in its own column goes back.
+ *
+ * One `PATCH`, optimistic, with the new assignees and the place (`after`,
+ * the card it lands behind in its list) — the requests the face's picker and
+ * the board's move send, in one. A refusal puts it back (`patch`). One step
+ * on ⌘Z's history, beside the board's moves, that takes back both.
  */
 export function usePeopleMoves({
   canWrite,
+  sort,
   tasks,
   patch,
   undone,
   people,
-}: Pick<TasksProps, 'canWrite'> & Pick<TaskData, 'tasks' | 'patch' | 'people'> & Pick<BoardMoves, 'undone'>) {
+  lists,
+  columns,
+  EDGE,
+}: Pick<TasksProps, 'canWrite' | 'sort'> &
+  Pick<TaskData, 'tasks' | 'patch' | 'people' | 'lists' | 'EDGE'> &
+  Pick<BoardMoves, 'undone'> & { columns: PersonColumn[] }) {
+  /* What a drop is measured against, read when the pointer moves. */
+  const now = useRef({ columns, lists, tasks, sort })
+  now.current = { columns, lists, tasks, sort }
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: board is a ref, read when the pointer moves
-  const resolve = useCallback((x: number, y: number, id: string): Spot | null => {
-    const column = columnAt(board.current, x, y)
-    if (!column) return null
-    const pane = column.querySelector('[data-column-scroll]')
-    const slots = [...(pane?.children ?? [])].filter((n): n is HTMLElement => n instanceof HTMLElement && n.dataset.slot !== undefined)
-    const at = slots.findIndex((s) => s.dataset.slot === id)
-    return { column: column.dataset.list!, index: at === -1 ? 0 : at }
-  }, [])
+  const resolve = useCallback(
+    (x: number, y: number, id: string, mid: number, h: number): Spot | null => {
+      const column = columnAt(board.current, x, y)
+      if (!column) return null
+      const key = column.dataset.list!
+      const task = partsOf(id).task
+      const pane = column.querySelector('[data-column-scroll]')
+      const slots = [...(pane?.children ?? [])].filter((n): n is HTMLElement => n instanceof HTMLElement && n.dataset.slot !== undefined)
+      const at = slots.findIndex((s) => s.dataset.slot === id)
+      const { columns, lists, tasks, sort } = now.current
+      if (sort !== 'manual' || key === GONE) return { column: key, index: at === -1 ? 0 : at }
+      /* The cards staying, as the board measures them: any card of this
+         task left out, the hole and another person's copy of it alike. */
+      const staying = (slot: HTMLElement) => partsOf(slot.dataset.slot!).task !== task
+      const self = at === -1 ? -1 : slots.slice(0, at).filter(staying).length
+      const others = slots.filter(staying)
+      let index = others.length
+      for (const [i, slot] of others.entries()) {
+        /* The board's rule — the leading edge past a neighbour's middle,
+           measured where the layout put it — `useBoardMoves`. */
+        const sliding = slid.has(slot) ? new DOMMatrixReadOnly(getComputedStyle(slot).transform).m42 : 0
+        const box = slot.getBoundingClientRect()
+        const middle = box.top - sliding + box.height / 2
+        const below = self !== -1 && i >= self
+        if (below ? mid + h / 2 <= middle + EDGE : mid - h / 2 < middle - EDGE) {
+          index = i
+          break
+        }
+      }
+      /* Among the cards of its own list, which is the only order it has. */
+      const t = tasks?.find((x) => x.id === task)
+      const c = columns.find((x) => x.key === key)
+      if (!t || !c) return { column: key, index }
+      const order = new Map(lists.map((l, i) => [l.id, i]))
+      const mine = order.get(t.list_id ?? '') ?? 0
+      const rest = c.open.filter((x) => x.id !== task)
+      const lo = rest.filter((x) => (order.get(x.list_id ?? '') ?? 0) < mine).length
+      const hi = lo + rest.filter((x) => x.list_id === t.list_id).length
+      return { column: key, index: Math.min(hi, Math.max(lo, index)) }
+    },
+    [EDGE],
+  )
+
   const commit = useCallback(
     (id: string, spot: Spot) => {
       const { column: from, task } = partsOf(id)
-      if (spot.column === from || spot.column === GONE) return
+      if (spot.column === GONE) return
       const t = tasks?.find((x) => x.id === task)
       if (!t) return
       const was = whoOf(t)
-      const next = reassigned(was, from, spot.column, new Set(people.map((p) => p.actor_id)))
-      if (next.join() === was.join()) return
-      undone.current.push({ kind: 'assign', id: task, before: was })
-      void patch(task, given(next), given(next))
+      const next = spot.column === from ? was : reassigned(was, from, spot.column, new Set(people.map((p) => p.actor_id)))
+      const moved = next.join() !== was.join()
+      /*
+       * Where it lands, with Manual on: behind the card above it, when that
+       * card is of its list; at the top of its list when it lands first
+       * among them. Into a column that holds nothing of its list there is
+       * no neighbour to be placed against, and its place is left as it is.
+       */
+      let after: string | null | undefined
+      const into = columns.find((c) => c.key === spot.column)
+      if (sort === 'manual' && into) {
+        const rest = into.open.filter((x) => x.id !== task)
+        if (rest.some((x) => x.list_id === t.list_id)) {
+          const above = rest[spot.index - 1]
+          after = above && above.list_id === t.list_id ? above.id : null
+          /* Already there: the card above it in this column is the one above it now. */
+          const at = into.open.findIndex((x) => x.id === task)
+          if (at !== -1) {
+            const prev = into.open[at - 1]
+            if ((prev && prev.list_id === t.list_id ? prev.id : null) === after) after = undefined
+          }
+        }
+      }
+      if (!moved && after === undefined) return
+      /* For ⌘Z: who had it, and the card above it in its whole list. */
+      const own = (tasks ?? []).filter((x) => !x.parent_id && x.list_id === t.list_id).sort(inKeyOrder)
+      const below = own.findIndex((x) => x.id === task)
+      undone.current.push({
+        kind: 'assign',
+        id: task,
+        before: was,
+        ...(after !== undefined ? { after: below > 0 ? own[below - 1]!.id : null, key: t.sort_key } : {}),
+      })
+      const key = after !== undefined && t.list_id ? chainKeys(tasks ?? [], t.list_id, [t], after).get(task) : undefined
+      void patch(
+        task,
+        { ...(moved ? given(next) : {}), ...(key ? { sort_key: key } : {}) },
+        { ...(moved ? given(next) : {}), ...(after !== undefined ? { after } : {}) },
+      )
     },
-    [tasks, patch, undone, people],
+    [tasks, patch, undone, people, columns, sort],
   )
   const { drag, board, layer, handlers } = useBoardDrag({ enabled: canWrite, resolve, onDrop: commit })
+  useSlides(board, drag, sort)
   return { drag, board, layer, handlers } as const
+}
+
+/**
+ * The cards close up rather than jump while a card is carried with Manual
+ * on — the board's FLIP (`useBoardLayout`, which argues every line of it),
+ * for the columns a card can move in here: the one the gap is in, the one it
+ * was in a step ago, and the one the card came from.
+ */
+function useSlides(board: React.RefObject<HTMLDivElement | null>, drag: Drag | null, sort: string) {
+  const wasDragging = useRef(false)
+  useLayoutEffect(() => {
+    if (drag && !drag.settling) {
+      wasDragging.current = true
+      return
+    }
+    if (!wasDragging.current) return
+    wasDragging.current = false
+    stopSlides()
+    if (slid.size > 0) void board.current?.offsetHeight
+    for (const el of slid) el.style.transition = ''
+    slid.clear()
+  }, [drag, board])
+
+  type Stood = { top: number; h: number; pane: Element | null; scroll: number }
+  const were = useRef(new Map<string, Stood>())
+  const lastColumn = useRef<string | null>(null)
+  useLayoutEffect(() => {
+    const root = board.current
+    if (!root || sort !== 'manual') return
+    const involved = new Set<string>()
+    if (drag) {
+      if (drag.spot) involved.add(drag.spot.column)
+      if (lastColumn.current) involved.add(lastColumn.current)
+      involved.add(partsOf(drag.id).column)
+    }
+    lastColumn.current = drag?.spot?.column ?? null
+    const cards: HTMLElement[] = []
+    const panes = new Map<HTMLElement, Element | null>()
+    for (const column of root.querySelectorAll<HTMLElement>('[data-list]')) {
+      if (!involved.has(column.dataset.list!)) continue
+      const pane = column.querySelector('[data-column-scroll]')
+      for (const el of pane?.children ?? []) {
+        if (!(el instanceof HTMLElement) || el.dataset.card === undefined) continue
+        cards.push(el)
+        panes.set(el, pane)
+      }
+    }
+    const stood = new Map<string, Stood>()
+    const shown = new Map<Element, DOMRect>()
+    for (const el of cards) {
+      const id = el.dataset.card!
+      const sliding = slid.has(el) ? new DOMMatrixReadOnly(getComputedStyle(el).transform).m42 : 0
+      const pane = panes.get(el) ?? null
+      const box = el.getBoundingClientRect()
+      stood.set(id, { top: box.top - sliding, h: box.height, pane, scroll: pane?.scrollTop ?? 0 })
+      if (pane && !shown.has(pane)) shown.set(pane, pane.getBoundingClientRect())
+    }
+    const moving: [HTMLElement, number][] = []
+    if (drag && !drag.settling) {
+      for (const el of cards) {
+        const id = el.dataset.card!
+        const was = were.current.get(id)
+        const is = stood.get(id)
+        if (!was || !is) continue
+        const by = was.pane === is.pane ? was.top + was.scroll - (is.top + is.scroll) : was.top - is.top
+        if (Math.abs(by) < 2) continue
+        const seen = is.pane ? shown.get(is.pane) : undefined
+        const off = (top: number) => !!seen && (top > seen.bottom || top + is.h < seen.top)
+        if (off(is.top) && off(is.top + by)) continue
+        moving.push([el, by])
+      }
+      for (const [el, by] of moving) {
+        slid.add(el)
+        el.style.transition = 'none'
+        el.style.transform = `translateY(${by}px)`
+      }
+      if (moving.length > 0) {
+        void root.offsetHeight
+        for (const [el] of moving) {
+          el.style.transition = 'transform 160ms var(--ease-out)'
+          el.style.transform = ''
+        }
+      }
+    }
+    were.current = stood
+  })
 }
 export type PeopleMoves = ReturnType<typeof usePeopleMoves>
 
@@ -229,7 +414,32 @@ export function peopleView({
   /* The list the board's own + would use: the first open one, never Triage. */
   const into = (lists.find((l) => !l.intake && !l.finishes) ?? lists.find((l) => !l.intake) ?? lists[0])?.id ?? null
   const from = drag ? partsOf(drag.id).column : null
-  const held = drag ? (columns.flatMap((c) => c.open).find((t) => t.id === partsOf(drag.id).task) ?? null) : null
+  const dragged = drag ? partsOf(drag.id).task : null
+  const held = dragged ? (columns.flatMap((c) => c.open).find((t) => t.id === dragged) ?? null) : null
+  /* With Manual on, the gap travels to where the card will land, as on the
+     board; with any other Ordering it stays where the card was. */
+  const spot = drag && !drag.settling && sort === 'manual' && drag.spot && drag.spot.column !== GONE ? drag.spot : null
+  /**
+   * A column as it would be if the card were let go of now — the board's
+   * `arranged`: the card out of the column it left, and the gap where it
+   * lands.
+   *
+   * Over a column that already holds the task — given to two, carried from
+   * one to the other — that column's own card is what moves to the place,
+   * rather than leaving for a gap: it is the card the drop will leave there.
+   * Taken out instead, it vanished with its faces while the pointer crossed
+   * its column and came back when it left — measured frame by frame, the
+   * face in its corner gone for twenty-odd frames and back. Moved, it is the
+   * same node the whole way and slides like any other card.
+   */
+  const rowsOf = (c: PersonColumn): { t: Task; hole: boolean }[] => {
+    if (!drag || drag.settling) return c.open.map((t) => ({ t, hole: false }))
+    if (!spot) return c.open.map((t) => ({ t, hole: c.key === from && t.id === dragged }))
+    const own = c.key !== from && c.open.some((t) => t.id === dragged)
+    const rows = c.open.filter((t) => !(t.id === dragged && (c.key === from || c.key === spot.column))).map((t) => ({ t, hole: false }))
+    if (c.key === spot.column && held) rows.splice(spot.index, 0, { t: held, hole: !own })
+    return rows
+  }
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       {/* Down into the tool body's foot, as the board does: its columns are the floor. */}
@@ -238,11 +448,12 @@ export function peopleView({
           <div ref={board} data-board data-people-board {...handlers} className="flex min-h-0 min-w-px flex-1 gap-3 overflow-x-auto">
             {columns.map((c) => {
               const name = c.person?.name ?? (c.key === NOBODY ? W.noAssignee : W.notOnProject)
-              /* The column a card is carried over lights as a whole, as an
-                 ordered column on the board does: the drop answers whose,
-                 not where. Not the column it came from, and never Not on
-                 this project, which nobody can be given to. */
-              const over = drag?.spot?.column === c.key && c.key !== from && c.key !== GONE
+              /* With an Ordering on, the column a card is carried over
+                 lights as a whole, as an ordered column on the board does:
+                 the drop answers whose, not where. Not the column it came
+                 from, and never Not on this project, which nobody can be
+                 given to. */
+              const over = sort !== 'manual' && drag?.spot?.column === c.key && c.key !== from && c.key !== GONE
               const pane = columnPane(`person:${c.key}`)
               return (
                 <div
@@ -275,16 +486,17 @@ export function peopleView({
                       className="relative flex min-h-0 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto"
                     >
                       {!drag && <Fluid what="[data-card]" tone="over" />}
-                      {c.open.map((t) => {
+                      {rowsOf(c).map(({ t, hole }) => {
                         const slot = slotOf(c.key, t.id)
-                        /* The card's own place, held open while it is in the
-                           air, with its markup hidden inside so a finger's
-                           drag is not ended — the board's hole, `boardView`. */
-                        if (drag?.id === slot && !drag.settling)
+                        /* The place it will land, held open while it is in
+                           the air, with its markup hidden inside so a
+                           finger's drag is not ended — the board's hole,
+                           `boardView`. */
+                        if (hole && drag)
                           return (
                             <div
                               key={t.id}
-                              data-slot={slot}
+                              data-slot={drag.id}
                               data-hole
                               className="shrink-0 bg-sunken"
                               style={{
@@ -390,7 +602,7 @@ function PersonHead({ column, name, newTask, onMade }: { column: PersonColumn; n
   const count = column.open.length
   return (
     <div className="flex shrink-0 items-center gap-2 pt-1 pr-1 pb-2 pl-2" title={doing}>
-      <span className="relative flex shrink-0 items-center">
+      <span data-person-face className="relative flex shrink-0 items-center">
         {status && <span data-agent-working aria-hidden className="agent-working pointer-events-none absolute -inset-1 rounded-full" />}
         {p ? (
           <Avatar id={p.actor_id} name={p.name} url={p.avatar_url} size={20} live={Boolean(status)} on="var(--lane)" />
