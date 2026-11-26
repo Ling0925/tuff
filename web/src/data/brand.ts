@@ -60,60 +60,86 @@ function load(src: string, crossOrigin: boolean): Promise<HTMLImageElement> {
   })
 }
 
-function roundedSquare(g: CanvasRenderingContext2D): void {
+type Frame = { size: number; inset: number; radius: number }
+const TAB: Frame = { size: SIZE, inset: 0, radius: RADIUS }
+
+function roundedSquare(g: CanvasRenderingContext2D, f: Frame): void {
+  const side = f.size - 2 * f.inset
   g.beginPath()
-  g.roundRect(0, 0, SIZE, SIZE, RADIUS)
+  g.roundRect(f.inset, f.inset, side, side, f.radius)
   g.closePath()
 }
 
-/** The mark as an image's address — a PNG drawn here, or the picture's own link when it cannot be read back. */
-async function drawn(b: Brand): Promise<string | null> {
+/** The mark drawn on a canvas of the frame's size: its picture covered, or its glyph or letter on its colour. */
+async function paint(b: Brand, f: Frame): Promise<HTMLCanvasElement | 'unreadable' | null> {
   const c = document.createElement('canvas')
-  c.width = SIZE
-  c.height = SIZE
+  c.width = f.size
+  c.height = f.size
   const g = c.getContext('2d')
-  if (!g) return b.icon_url
+  if (!g) return null
+  const side = f.size - 2 * f.inset
   if (b.icon_url) {
     try {
       const img = await load(b.icon_url, true)
-      roundedSquare(g)
+      roundedSquare(g, f)
       g.clip()
       /* Covered, as the mark's `object-cover` is. */
-      const scale = Math.max(SIZE / img.naturalWidth, SIZE / img.naturalHeight)
+      const scale = Math.max(side / img.naturalWidth, side / img.naturalHeight)
       const w = img.naturalWidth * scale
       const h = img.naturalHeight * scale
-      g.drawImage(img, (SIZE - w) / 2, (SIZE - h) / 2, w, h)
-      return c.toDataURL('image/png')
+      g.drawImage(img, f.inset + (side - w) / 2, f.inset + (side - h) / 2, w, h)
+      return c
     } catch {
-      /* Another origin that will not be read back, or a picture gone: its
-         own link while it lasts, as the switcher would draw it. */
-      return b.icon_url
+      /* Another origin that will not be read back, or a picture gone. */
+      return 'unreadable'
     }
   }
   const tint = getComputedStyle(document.documentElement).getPropertyValue(`--face-${b.mark_tint}`).trim() || '#747479'
-  roundedSquare(g)
+  roundedSquare(g, f)
   g.fillStyle = tint
   g.fill()
   if (b.mark_icon) {
     try {
-      const markup = glyphMarkup(b.mark_icon as IconName, Math.round(SIZE * 0.6)).replace(
+      const markup = glyphMarkup(b.mark_icon as IconName, Math.round(side * 0.6)).replace(
         '<svg ',
         '<svg xmlns="http://www.w3.org/2000/svg" style="color:#ffffff" ',
       )
       const img = await load(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`, false)
-      g.drawImage(img, (SIZE - img.width) / 2, (SIZE - img.height) / 2)
-      return c.toDataURL('image/png')
+      g.drawImage(img, (f.size - img.width) / 2, (f.size - img.height) / 2)
+      return c
     } catch {
       // A glyph this build does not know: the letter, as the mark falls back.
     }
   }
   g.fillStyle = '#ffffff'
-  g.font = `600 ${Math.round(SIZE * 0.56)}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`
+  g.font = `600 ${Math.round(side * 0.56)}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`
   g.textAlign = 'center'
   g.textBaseline = 'middle'
-  g.fillText((b.name.trim()[0] ?? '?').toUpperCase(), SIZE / 2, SIZE / 2 + 2)
+  g.fillText((b.name.trim()[0] ?? '?').toUpperCase(), f.size / 2, f.size / 2 + (2 * f.size) / SIZE)
+  return c
+}
+
+/** The mark as an image's address: a PNG drawn here, or the picture's own link when it cannot be read back. */
+async function drawn(b: Brand): Promise<string | null> {
+  const c = await paint(b, TAB)
+  if (c === null || c === 'unreadable') return b.icon_url
   return c.toDataURL('image/png')
 }
+
+/**
+ * The mark as a PNG of a given size, for a workspace's own domain to serve
+ * as its installed app's icons: 512 with a
+ * margin for the manifest, 180 to the edge for the Home Screen, which rounds
+ * it itself. Null when it cannot be drawn here.
+ */
+export async function markPng(b: Brand, size: number, inset: number, radius: number): Promise<Blob | null> {
+  const c = await paint(b, { size, inset, radius })
+  if (c === null || c === 'unreadable') return null
+  return new Promise((done) => c.toBlob((blob) => done(blob), 'image/png'))
+}
+
+/** What a brand looks like, said once, for whoever keeps what was drawn of it. */
+export const brandLook = (b: Brand): string => lookOf(b)
 
 let asked = 0
 

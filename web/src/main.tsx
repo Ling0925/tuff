@@ -1,4 +1,5 @@
 import { lazy, StrictMode, Suspense } from 'react'
+import { onHost } from './data/host.js'
 import { OfflineBand } from './ui/OfflineBand.jsx'
 import { createRoot } from 'react-dom/client'
 import { App } from './ui/App.jsx'
@@ -26,6 +27,10 @@ const Verify = lazy(() => import('./ui/Access.jsx').then((m) => ({ default: m.Ve
    `edition.tsx`. */
 edition.boot(location.pathname.replace(/^\/fr(?=\/|$)/, '') || '/', Boolean(stored()))
 const here = location.pathname.replace(/^\/fr(?=\/|$)/, '') || '/'
+/* On a workspace's own domain there is one workspace: `/` is it when signed
+   in and its sign-in otherwise, and none of the site's pages are drawn. */
+const host = onHost()
+if (host && here === '/') history.replaceState(null, '', stored() ? `/${host.slug}` : '/signin')
 /* A document shared to the web. */
 const PublicDoc = lazy(() => import('./ui/PublicDoc.jsx').then((m) => ({ default: m.PublicDoc })))
 const shared = /^\/d\/([A-Za-z0-9_-]+)\/?$/.exec(location.pathname)?.[1]
@@ -63,7 +68,7 @@ const invited = /^\/invite\/([^/?#]+)/.exec(location.pathname)?.[1]
    connected. Everything else is the app, which asks for a sign-in where it
    needs one — and on your own server that is what `/` is. */
 const path = here
-const edition_ = edition.page(path, Boolean(stored()))
+const edition_ = host ? null : edition.page(path, Boolean(stored()))
 const app =
   !invited &&
   !edition_ &&

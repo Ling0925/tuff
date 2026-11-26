@@ -22,6 +22,8 @@ export const edition: WebEdition = {
   FeedbackLocked: null,
   TokensLocked: null,
   Plan: null,
+  /* None: your own server already has an address of its own. */
+  Domain: null,
   settingsSays: null,
   trouble: () => null,
   auditLine: () => null,

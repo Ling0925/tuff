@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { leaveFor } from './host.js'
 
 /**
  * Where you are, in the address bar.
@@ -149,6 +150,9 @@ const listeners = new Set<() => void>()
 export function goTo(r: Route): void {
   const next = withBeside(format(r))
   if (next === location.pathname + location.search) return
+  /* From a workspace's own domain, another workspace is usetuff.com's. */
+  const away = leaveFor(next)
+  if (away) return location.assign(away)
   history.pushState(null, '', next)
   for (const said of listeners) said()
 }
@@ -475,6 +479,10 @@ export function useRoute(): {
   const go = useCallback((r: Route) => {
     const next = withBeside(format(r))
     if (next === location.pathname + location.search) return
+    /* A path into another workspace from a workspace's own domain is a full
+       navigation to the same path at usetuff.com. */
+    const away = leaveFor(next)
+    if (away) return location.assign(away)
     history.pushState(null, '', next)
     setRoute(parse(next))
   }, [])

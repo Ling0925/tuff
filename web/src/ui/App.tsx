@@ -1,4 +1,6 @@
 import { edition } from '../edition.jsx'
+import { onHost } from '../data/host.js'
+import { HostSecurity, HostSignIn } from './app/hostSignIn.jsx'
 import { UndoToast } from './UndoToast.jsx'
 import { MorePage, PhoneTabs } from './PhoneTabs.jsx'
 import { Chats } from './chat/Chats.jsx'
@@ -204,6 +206,9 @@ export function App() {
       .catch(() => {})
   }, [signedIn])
 
+  /* On a workspace's own domain: a code or a provider, never a password. */
+  const host = onHost()
+  if (!signedIn && host) return <HostSignIn host={host} onDone={() => setSignedIn(true)} />
   if (!signedIn)
     return (
       <SignIn
@@ -840,16 +845,24 @@ export function App() {
                             <Face me={me} onChanged={load} />
                             <Tongue />
                             <Notifications />
-                            <SecondFactor />
-                            {/* What else signs this account in. */}
-                            <WaysIn />
-                            <Sessions />
-                            <Tokens
-                              agents={me.can.includes('agent.use')}
-                              {...(me.can.includes('workspace.billing') ? { onSettings: () => navigate({ view: 'settings' }) } : {})}
-                            />
-                            {/* Who you are on GitHub. */}
-                            <GithubAccount />
+                            {/* On a workspace's own domain, what belongs to the account is
+                changed at usetuff.com. */}
+                            {host ? (
+                              <HostSecurity host={host} />
+                            ) : (
+                              <>
+                                <SecondFactor />
+                                {/* What else signs this account in. */}
+                                <WaysIn />
+                                <Sessions />
+                                <Tokens
+                                  agents={me.can.includes('agent.use')}
+                                  {...(me.can.includes('workspace.billing') ? { onSettings: () => navigate({ view: 'settings' }) } : {})}
+                                />
+                                {/* Who you are on GitHub. */}
+                                <GithubAccount />
+                              </>
+                            )}
                             {/* The narrower way out before the widest. */}
                             <LeaveWorkspace
                               workspace={me.workspace}
@@ -859,7 +872,7 @@ export function App() {
                             />
                             {/* Last, as the thing least often come here for and the one that
                 cannot be undone. */}
-                            <YourData />
+                            {!host && <YourData />}
                           </div>
                         )}
                       </div>
