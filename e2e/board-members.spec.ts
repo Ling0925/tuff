@@ -522,8 +522,8 @@ test('a card let go lands as one, its face drawn where the copy’s was — on t
   /*
    * The board of members: a second agent with work of its own, and the
    * task the agent and I share carried from the agent's column to it — it
-   * lands there with my face in its corner, while the agent's column, now
-   * empty, goes and the columns beside it widen.
+   * lands there with my face in its corner, and the agent's column, now
+   * empty, stays: everybody on the project has a column, work or not.
    */
   const { projects } = (await (await page.request.get('/api/projects', { headers: h })).json()) as {
     projects: { id: string; slug: string }[]
@@ -549,4 +549,19 @@ test('a card let go lands as one, its face drawn where the copy’s was — on t
   await expect(column(s.agent).locator('[data-card]')).toHaveCount(1)
   await landsWhole(page, column(s.agent).locator('[data-card]').first(), column(two.agent_id), s.tasks.shared.id)
   await expect.poll(() => assignees(page, s.tasks.shared.id), { timeout: 10_000 }).toEqual([s.me, two.agent_id].sort())
+  await expect(column(s.agent)).toBeVisible()
+  await expect(column(s.agent).locator('[data-card]')).toHaveCount(0)
+
+  /* A member with nothing at all has a column, and a card dropped in it is theirs. */
+  const three = (await (
+    await page.request.post('/api/agents', {
+      headers: { ...h, 'content-type': 'application/json' },
+      data: { name: 'Third', project_ids: [pid], reach: 'mcp' },
+    })
+  ).json()) as { agent_id: string }
+  await page.reload()
+  await expect(column(three.agent_id)).toBeVisible({ timeout: 15_000 })
+  await expect(column(three.agent_id).locator('[data-card]')).toHaveCount(0)
+  await carry(page, column(two.agent_id).locator('[data-card]').first(), column(three.agent_id))
+  await expect(column(three.agent_id).locator('[data-card]')).toHaveCount(1, { timeout: 10_000 })
 })

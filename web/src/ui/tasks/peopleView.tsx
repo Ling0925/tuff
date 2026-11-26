@@ -108,7 +108,14 @@ export function personColumns({
   if (sort !== 'manual') for (const c of columns.values()) c.open = inOrder(c.open, sort, dir)
   const only = who === 'all' ? null : who === 'mine' ? meId : who === 'none' ? NOBODY : who
   const rank = (k: string) => known.get(k) ?? people.length
-  const shown = [...columns.values()].filter((c) => c.key !== NOBODY && c.open.length > 0 && (only === null || c.key === only))
+  /* Everybody on the project has a column, work or not (a call):
+     a person or an agent with nothing open is somebody to give work to, and
+     their empty column is where it is dropped. Not on this project only
+     when it holds something — it is leftovers, not a place to give to. */
+  for (const p of people) columnOf(p.actor_id)
+  const shown = [...columns.values()].filter(
+    (c) => c.key !== NOBODY && (c.key !== GONE || c.open.length > 0) && (only === null || c.key === only),
+  )
   return [columns.get(NOBODY) ?? { key: NOBODY, person: null, open: [], done: 0 }, ...shown.sort((a, b) => rank(a.key) - rank(b.key))]
 }
 
