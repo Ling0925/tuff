@@ -42,10 +42,35 @@ function worn(row: Row | undefined): Brand | null {
   }
 }
 
-/** A workspace's brand by its id — one the caller already holds, never one a request named. */
+/**
+ * A workspace's brand by its id, for the worker — a digest's. Granted to
+ * the worker's role alone (migration 324): a request never reads a
+ * workspace outside the policies by an id.
+ */
 export async function brandOf(tx: Tx, workspaceId: string): Promise<Brand | null> {
   if (!edition.brands) return null
   const [row] = await tx<Row[]>`select * from workspace_brand(${workspaceId})`
+  return worn(row)
+}
+
+/**
+ * The brand of the workspace a request is signed in to, read under the
+ * policies as the rest of its row is — `/api/me`, an invitation's mail.
+ * The same rule as `workspace_brand`: standing, not a board's, on a plan
+ * `plan_branded` names.
+ */
+export async function brandHere(tx: Tx, workspaceId: string): Promise<Brand | null> {
+  if (!edition.brands) return null
+  const [row] = await tx<Row[]>`
+    select id, name, mark_icon, mark_tint, icon_key from workspace
+    where id = ${workspaceId} and deleted_at is null and not scratch and plan_branded(plan)`
+  return worn(row)
+}
+
+/** A feedback page's workspace's brand, found through the page's address — only while the page is available. */
+export async function brandOfPage(tx: Tx, slug: string): Promise<Brand | null> {
+  if (!edition.brands) return null
+  const [row] = await tx<Row[]>`select * from feedback_page_brand(${slug})`
   return worn(row)
 }
 
@@ -56,7 +81,7 @@ export async function brandOfDocument(tx: Tx, token: string): Promise<Brand | nu
   return worn(row)
 }
 
-/** An invitation's workspace's brand, found through the invitation's hash. */
+/** An invitation's workspace's brand, found through the invitation's hash — only while it can still be used. */
 export async function brandOfInvite(tx: Tx, tokenHash: string): Promise<Brand | null> {
   if (!edition.brands) return null
   const [row] = await tx<Row[]>`select * from invite_brand(${tokenHash})`

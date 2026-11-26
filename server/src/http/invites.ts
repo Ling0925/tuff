@@ -3,7 +3,7 @@ import { send, note, mailOn } from '../mail.js'
 import { edition } from '../edition.js'
 import { fullRefusal, workspaceFull } from '../ceilings.js'
 import { emailOf } from '../auth/address.js'
-import { brandOf, brandOfInvite } from '../brand.js'
+import { brandHere, brandOfInvite } from '../brand.js'
 import { oneLine } from '../text.js'
 import { origin, sendChoosePassword } from './access.js'
 import { guess, metaOf, spendOn } from './limits.js'
@@ -437,7 +437,7 @@ async function mailInvite(
               .filter(Boolean),
         /* The workspace's own name in Tuff's place, where its plan wears
            it. */
-        await brandOf(tx, ctx.workspaceId),
+        await brandHere(tx, ctx.workspaceId),
       ] as const,
   )
   const url = `${origin(c)}/invite/${encodeURIComponent(token)}`
@@ -487,6 +487,10 @@ async function mailInvite(
         (n: number) => `L’invitation expire dans ${n} ${one(n, 'fr') ? 'jour' : 'jours'}.`,
       ],
       join: ['Accept the invitation', 'Accepter l’invitation'],
+      /* A branded invitation's foot: the product it was sent with, so a
+         letter that opens a password form under a stranger's uploaded logo
+         always says whose form it is. */
+      sentWith: ['Sent with Tuff.', 'Envoyé avec Tuff.'],
     },
     language,
   )
@@ -505,12 +509,14 @@ async function mailInvite(
     to: inv.email,
     subject: brand ? w.subjectBranded : w.subject,
     ...(name ? { fromName: name } : {}),
-    ...(brand ? { via: brand.name } : {}),
+    /* Never the brand alone: a stranger is mailed by a person, or by
+       "Someone", through it. */
+    ...(brand ? { via: brand.name, someone: w.someone } : {}),
     ...(from ? { replyTo: from } : {}),
     ...note(
       [invited(sender, oneLine(who?.workspace ?? '') || w.theirs), ...(projects.length > 0 ? [w.project(projects)] : [])],
       { label: w.join, url },
-      [w.expires(days)],
+      [w.expires(days), ...(brand ? [w.sentWith] : [])],
       language,
     ),
   })
@@ -537,7 +543,7 @@ invites.get('/invite/:token', async (c) => {
     withActor(ctx.actorId, ctx.workspaceId, (tx) => tx<{ workspace_id: string; member: boolean }[]>`select * from invite_for_me(${hash})`),
     withActor(ctx.actorId, ctx.workspaceId, (tx) => tx<{ name: string }[]>`select name from actor where id = ${ctx.actorId}`),
     emailOf(ctx.actorId),
-    edition.brands ? withoutActor((tx) => brandOfInvite(tx, hash)) : null,
+    edition.brands && row.state === 'open' ? withoutActor((tx) => brandOfInvite(tx, hash)) : null,
   ])
   const member = seen[0]?.member === true
   return c.json({
@@ -598,7 +604,8 @@ publicInvites.get('/invite/:token', async (c) => {
     return c.json({ state: 'invalid' })
   }
   /* The workspace's own mark above "Join", where its plan wears it. */
-  const brand = edition.brands ? await withoutActor((tx) => brandOfInvite(tx, hashToken(c.req.param('token')))) : null
+  const brand =
+    edition.brands && row.state === 'open' ? await withoutActor((tx) => brandOfInvite(tx, hashToken(c.req.param('token')))) : null
   return c.json({ ...row, brand })
 })
 

@@ -214,7 +214,7 @@ nowhere.get(
     )
     if (!row || row.state === 'revoked') return c.json({ state: 'invalid' })
     /* The workspace's own mark, where its plan wears it. */
-    const brand = edition.brands ? await withoutActor((tx) => brandOfInvite(tx, hash)) : null
+    const brand = edition.brands && row.state === 'open' ? await withoutActor((tx) => brandOfInvite(tx, hash)) : null
     return c.json({ ...row, brand, you: { name: who.person.name, email: who.person.email }, member: false })
   }),
 )

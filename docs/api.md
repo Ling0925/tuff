@@ -463,14 +463,18 @@ document, a feedback page, an invitation's page, and in `GET /api/me`'s
 `workspace` for the window's icon and title. It is the workspace's own name
 and mark, nothing stored beside them; `mark_tint` is never null in it (a
 colour nobody chose is the one the workspace's id gives, worked out by the
-server, so a page with no session draws it without the id) and `icon_url` is
-signed for an hour over the picture's key alone, so a reader with no session
-or file cookie opens that picture and nothing else. The server works it out
-at every read and a client never decides it from a plan's name; on your own
-server it is always null. Read through `workspace_brand(id)`, which answers
-nothing for a workspace that does not wear one, and through
-`public_document_brand(token)` and `invite_brand(token_hash)`, which find
-the workspace by the secret that opens the page (migration 323).
+server) and `icon_url` is signed for an hour over the picture's key alone,
+so a reader with no session or file cookie opens that picture and nothing
+else — its path is the stored key, which begins with the workspace's id,
+and the id opens nothing. The server works it out at every read and a
+client never decides it from a plan's name; on your own server it is
+always null. It is answered only while the page is one: a feedback page
+that is not `available`, and an invitation whose `state` is not `open`,
+answer `brand: null`. A request finds it through the secret that opens the
+page — `public_document_brand(token)`, `invite_brand(token_hash)`,
+`feedback_page_brand(slug)` — or reads its own workspace under the
+policies; `workspace_brand(id)` is the worker's alone (migrations 323,
+324).
 
 
 | Method | Path | Action |

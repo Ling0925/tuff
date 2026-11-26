@@ -655,8 +655,8 @@ export const MeActor = z.object({
  * people. The server works it out from the
  * plan at every read; null wherever it is not worn, which on your own
  * server is everywhere. `mark_tint` is never null here: a colour nobody
- * chose is the one the workspace's id gives, worked out by the server so a
- * public page needs no id to draw it.
+ * chose is the one the workspace's id gives, worked out by the server and
+ * handed over as a colour.
  */
 export const Brand = z.object({
   name: z.string(),
@@ -2062,7 +2062,8 @@ export const InvitePreview = z.object({
   workspace_name: z.string().nullable().optional(),
   role: z.string().nullable().optional(),
   email: z.string().nullable().optional(),
-  /** The workspace's mark above "Join", where its plan wears one. */
+  /** The workspace's mark above "Join", where its plan wears one and the
+      invitation is still `open`. */
   brand: Brand.nullable().optional(),
 })
 export type InvitePreview = z.infer<typeof InvitePreview>
@@ -2279,8 +2280,8 @@ export const FeedbackPublic = z.object({
   turnstile_site_key: z.string().nullable(),
   moved_to: z.string().optional(),
   /** The workspace's name and mark at the foot in place of "Made with
-      Tuff", where its plan wears them; null, and nothing about the
-      workspace, anywhere else. */
+      Tuff", where its plan wears them and the page is `available`; null,
+      and nothing about the workspace, anywhere else. */
   brand: Brand.nullable().optional(),
 })
 export type FeedbackPublic = z.infer<typeof FeedbackPublic>

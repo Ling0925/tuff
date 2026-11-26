@@ -17,7 +17,9 @@ import { setOwnName } from './title.js'
  * answered (`wearKept`) — otherwise every load would show Tuff's icon and
  * then the agency's, which is the jerk the project's handbook asks not to ship.
  */
-const KEY = 'tracker.brand'
+/* Under the prefix signing out clears (`wipe`, `data/api.ts`): the next
+   person on this browser is not shown the last one's workspace. */
+const KEY = 'tracker:brand'
 const SIZE = 64
 /* The mark's corner at the size a tab draws it, sixteen pixels, scaled to
    the canvas: `markRadius(16)` is six. */

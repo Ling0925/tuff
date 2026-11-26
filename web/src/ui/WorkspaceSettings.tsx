@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { Brand } from '@tracker/shared-schema'
 import { api, Refused, stored } from '../data/api.js'
 import { ahead, known } from '../data/ahead.js'
 import { edition } from '../edition.jsx'
@@ -30,7 +31,7 @@ type Look = {
   mark_tint?: number | null
   icon_url?: string | null
   /** Worn in Tuff's place on what the workspace shows to people. */
-  brand?: unknown
+  brand?: Brand | null | undefined
 }
 
 /** A setting as a line of the lists: what it is and a sentence on the left, the control on the right. */

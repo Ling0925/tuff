@@ -72,6 +72,11 @@ function paint(): void {
   baseFor = icon
   base.crossOrigin = 'anonymous'
   base.onload = draw
+  /* A picture that will not load, or not across origins: the icon as it
+     is, without the dot, rather than whatever was there before. */
+  base.onerror = () => {
+    if (baseFor === icon) el.href = icon
+  }
   base.src = icon
 }
 

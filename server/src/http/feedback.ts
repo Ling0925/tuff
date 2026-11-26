@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto'
 import { v7 as uuidv7 } from 'uuid'
 import { withActor, withoutActor } from '../db.js'
 import { allowIn, feedbackContext, type AuthContext } from '../auth/context.js'
-import { brandOf } from '../brand.js'
+import { brandOfPage } from '../brand.js'
 import { feedbackHeld } from '../ceilings.js'
 import { edition } from '../edition.js'
 import { hashToken } from '../auth/crypto.js'
@@ -312,9 +312,10 @@ feedbackPublic.get('/:slug', async (c) => {
   const page = await pageBySlug(c.req.param('slug'))
   if (!page) return c.json(ERR.missing, 404)
   /* The workspace's own name and mark at the foot, where its plan wears
-     them; null, and the page says nothing
-     of the workspace, anywhere else. */
-  const brand = edition.brands ? await withoutActor((tx) => brandOf(tx, page.workspace_id)) : null
+     them and the page is open; null, and
+     the page says nothing of the workspace, anywhere else. Found through
+     the page's own address (`feedback_page_brand`). */
+  const brand = edition.brands && page.available ? await withoutActor((tx) => brandOfPage(tx, page.slug)) : null
   return c.json({
     slug: page.slug,
     name: page.name,

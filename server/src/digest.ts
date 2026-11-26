@@ -192,10 +192,12 @@ export async function sendDigests(): Promise<number> {
       const off = digestOffLink(person.actor_id)
       const brand = await brandOfDigest(notes.map((n) => n.workspace_id))
       const mail = digestLetter(person.name, items, more, off, language, brand?.name ?? null)
+      /* From "Acme" alone, where branded: a digest goes only to the
+         workspace's own members, who chose to be mailed it. */
       /* The mail client's own "Unsubscribe" beside the sender, which it
          presses with a POST — RFC 8058 — rather than opening the link. */
       const headers = { 'List-Unsubscribe': `<${off}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }
-      if (await send({ to: person.email, ...mail, headers, ...(brand ? { via: brand.name } : {}) })) sent += 1
+      if (await send({ to: person.email, ...mail, headers, ...(brand ? { via: brand.name, bare: true } : {}) })) sent += 1
     } catch (e) {
       console.error('worker: a digest failed', e)
     }
