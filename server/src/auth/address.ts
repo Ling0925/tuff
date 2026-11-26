@@ -112,34 +112,43 @@ export async function mailCode(
   const language = await languageFor(actorId, screen)
   const w = say(
     {
-      subject: [`${code} is your Tuff code`, `${code} est votre code Tuff`],
-      code: [`Your code is ${code}. It works for ten minutes.`, `Votre code est ${code}. Il est valable dix minutes.`],
+      subject: [`${code} is your Tuff code`, `${code} est votre code Tuff`, `${code} 是你的 Tuff 验证码`],
+      code: [
+        `Your code is ${code}. It works for ten minutes.`,
+        `Votre code est ${code}. Il est valable dix minutes.`,
+        `你的验证码是 ${code}，10 分钟内有效。`,
+      ],
       who:
         purpose === 'twofa-off'
           ? [
               'Someone signed in to your Tuff account asked to turn off two-factor authentication. If this wasn’t you, don’t share the code, and sign out your other devices from your account.',
               'Une personne connectée à votre compte Tuff a demandé à désactiver l’authentification à deux facteurs. Si ce n’était pas vous, ne communiquez pas ce code et déconnectez vos autres appareils depuis votre compte.',
+              '一名已登录你 Tuff 账户的人请求关闭双重验证。如果这不是你本人操作，不要分享此验证码，并在账户中退出其他设备。',
             ]
           : purpose === 'twofa'
             ? [
                 'Someone signed in to your Tuff account asked to turn on two-factor authentication. If this wasn’t you, don’t share the code, and sign out your other devices from your account.',
                 'Une personne connectée à votre compte Tuff a demandé à activer l’authentification à deux facteurs. Si ce n’était pas vous, ne communiquez pas ce code et déconnectez vos autres appareils depuis votre compte.',
+                '一名已登录你 Tuff 账户的人请求开启双重验证。如果这不是你本人操作，不要分享此验证码，并在账户中退出其他设备。',
               ]
             : purpose === 'ways'
               ? [
                   'Someone signed in to your Tuff account asked to add or remove a way to sign in. If this wasn’t you, don’t share the code, and sign out your other devices from your account.',
                   'Une personne connectée à votre compte Tuff a demandé à ajouter ou à retirer un moyen de connexion. Si ce n’était pas vous, ne communiquez pas ce code et déconnectez vos autres appareils depuis votre compte.',
+                  '一名已登录你 Tuff 账户的人请求添加或移除登录方式。如果这不是你本人操作，不要分享此验证码，并在账户中退出其他设备。',
                 ]
               : purpose === 'mail'
                 ? [
                     'Someone signed in to your Tuff account asked to change how this server sends email. If this wasn’t you, don’t share the code, and sign out your other devices from your account.',
                     'Une personne connectée à votre compte Tuff a demandé à modifier la façon dont ce serveur envoie les e-mails. Si ce n’était pas vous, ne communiquez pas ce code et déconnectez vos autres appareils depuis votre compte.',
+                    '一名已登录你 Tuff 账户的人请求更改此服务器发送邮件的方式。如果这不是你本人操作，不要分享此验证码，并在账户中退出其他设备。',
                   ]
                 : [
                     'Someone signed in to your Tuff account asked to delete it or to hand a workspace over. If this wasn’t you, don’t share the code, and sign out your other devices from your account.',
                     'Une personne connectée à votre compte Tuff a demandé à le supprimer ou à transférer un espace de travail. Si ce n’était pas vous, ne communiquez pas ce code et déconnectez vos autres appareils depuis votre compte.',
+                    '一名已登录你 Tuff 账户的人请求删除账户或转让工作区。如果这不是你本人操作，不要分享此验证码，并在账户中退出其他设备。',
                   ],
-      open: ['Open Tuff', 'Ouvrir Tuff'],
+      open: ['Open Tuff', 'Ouvrir Tuff', '打开 Tuff'],
     },
     language,
   )
@@ -165,16 +174,19 @@ export async function tellFactorOn(base: string, actorId: string, screen: Langua
       subject: [
         'Two-factor authentication is on for your Tuff account',
         'L’authentification à deux facteurs est activée sur votre compte Tuff',
+        '你的 Tuff 账户已开启双重验证',
       ],
       what: [
         'Signing in to your Tuff account now asks for a code from an authenticator app.',
         'La connexion à votre compte Tuff demande maintenant un code d’une application d’authentification.',
+        '现在登录你的 Tuff 账户时，需要输入身份验证器应用中的验证码。',
       ],
       then: [
         'If this wasn’t you, reset your password from the sign-in page within seven days. That turns two-factor authentication off and signs everyone out.',
         'Si ce n’était pas vous, réinitialisez votre mot de passe depuis la page de connexion dans les sept jours. Cela désactive l’authentification à deux facteurs et déconnecte tout le monde.',
+        '如果这不是你本人操作，请在七天内从登录页重置密码。这会关闭双重验证并退出所有设备。',
       ],
-      open: ['Open Tuff', 'Ouvrir Tuff'],
+      open: ['Open Tuff', 'Ouvrir Tuff', '打开 Tuff'],
     },
     language,
   )
@@ -205,20 +217,30 @@ export async function tellWayIn(
     {
       subject:
         what === 'added'
-          ? [`${name} can now sign in to your Tuff account`, `${name} peut maintenant vous connecter à votre compte Tuff`]
-          : [`${name} was removed from your Tuff account`, `${name} a été retiré de votre compte Tuff`],
+          ? [
+              `${name} can now sign in to your Tuff account`,
+              `${name} peut maintenant vous connecter à votre compte Tuff`,
+              `${name} 现在可以登录你的 Tuff 账户`,
+            ]
+          : [`${name} was removed from your Tuff account`, `${name} a été retiré de votre compte Tuff`, `${name} 已从你的 Tuff 账户中移除`],
       what:
         what === 'added'
           ? [
               `${name}${as} was added as a way to sign in to your Tuff account.`,
               `${name}${as} a été ajouté comme moyen de connexion à votre compte Tuff.`,
+              `${name}${as} 已添加为你的 Tuff 账户登录方式。`,
             ]
-          : [`${name}${as} can no longer sign in to your Tuff account.`, `${name}${as} ne peut plus vous connecter à votre compte Tuff.`],
+          : [
+              `${name}${as} can no longer sign in to your Tuff account.`,
+              `${name}${as} ne peut plus vous connecter à votre compte Tuff.`,
+              `${name}${as} 不能再用于登录你的 Tuff 账户。`,
+            ],
       then: [
         'If this wasn’t you, change your password and sign out your other devices from your account settings.',
         'Si ce n’était pas vous, changez votre mot de passe et déconnectez vos autres appareils depuis les paramètres de votre compte.',
+        '如果这不是你本人操作，请修改密码，并在账户设置中退出其他设备。',
       ],
-      open: ['Open Tuff', 'Ouvrir Tuff'],
+      open: ['Open Tuff', 'Ouvrir Tuff', '打开 Tuff'],
     },
     language,
   )
@@ -269,16 +291,19 @@ export async function sendToNew(base: string, actorId: string, to: string, scree
         subject: [
           'Someone tried to use this email for another Tuff account',
           'Quelqu’un a essayé d’utiliser cette adresse pour un autre compte Tuff',
+          '有人尝试将此邮箱用于另一个 Tuff 账户',
         ],
         what: [
           'Someone asked to change the email of a Tuff account to this address. This address already has an account, so nothing changed.',
           'Quelqu’un a demandé à remplacer l’adresse e-mail d’un compte Tuff par celle-ci. Un compte existe déjà avec cette adresse, donc rien n’a changé.',
+          '有人请求将一个 Tuff 账户的邮箱更改为此地址。由于此地址已有账户，因此没有发生任何变化。',
         ],
         then: [
           'If you meant to use this address, sign in with it instead. If this wasn’t you, you don’t need to do anything.',
           'Si vous vouliez utiliser cette adresse, connectez-vous plutôt avec elle. Si ce n’était pas vous, vous n’avez rien à faire.',
+          '如果你确实想使用此地址，请改用它登录。如果这不是你本人操作，则无需处理。',
         ],
-        signIn: ['Sign in', 'Se connecter'],
+        signIn: ['Sign in', 'Se connecter', '登录'],
       },
       language,
     )
@@ -292,19 +317,21 @@ export async function sendToNew(base: string, actorId: string, to: string, scree
   const language = await languageFor(actorId, screen)
   const w = say(
     {
-      subject: ['Confirm your new email for Tuff', 'Confirmez votre nouvelle adresse e-mail pour Tuff'],
+      subject: ['Confirm your new email for Tuff', 'Confirmez votre nouvelle adresse e-mail pour Tuff', '确认你的 Tuff 新邮箱'],
       what: [
         'Someone asked to change the email of a Tuff account to this address.',
         'Quelqu’un a demandé à remplacer l’adresse e-mail d’un compte Tuff par celle-ci.',
+        '有人请求将一个 Tuff 账户的邮箱更改为此地址。',
       ],
       then: [
         'Confirm the change to sign in with this address from now on. The link expires in 24 hours. If this wasn’t you, ignore this email and nothing will change.',
         'Confirmez le changement pour vous connecter désormais avec cette adresse. Le lien expire dans 24 heures. Si ce n’était pas vous, ignorez cet e-mail et rien ne changera.',
+        '确认更改后，你将使用此地址登录。链接 24 小时内有效。如果这不是你本人操作，请忽略此邮件，不会有任何变化。',
       ],
       /* A review: the account that asked can confirm it, so a
          forwarded letter hands the address over. */
-      forward: ['Don’t forward this email to anyone.', 'Ne transférez cet e-mail à personne.'],
-      confirm: ['Confirm the new email', 'Confirmer la nouvelle adresse'],
+      forward: ['Don’t forward this email to anyone.', 'Ne transférez cet e-mail à personne.', '不要将这封邮件转发给任何人。'],
+      confirm: ['Confirm the new email', 'Confirmer la nouvelle adresse', '确认新邮箱'],
     },
     language,
   )
@@ -322,16 +349,22 @@ export async function sendForApproval(base: string, actorId: string, current: st
   const language = await languageFor(actorId, screen)
   const w = say(
     {
-      subject: ['Approve a new email for your Tuff account', 'Approuvez une nouvelle adresse e-mail pour votre compte Tuff'],
+      subject: [
+        'Approve a new email for your Tuff account',
+        'Approuvez une nouvelle adresse e-mail pour votre compte Tuff',
+        '批准你的 Tuff 账户使用新邮箱',
+      ],
       what: [
         `Someone signed in to your Tuff account asked to change its email to ${to}.`,
         `Une personne connectée à votre compte Tuff a demandé à remplacer son adresse e-mail par ${to}.`,
+        `一名已登录你 Tuff 账户的人请求将邮箱更改为 ${to}。`,
       ],
       then: [
         'If this was you, approve the change and we’ll send a link to the new address to finish. If it wasn’t you, ignore this email and nothing will change. Then go to Account and sign out any devices that aren’t yours.',
         'Si c’était vous, approuvez le changement et nous enverrons un lien à la nouvelle adresse pour terminer. Si ce n’était pas vous, ignorez cet e-mail et rien ne changera. Allez ensuite dans Compte et déconnectez les appareils qui ne sont pas les vôtres.',
+        '如果这是你本人操作，请批准更改，我们会向新地址发送完成更改所需的链接。如果不是，请忽略此邮件，不会有任何变化。随后请前往「账户」，退出所有不属于你的设备。',
       ],
-      approve: ['Approve the change', 'Approuver le changement'],
+      approve: ['Approve the change', 'Approuver le changement', '批准更改'],
     },
     language,
   )
@@ -456,22 +489,25 @@ export async function confirmLink(
     const support = edition.vendor?.support ?? null
     const w = say(
       {
-        subject: ['Your Tuff email was changed', 'L’adresse e-mail de votre compte Tuff a été modifiée'],
+        subject: ['Your Tuff email was changed', 'L’adresse e-mail de votre compte Tuff a été modifiée', '你的 Tuff 邮箱已更改'],
         what: [
           `The email for your Tuff account was changed to ${masked(t.email)}.`,
           `L’adresse e-mail de votre compte Tuff a été remplacée par ${masked(t.email)}.`,
+          `你的 Tuff 账户邮箱已更改为 ${masked(t.email)}。`,
         ],
         /* The service's own address, or on your own server its owner — `edition.vendor`. */
         then: support
           ? [
               `If this was you, you don’t need to do anything. If it wasn’t, email ${support} from this address and we’ll change it back.`,
               `Si c’était vous, vous n’avez rien à faire. Sinon, écrivez à ${support} depuis cette adresse et nous rétablirons l’ancienne.`,
+              `如果这是你本人操作，则无需处理。如果不是，请使用此地址写信至 ${support}，我们会帮你改回。`,
             ]
           : [
               'If this was you, you don’t need to do anything. If it wasn’t, tell the owner of this server.',
               'Si c’était vous, vous n’avez rien à faire. Sinon, prévenez le propriétaire de ce serveur.',
+              '如果这是你本人操作，则无需处理。如果不是，请告知此服务器的所有者。',
             ],
-        signIn: ['Sign in', 'Se connecter'],
+        signIn: ['Sign in', 'Se connecter', '登录'],
       },
       language,
     )

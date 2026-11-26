@@ -54,7 +54,12 @@ const same = (a: number[], b: number[]) => a.length === b.length && a.every((x, 
 export function repeatSaid(rule: Repeat): string {
   const n = rule.interval ?? 1
   const fr = now === 'fr'
+  const zh = now === 'zh'
   if (rule.from === 'done') {
+    if (zh) {
+      const unit = { day: '天', week: '周', month: '个月', year: '年' }[rule.every]
+      return `完成后 ${n} ${unit}`
+    }
     const unit = fr
       ? { day: ['Un jour', 'jours'], week: ['Une semaine', 'semaines'], month: ['Un mois', 'mois'], year: ['Un an', 'ans'] }[rule.every]
       : { day: ['A day', 'days'], week: ['A week', 'weeks'], month: ['A month', 'months'], year: ['A year', 'years'] }[rule.every]
@@ -62,13 +67,21 @@ export function repeatSaid(rule: Repeat): string {
     return fr ? `${span} après la fin` : `${span} after it’s done`
   }
   if (rule.every === 'day') {
+    if (zh) return n === 1 ? '每天' : `每 ${n} 天`
     if (fr) return n === 1 ? 'Tous les jours' : `Tous les ${n} jours`
     return n === 1 ? 'Every day' : `Every ${n} days`
   }
   if (rule.every === 'week') {
     const days = [...(rule.weekdays ?? [])].sort((a, b) => a - b)
-    if (n === 1 && same(days, WEEKDAYS)) return fr ? 'Tous les jours ouvrés' : 'Every weekday'
-    if (n === 1 && days.length === 7) return fr ? 'Tous les jours' : 'Every day'
+    if (n === 1 && same(days, WEEKDAYS)) return zh ? '每个工作日' : fr ? 'Tous les jours ouvrés' : 'Every weekday'
+    if (n === 1 && days.length === 7) return zh ? '每天' : fr ? 'Tous les jours' : 'Every day'
+    if (zh) {
+      const lead = n === 1 ? '每周' : `每 ${n} 周`
+      if (!days.length) return lead
+      const weekday = (w: number) => weekdayLong(w).replace(/^星期/, '')
+      if (days.length === 1) return `${lead}${weekday(days[0]!)}`
+      return n === 1 ? `${lead}${days.map(weekday).join('、')}` : `${lead}的${days.map(weekday).join('、')}`
+    }
     if (fr) {
       if (n === 1 && days.length === 1) return `Tous les ${weekdayLong(days[0]!)}s`
       const lead = n === 1 ? 'Toutes les semaines' : `Toutes les ${n} semaines`
@@ -82,6 +95,10 @@ export function repeatSaid(rule: Repeat): string {
   }
   if (rule.every === 'month') {
     const day = rule.day ?? 1
+    if (zh) {
+      const lead = n === 1 ? '每月' : `每 ${n} 个月`
+      return day === -1 ? `${lead}最后一天` : `${lead}${day}日`
+    }
     if (fr) {
       const lead = n === 1 ? 'Tous les mois' : `Tous les ${n} mois`
       return day === -1 ? `${lead} le dernier jour` : `${lead} le ${day === 1 ? '1er' : day}`
@@ -90,6 +107,7 @@ export function repeatSaid(rule: Repeat): string {
     return day === -1 ? `${lead} on the last day` : `${lead} on the ${ordinal(day)}`
   }
   const on = monthDay(rule.month ?? 1, rule.day ?? 1)
+  if (zh) return `${n === 1 ? '每年' : `每 ${n} 年`}${on}`
   if (fr) return `${n === 1 ? 'Tous les ans' : `Tous les ${n} ans`} le ${on}`
   return `${n === 1 ? 'Every year' : `Every ${n} years`} on ${on}`
 }

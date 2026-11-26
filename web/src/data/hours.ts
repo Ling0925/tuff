@@ -24,6 +24,10 @@ export function asHours(minutes: number): string {
     if (!h) return `${m}\u00a0min`
     return m ? `${h}\u00a0h\u00a0${String(m).padStart(2, '0')}` : `${h}\u00a0h`
   }
+  if (now === 'zh') {
+    if (!h) return `${m} 分钟`
+    return m ? `${h} 小时 ${m} 分钟` : `${h} 小时`
+  }
   if (!h) return `${m}m`
   return m ? `${h}h ${m}m` : `${h}h`
 }

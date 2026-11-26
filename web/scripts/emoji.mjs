@@ -10,8 +10,10 @@
  *   annotations_fr.xml          …/common/annotations/fr.xml
  *   annotationsDerived_en.xml   …/common/annotationsDerived/en.xml
  *   annotationsDerived_fr.xml   …/common/annotationsDerived/fr.xml
+ *   annotations_zh.xml          …/common/annotations/zh.xml
+ *   annotationsDerived_zh.xml   …/common/annotationsDerived/zh.xml
  *
- * and writes `web/src/data/emoji/en.json` and `fr.json`. Run again when
+ * and writes `web/src/data/emoji/en.json`, `fr.json` and `zh.json`. Run again when
  * Unicode adds emoji; nothing else needs to change.
  *
  * Data, not a dependency: the files are Unicode's (Unicode-3.0 licence,
@@ -133,3 +135,4 @@ function build(lang) {
 
 build('en')
 build('fr')
+build('zh')

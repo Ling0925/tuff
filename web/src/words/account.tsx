@@ -380,6 +380,7 @@ export const ACCOUNT = say({
   deletedAlone: [
     (names: ReactNode) => <>Deleted with everything in them, since you’re the only one there: {names}.</>,
     (names: ReactNode) => <>Supprimés avec tout leur contenu, car personne d’autre n’en fait partie : {names}.</>,
+    (names: ReactNode) => <>由于你是其中唯一的成员，以下内容及其全部数据都会被删除：{names}。</>,
   ],
   youLeave: [
     (names: string) => `You’ll leave ${names}. What you wrote there stays, under “Deleted account”.`,

@@ -9,7 +9,7 @@ import { outbox } from '../src/mail.js'
 import { issueApiToken, registerUser } from '../src/auth/flows.js'
 import { ERRORS_FR, ERRORS_FR_LIKE, frenchError, ERRORS_ZH, zhError } from '../src/words.js'
 import { edition } from '../src/edition.js'
-import { LABELS_FR, LISTS_FR, SAMPLE, SAMPLE_FR, TEMPLATES_FR } from '../src/templates.js'
+import { LABELS_FR, LABELS_ZH, LISTS_FR, LISTS_ZH, SAMPLE, SAMPLE_FR, SAMPLE_ZH, TEMPLATES_FR, TEMPLATES_ZH } from '../src/templates.js'
 import { addPerson, bearerFor, closeDb, makeOwner, makeProject, stamp, uuidv7, withActor } from './helpers.js'
 
 after(async () => {
@@ -329,47 +329,50 @@ test('a note is written in the language of whoever it reaches', async () => {
 
 /* --------------------------------------------------- what a project holds */
 
-test('a project made by somebody who reads French starts in French', async () => {
-  const { token } = await makeOwner()
-  await request('/api/me', { method: 'PATCH', token, body: { language: 'fr' } })
+test('a project starts in the language of whoever makes it', async () => {
+  for (const language of ['fr', 'zh'] as const) {
+    const { token } = await makeOwner()
+    await request('/api/me', { method: 'PATCH', token, body: { language } })
 
-  const made = await request('/api/projects', { method: 'POST', token, body: { name: 'Lancement', template: 'launch' } })
-  assert.equal(made.status, 201)
-  const { id } = (await made.json()) as { id: string }
-  const lists = (await (await request(`/api/projects/${id}/lists`, { token })).json()) as { lists: { name: string }[] }
-  assert.deepEqual(
-    lists.lists.map((l) => l.name),
-    ['Backlog', 'À faire', 'En cours', 'En revue', 'Terminé', 'Annulé'],
-  )
+    const made = await request('/api/projects', { method: 'POST', token, body: { name: 'Lancement', template: 'launch' } })
+    assert.equal(made.status, 201)
+    const { id } = (await made.json()) as { id: string }
+    const lists = (await (await request(`/api/projects/${id}/lists`, { token })).json()) as { lists: { name: string }[] }
+    assert.deepEqual(
+      lists.lists.map((l) => l.name),
+      language === 'fr'
+        ? ['Backlog', 'À faire', 'En cours', 'En revue', 'Terminé', 'Annulé']
+        : ['待办池', '待办', '进行中', '评审中', '已完成', '已取消'],
+    )
 
-  const owner = (await (await request('/api/me', { token })).json()) as { actor: { id: string } }
-  const [held] = await withActor(
-    owner.actor.id,
-    (tx) =>
-      tx<{ labels: string[]; tasks: string[]; docs: string[] }[]>`
-      select array(select name::text from label where project_id = ${id} and deleted_at is null order by name) as labels,
-             array(select title from task where project_id = ${id} order by title) as tasks,
-             array(select name from file where project_id = ${id}) as docs`,
-  )
-  assert.deepEqual(held!.labels, ['Amélioration', 'Bug', 'Fonctionnalité'])
-  assert.deepEqual(
-    held!.tasks,
-    Object.values(TEMPLATES_FR.launch.tasks).sort((a, b) => a.localeCompare(b, 'fr')),
-  )
-  assert.deepEqual(held!.docs, [TEMPLATES_FR.launch.doc.name])
+    const owner = (await (await request('/api/me', { token })).json()) as { actor: { id: string } }
+    const [held] = await withActor(
+      owner.actor.id,
+      (tx) =>
+        tx<{ labels: string[]; tasks: string[]; docs: string[] }[]>`
+        select array(select name::text from label where project_id = ${id} and deleted_at is null order by name) as labels,
+               array(select title from task where project_id = ${id} order by title) as tasks,
+               array(select name from file where project_id = ${id}) as docs`,
+    )
+    const template = language === 'fr' ? TEMPLATES_FR.launch : TEMPLATES_ZH.launch
+    assert.deepEqual(held!.labels, language === 'fr' ? ['Amélioration', 'Bug', 'Fonctionnalité'] : ['功能', '改进', '缺陷'].sort())
+    assert.deepEqual(new Set(held!.tasks), new Set(Object.values(template.tasks)))
+    assert.deepEqual(held!.docs, [template.doc.name])
 
-  // The sample too, its tasks carrying the labels they were given.
-  const sample = await request('/api/projects/sample', { method: 'POST', token })
-  assert.equal(sample.status, 201)
-  const s = (await sample.json()) as { id: string; name: string }
-  assert.equal(s.name, SAMPLE_FR.name)
-  const [labelled] = await withActor(
-    owner.actor.id,
-    (tx) =>
-      tx<{ n: number }[]>`
-      select count(*)::int as n from task_label tl join task t on t.id = tl.task_id where t.project_id = ${s.id}`,
-  )
-  assert.equal(labelled!.n, SAMPLE_FR.tasks.filter((t) => t.label).length)
+    // The sample too, its tasks carrying the labels they were given.
+    const expected = language === 'fr' ? SAMPLE_FR : SAMPLE_ZH
+    const sample = await request('/api/projects/sample', { method: 'POST', token })
+    assert.equal(sample.status, 201)
+    const s = (await sample.json()) as { id: string; name: string }
+    assert.equal(s.name, expected.name)
+    const [labelled] = await withActor(
+      owner.actor.id,
+      (tx) =>
+        tx<{ n: number }[]>`
+        select count(*)::int as n from task_label tl join task t on t.id = tl.task_id where t.project_id = ${s.id}`,
+    )
+    assert.equal(labelled!.n, expected.tasks.filter((t) => t.label).length)
+  }
 
   // And somebody who never said starts in English, as before.
   const en = await makeOwner()
@@ -385,22 +388,30 @@ test('a project made by somebody who reads French starts in French', async () =>
   )
 })
 
-test('the French for what a project starts with is all there', () => {
-  assert.deepEqual(Object.keys(LISTS_FR).sort(), ['Backlog', 'Canceled', 'Done', 'In Progress', 'In Review', 'Todo'])
-  assert.deepEqual(Object.keys(LABELS_FR).sort(), ['Bug', 'Feature', 'Improvement'])
+test('what a project starts with is all there in French and Chinese', () => {
+  const lists = ['Backlog', 'Canceled', 'Done', 'In Progress', 'In Review', 'Todo']
+  const labels = ['Bug', 'Feature', 'Improvement']
+  assert.deepEqual(Object.keys(LISTS_FR).sort(), lists)
+  assert.deepEqual(Object.keys(LISTS_ZH).sort(), lists)
+  assert.deepEqual(Object.keys(LABELS_FR).sort(), labels)
+  assert.deepEqual(Object.keys(LABELS_ZH).sort(), labels)
   for (const [key, plan] of Object.entries(PROJECT_TEMPLATES)) {
-    const fr = TEMPLATES_FR[key as keyof typeof TEMPLATES_FR]
-    assert.deepEqual(Object.keys(fr.tasks).sort(), plan.tasks.map((t) => t.title).sort(), key)
-    assert.equal(fr.doc.body.length, plan.doc.body.length, key)
+    for (const written of [TEMPLATES_FR[key as keyof typeof TEMPLATES_FR], TEMPLATES_ZH[key as keyof typeof TEMPLATES_ZH]]) {
+      assert.deepEqual(Object.keys(written.tasks).sort(), plan.tasks.map((t) => t.title).sort(), key)
+      assert.equal(written.doc.body.length, plan.doc.body.length, key)
+    }
   }
-  // The sample in the same states: the same lists, labels, dates and parts.
+  // The samples in the same states: the same lists, labels, dates and parts.
   const shape = (s: typeof SAMPLE) =>
     s.tasks.map((t) => [t.list, t.label, t.priority, t.dueIn, t.doneDaysAgo, t.parts?.map((x) => Boolean(x.done))])
   assert.deepEqual(shape(SAMPLE_FR), shape(SAMPLE))
+  assert.deepEqual(shape(SAMPLE_ZH), shape(SAMPLE))
   // And every task the chat and the comments name is one it has.
-  const titles = new Set(SAMPLE_FR.tasks.map((t) => t.title))
-  for (const named of [...SAMPLE_FR.chat.map((m) => m.task), ...SAMPLE_FR.comments.map((c) => c.task)]) {
-    if (named) assert.ok(titles.has(named), named)
+  for (const sample of [SAMPLE_FR, SAMPLE_ZH]) {
+    const titles = new Set(sample.tasks.map((t) => t.title))
+    for (const named of [...sample.chat.map((m) => m.task), ...sample.comments.map((c) => c.task)]) {
+      if (named) assert.ok(titles.has(named), named)
+    }
   }
 })
 

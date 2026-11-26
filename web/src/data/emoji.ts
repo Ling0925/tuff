@@ -9,6 +9,7 @@
  */
 import enUrl from './emoji/en.json?url'
 import frUrl from './emoji/fr.json?url'
+import zhUrl from './emoji/zh.json?url'
 import { tongue } from './words.js'
 import { find, type Emoji, type EmojiGroup } from './emojiFind.js'
 
@@ -29,7 +30,7 @@ export function emojiNow(): EmojiGroup[] | null {
 export function loadEmoji(): Promise<EmojiGroup[]> {
   if (ready) return Promise.resolve(ready)
   if (!coming) {
-    coming = fetch(tongue() === 'fr' ? frUrl : enUrl)
+    coming = fetch(tongue() === 'fr' ? frUrl : tongue() === 'zh' ? zhUrl : enUrl)
       .then((r) => {
         if (!r.ok) throw new Error(String(r.status))
         return r.json() as Promise<File>

@@ -99,19 +99,25 @@ const MAIL = (language: Language) =>
       /* Neutral, and from Tuff: a page's name in the From or the subject
          would let anybody with a page write "PayPal" where an inbox
          puts its trust. The name is in the body only. */
-      subject: ['Confirm your request', 'Confirmez votre demande'],
+      subject: ['Confirm your request', 'Confirmez votre demande', '确认你的请求'],
       /* Never what they wrote: a mail from our address carries no text a
          stranger chose. The confirm page shows it, to whoever opens the link. */
       asked: [
         (page: string) => `Someone using this address sent a request on the ${page} feedback page.`,
         (page: string) => `Quelqu’un a envoyé une demande depuis cette adresse sur la page de retours de ${page}.`,
+        (page: string) => `有人使用此邮箱在 ${page} 反馈页面上提交了请求。`,
       ],
       why: [
         'Open the link to see it and confirm it, so the team gets it. The link works for two days.',
         'Ouvrez le lien pour la voir et la confirmer, afin que l’équipe la reçoive. Le lien est valable deux jours.',
+        '打开链接即可查看并确认请求，团队随后会收到它。链接两天内有效。',
       ],
-      button: ['Confirm request', 'Confirmer la demande'],
-      notYou: ['If you didn’t ask for this, ignore this email.', 'Si vous n’avez rien demandé, ignorez cet e-mail.'],
+      button: ['Confirm request', 'Confirmer la demande', '确认请求'],
+      notYou: [
+        'If you didn’t ask for this, ignore this email.',
+        'Si vous n’avez rien demandé, ignorez cet e-mail.',
+        '如果这不是你提交的，请忽略此邮件。',
+      ],
     },
     language,
   )
@@ -119,7 +125,7 @@ const MAIL = (language: Language) =>
 /** The note a follower gets — never what the stranger wrote, which a push
     would put on a lock screen. */
 const ARRIVED = (language: Language) =>
-  say({ line: ['New request from the feedback page', 'Nouvelle demande depuis la page de retours'] }, language).line
+  say({ line: ['New request from the feedback page', 'Nouvelle demande depuis la page de retours', '来自反馈页面的新请求'] }, language).line
 
 /* --------------------------------------------------------- the page row */
 

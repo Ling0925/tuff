@@ -122,9 +122,9 @@ export function useAppLoad({
      */
     const said = readTongue()
     const kept = m.actor.language ?? null
-    if (said === 'en' || said === 'fr') {
+    if (said === 'en' || said === 'fr' || said === 'zh') {
       if (kept !== said) void api('/me', { method: 'PATCH', body: JSON.stringify({ language: said }) }).catch(() => {})
-    } else if (said === 'system' && (kept === 'en' || kept === 'fr') && kept !== now) {
+    } else if (said === 'system' && (kept === 'en' || kept === 'fr' || kept === 'zh') && kept !== now) {
       chooseTongue(kept)
       return
     }

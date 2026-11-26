@@ -1184,20 +1184,23 @@ export async function sendAlreadyHere(c: Context, actorId: string, email: string
   if (await confirmed(actorId)) {
     const w = say(
       {
-        subject: ['You already have a Tuff account', 'Vous avez déjà un compte Tuff'],
+        subject: ['You already have a Tuff account', 'Vous avez déjà un compte Tuff', '你已经有 Tuff 账户'],
         what: [
           'Someone tried to sign up for Tuff with this email address, but it already has an account.',
           'Quelqu’un a essayé de s’inscrire à Tuff avec cette adresse e-mail, mais un compte existe déjà.',
+          '有人尝试使用此邮箱注册 Tuff，但该邮箱已有账户。',
         ],
         how: [
           `Sign in with this address. If you’ve forgotten your password, set a new one at ${origin(c)}/forgot.`,
           `Connectez-vous avec cette adresse. Si vous avez oublié votre mot de passe, choisissez-en un nouveau sur ${origin(c)}/forgot.`,
+          `请使用此邮箱登录。如果忘记了密码，可在 ${origin(c)}/forgot 设置新密码。`,
         ],
         then: [
           'If this wasn’t you, nothing has changed and you don’t need to do anything.',
           'Si ce n’était pas vous, rien n’a changé et vous n’avez rien à faire.',
+          '如果这不是你本人操作，没有任何变化，你也无需处理。',
         ],
-        signIn: ['Sign in', 'Se connecter'],
+        signIn: ['Sign in', 'Se connecter', '登录'],
       },
       language,
     )
@@ -1235,16 +1238,18 @@ export async function sendChoosePassword(
   const token = await chooseTicket(actorId)
   const w = say(
     {
-      subject: ['Confirm your email for Tuff', 'Confirmez votre adresse e-mail pour Tuff'],
+      subject: ['Confirm your email for Tuff', 'Confirmez votre adresse e-mail pour Tuff', '确认你的 Tuff 邮箱'],
       what: [
         'Welcome to Tuff. Confirm your email and choose a password to finish signing up.',
         'Bienvenue sur Tuff. Confirmez votre adresse e-mail et choisissez un mot de passe pour terminer votre inscription.',
+        '欢迎使用 Tuff。请确认邮箱并设置密码，以完成注册。',
       ],
       then: [
         'The link expires in 24 hours. If you didn’t sign up for Tuff, ignore this email. Nothing happens until the link is used.',
         'Le lien expire dans 24 heures. Si vous ne vous êtes pas inscrit à Tuff, ignorez cet e-mail. Rien ne se passe tant que le lien n’est pas utilisé.',
+        '链接 24 小时内有效。如果你没有注册 Tuff，请忽略此邮件；在链接被使用前不会发生任何变化。',
       ],
-      confirm: ['Choose a password', 'Choisir un mot de passe'],
+      confirm: ['Choose a password', 'Choisir un mot de passe', '设置密码'],
     },
     language,
   )
@@ -1407,16 +1412,18 @@ access.post('/password/forgot', async (c) => {
       const language = await languageFor(u.actor_id, heard(c))
       const w = say(
         {
-          subject: ['Set a new password for Tuff', 'Choisissez un nouveau mot de passe pour Tuff'],
+          subject: ['Set a new password for Tuff', 'Choisissez un nouveau mot de passe pour Tuff', '为 Tuff 设置新密码'],
           what: [
             'Someone asked to set a new password for your Tuff account.',
             'Quelqu’un a demandé à changer le mot de passe de votre compte Tuff.',
+            '有人请求为你的 Tuff 账户设置新密码。',
           ],
           then: [
             'The link expires in 1 hour and can only be used once. If this wasn’t you, ignore this email and nothing will change.',
             'Le lien expire dans 1 heure et ne peut servir qu’une fois. Si ce n’était pas vous, ignorez cet e-mail et rien ne changera.',
+            '链接 1 小时内有效，且只能使用一次。如果这不是你本人操作，请忽略此邮件，不会有任何变化。',
           ],
-          set: ['Set a new password', 'Choisir un nouveau mot de passe'],
+          set: ['Set a new password', 'Choisir un nouveau mot de passe', '设置新密码'],
         },
         language,
       )
@@ -1495,26 +1502,30 @@ access.post('/password/reset', async (c) => {
     const support = edition.vendor?.support ?? null
     const w = say(
       {
-        subject: ['Your Tuff password was reset', 'Le mot de passe de votre compte Tuff a été réinitialisé'],
+        subject: ['Your Tuff password was reset', 'Le mot de passe de votre compte Tuff a été réinitialisé', '你的 Tuff 密码已重置'],
         reset: [
           'The password for your Tuff account was just reset. Every device was signed out, and tokens for connected tools were revoked.',
           'Le mot de passe de votre compte Tuff vient d’être réinitialisé. Tous les appareils ont été déconnectés, et les jetons des outils connectés ont été révoqués.',
+          '你的 Tuff 账户密码刚刚被重置。所有设备均已退出登录，已连接工具的令牌也已撤销。',
         ],
         set: [
           'A password was just set for your Tuff account. Every device was signed out.',
           'Un mot de passe vient d’être défini pour votre compte Tuff. Tous les appareils ont été déconnectés.',
+          '你的 Tuff 账户刚刚设置了密码。所有设备均已退出登录。',
         ],
         /* The service's own address, or on your own server its owner — `edition.vendor`. */
         then: support
           ? [
               `If this wasn’t you, reset your password again and email ${support}.`,
               `Si ce n’était pas vous, réinitialisez de nouveau votre mot de passe et écrivez à ${support}.`,
+              `如果这不是你本人操作，请再次重置密码并写信至 ${support}。`,
             ]
           : [
               'If this wasn’t you, reset your password again and tell the owner of this server.',
               'Si ce n’était pas vous, réinitialisez de nouveau votre mot de passe et prévenez le propriétaire de ce serveur.',
+              '如果这不是你本人操作，请再次重置密码并告知此服务器的所有者。',
             ],
-        again: ['Reset password', 'Réinitialiser le mot de passe'],
+        again: ['Reset password', 'Réinitialiser le mot de passe', '重置密码'],
       },
       language,
     )

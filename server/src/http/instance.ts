@@ -157,12 +157,13 @@ instanceApi.post('/instance/test-letter', async (c) => {
   const language = await languageFor(ctx.actorId, heard(c))
   const w = say(
     {
-      subject: ['A test letter from Tuff', 'Un e-mail de test de Tuff'],
+      subject: ['A test letter from Tuff', 'Un e-mail de test de Tuff', '来自 Tuff 的测试邮件'],
       line: [
         'Mail from your Tuff server works. You asked for this letter in Server settings.',
         'L’envoi d’e-mails de votre serveur Tuff fonctionne. Vous avez demandé cet e-mail depuis les paramètres du serveur.',
+        '你的 Tuff 服务器可以正常发送邮件。你在服务器设置中请求了这封邮件。',
       ],
-      open: ['Open Tuff', 'Ouvrir Tuff'],
+      open: ['Open Tuff', 'Ouvrir Tuff', '打开 Tuff'],
     },
     language,
   )

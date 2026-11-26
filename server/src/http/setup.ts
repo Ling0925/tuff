@@ -117,12 +117,13 @@ setup.post('/setup/mail/test', async (c) => {
   if (!(await spendOn(`setup-letter:${clientOf(c)}`, 5, 900))) return c.json(tooMany, 429)
   const w = say(
     {
-      subject: ['A test email from Tuff', 'Un e-mail de test de Tuff'],
+      subject: ['A test email from Tuff', 'Un e-mail de test de Tuff', '来自 Tuff 的测试邮件'],
       line: [
         'Email from your Tuff server works. You sent this from the setup screen.',
         'L’envoi d’e-mails de votre serveur Tuff fonctionne. Vous l’avez envoyé depuis l’écran de configuration.',
+        '你的 Tuff 服务器可以正常发送邮件。这封邮件是从设置界面发送的。',
       ],
-      open: ['Open Tuff', 'Ouvrir Tuff'],
+      open: ['Open Tuff', 'Ouvrir Tuff', '打开 Tuff'],
     },
     heard(c),
   )

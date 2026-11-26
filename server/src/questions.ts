@@ -59,9 +59,10 @@ const CHAIN = (l: Language) =>
       said: [
         'Agents handed this task back and forth 3 times in a row, so I stopped here. Take a look.',
         'Des agents se sont passé cette tâche 3 fois de suite, je me suis donc arrêté ici. Jetez-y un œil.',
+        '代理已经连续 3 次来回移交此任务，所以我停在了这里。请查看。',
       ],
-      goOn: ['Let them go on', 'Les laisser continuer'],
-      mine: ['I’ll take it from here', 'Je m’en occupe'],
+      goOn: ['Let them go on', 'Les laisser continuer', '让它们继续'],
+      mine: ['I’ll take it from here', 'Je m’en occupe', '由我来处理'],
     },
     l,
   )

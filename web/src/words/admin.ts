@@ -193,6 +193,7 @@ export const ADMIN = say({
   logRole: [
     { owner: 'owner', admin: 'admin', member: 'member', guest: 'guest', client: 'client' } as Record<string, string>,
     { owner: 'propriétaire', admin: 'administrateur', member: 'membre', guest: 'invité', client: 'client' } as Record<string, string>,
+    { owner: '所有者', admin: '管理员', member: '成员', guest: '访客', client: '客户' } as Record<string, string>,
   ],
   logOn: [
     (browser: string, system: string) => `${browser} on ${system}`,
