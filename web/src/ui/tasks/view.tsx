@@ -5,6 +5,7 @@ import {
   type Label,
   type Placed,
   usePhone,
+  useWide,
   Choice,
   Toggle,
   Hairline,
@@ -278,6 +279,9 @@ function ViewAnswers({ on, group, sort, dir, who, labels, people, meId, allLabel
    * them all, because a card draws them at any width.
    */
   const phone = usePhone()
+  /* The board's columns can be its members on a desk only. */
+  const desk = useWide()
+  const byMembers = group === 'who'
   const bare = phone && arranging
   /*
    * Reset is only there when there is something to undo.
@@ -296,6 +300,7 @@ function ViewAnswers({ on, group, sort, dir, who, labels, people, meId, allLabel
   const untouched =
     who === 'all' &&
     !labels &&
+    (arranging || !byMembers) &&
     (Object.keys(base) as (keyof Shows)[]).every((k) => shows[k] === base[k]) &&
     (!arranging || (list === null && group === 'list' && sort === 'manual' && dir === 'asc'))
   return (
@@ -393,6 +398,25 @@ function ViewAnswers({ on, group, sort, dir, who, labels, people, meId, allLabel
       */}
       {!arranging && (
         <>
+          {/*
+            What the columns are, first, because it is the question the rest
+            of a board's answers sit inside: the lists, or the members. The
+            same answer as the list's grouping — `?group=who` is the list
+            grouped by assignee and the board with a column per member — so
+            going between them keeps it.
+          */}
+          {desk && (
+            <Choice
+              said={W.columns}
+              testId="view-columns"
+              value={byMembers ? 'who' : 'list'}
+              onPick={(v) => onPick({ group: v })}
+              options={[
+                { id: 'list', label: W.columnsLists, testId: 'view-columns-list' },
+                { id: 'who', label: W.columnsMembers, testId: 'view-columns-members' },
+              ]}
+            />
+          )}
           <Choice
             said={W.ordering}
             testId="view-sort"
@@ -528,7 +552,11 @@ function ViewAnswers({ on, group, sort, dir, who, labels, people, meId, allLabel
              the list's grouping back is a button undoing something the
              person cannot see. */
             onPick(
-              arranging ? { list: null, group: 'list', sort: 'manual', dir: 'asc', who: 'all', labels: '' } : { who: 'all', labels: '' },
+              arranging
+                ? { list: null, group: 'list', sort: 'manual', dir: 'asc', who: 'all', labels: '' }
+                : /* The members back to lists, and only that: a grouping the
+                     board does not draw belongs to the list and stays. */
+                  { who: 'all', labels: '', ...(byMembers ? { group: 'list' } : {}) },
             )
             /* The defaults of the surface being reset, not the list's: a
              board put back to the list's answer would lose its due date
@@ -600,10 +628,13 @@ export function View(
      from the first time it was opened. */
   const drawnFrom = arranging ? SHOWS_DEFAULT : SHOWS_BOARD
   const drawnPlain = (Object.keys(drawnFrom) as (keyof Shows)[]).every((k) => shows[k] === drawnFrom[k])
+  /* Members for columns is off the board's default, where it can be chosen. */
+  const desk = useWide()
   const plain =
     who === 'all' &&
     !props.labels &&
     drawnPlain &&
+    (arranging || !desk || group !== 'who') &&
     (!arranging || (list === null && group === 'list' && sort === 'manual' && dir === 'asc'))
 
   /*

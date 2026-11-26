@@ -38,12 +38,14 @@ export function useTaskData({
   const [tasks, setTasks] = useState<Task[] | null>(() => recall(`tasks:${projectId}`))
   /*
    * Which drawing: the list, the board, or the board with a column per
-   * assignee. The people view wants the width
-   * of a desk, so a narrower window draws the list for `?view=members` and
-   * leaves the address as it is: widen the window and the columns come back.
+   * member. The board's columns are its
+   * grouping, so the one answer to "grouped by what" decides them: grouped
+   * by assignee (`?group=who`), the board's columns are the members. On a
+   * desk only: a narrower window draws the lists for it and leaves the
+   * address as it is — widen the window and the members come back.
    */
   const wide = useWide()
-  const view: 'list' | 'board' | 'people' = mode === 'board' ? 'board' : mode === 'members' && wide ? 'people' : 'list'
+  const view: 'list' | 'board' | 'people' = mode === 'board' ? (group === 'who' && wide ? 'people' : 'board') : 'list'
   /* What a row or a card shows is kept for the list and the board; the
      people view draws the board's cards, so it shares the board's answers. */
   const drawing = view === 'list' ? 'list' : 'board'

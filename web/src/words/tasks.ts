@@ -40,10 +40,12 @@ export const TASKS = say({
 
   /* The bar over the work. */
   board: ['Board', 'Tableau'],
-  /* The third drawing: the board with a column for each assignee.
+  /* What a board's columns are, in its View menu: the lists, or the members.
      Members, as the project's own people are
      called on its Settings and in Linear's and Asana's grouping. */
-  people: ['Members', 'Membres'],
+  columns: ['Columns', 'Colonnes'],
+  columnsLists: ['Lists', 'Listes'],
+  columnsMembers: ['Members', 'Membres'],
 
   /* A column in the people view. */
   notOnProject: ['Not on this project', 'Hors du projet'],

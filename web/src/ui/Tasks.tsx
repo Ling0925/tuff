@@ -407,18 +407,15 @@ export function Tasks({
           that starts forty pixels further down for no answer it gives.
         */}
         {/*
-          And Members, on a desk: the board with a column per assignee.
-          Not offered below 1024, where a
-          board of people has no room to be one; `?view=members` draws the
-          list there and keeps the address.
+          Two drawings and no third: a board of members is a way of drawing
+          the board, chosen in its View menu.
         */}
         <Segments
           items={[
             { key: 'list', label: ACTS.list, icon: 'list' as const, testId: 'view-list-mode' },
             { key: 'board', label: W.board, icon: 'board' as const, testId: 'view-board' },
-            ...(wide ? [{ key: 'members', label: W.people, icon: 'people' as const, testId: 'view-members' }] : []),
           ]}
-          value={view === 'people' ? 'members' : view}
+          value={view === 'list' ? 'list' : 'board'}
           onPick={(k) => onNavigate({ mode: k })}
         />
         <View
