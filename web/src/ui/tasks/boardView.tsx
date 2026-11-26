@@ -560,6 +560,7 @@ export function boardView({
                                 key={t.id}
                                 t={t}
                                 col={l.id}
+                                landing={drag?.settling === true && drag.id === t.id}
                                 taken={taken.has(t.id)}
                                 look={look}
                                 parts={partsSaid(t.id)}
@@ -646,6 +647,7 @@ export function boardView({
                       />
                     ))}
                   <div
+                    data-lift
                     className="relative px-4 py-3"
                     style={{
                       /*

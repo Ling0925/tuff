@@ -44,7 +44,7 @@ export const TASKS = say({
      Members, as the project's own people are
      called on its Settings and in Linear's and Asana's grouping. */
   columns: ['Columns', 'Colonnes'],
-  columnsLists: ['Lists', 'Listes'],
+  columnsLists: ['Status', 'Statut'],
   columnsMembers: ['Members', 'Membres'],
   /* The ring before a card's title on the board of members, for whoever
      cannot see it: the list the task is in. */

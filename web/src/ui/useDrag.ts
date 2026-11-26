@@ -698,6 +698,38 @@ export function useBoardDrag({
         [{ transform: 'translate(0px, 0px)' }, { transform: `translate(${to.left - at.left}px, ${to.top - at.top}px)` }],
         { duration: 170, easing: 'cubic-bezier(0.23, 1, 0.32, 1)', fill: 'forwards' },
       )
+      /*
+       * And set down to its own size on the way, in the same movement.
+       *
+       * The copy is lifted to 102% while in hand, and it stayed lifted all
+       * the way home: it landed on the card two per cent larger round the
+       * point it was held by, and when it went the card under it was
+       * smaller — the far corner, where the face is, jumped three pixels in
+       * one frame. Measured at the face: the copy's at 1035, the card's at
+       * 1032. Brought to 1 on the same curve, the copy is the card when it
+       * goes.
+       */
+      /*
+       * And to the width of where it lands, when that is not the width it
+       * left: on the board of members a column goes when its last open card
+       * is carried out of it, and the columns beside it widen in the same
+       * frame — the copy, still the old width, landed with its corner face
+       * forty pixels short of the card's, and the face jumped when it went.
+       * Width rather than a transform, which would squeeze the letters; one
+       * small element, for the flight, and only when the two differ.
+       */
+      if (Math.abs(to.width - at.width) >= 1)
+        node.animate([{ width: `${at.width}px` }, { width: `${to.width}px` }], {
+          duration: 170,
+          easing: 'cubic-bezier(0.23, 1, 0.32, 1)',
+          fill: 'forwards',
+        })
+      const lifted = node.querySelector<HTMLElement>('[data-lift]')
+      lifted?.animate([{ transform: 'scale(1.02)' }, { transform: 'scale(1)' }], {
+        duration: 170,
+        easing: 'cubic-bezier(0.23, 1, 0.32, 1)',
+        fill: 'forwards',
+      })
       move.onfinish = stop
       move.oncancel = stop
     })

@@ -3,7 +3,7 @@ import { login, drawnWhole, make, viewAnswers } from './helpers.js'
 
 /**
  * The board by members. On a desk the board's
- * View menu asks what its columns are, Lists or Members, kept as the
+ * View menu asks what its columns are, Status or Members, kept as the
  * grouping (`?group=who`). Members draws a column for each assignee: the
  * head is the face, the name, the open count and a +; the cards are the
  * board's, with the task's list where the board draws the face; a task
@@ -134,6 +134,8 @@ test('on a desk, the board’s Columns choice draws a column per member, and its
   await viewAnswers(page, true)
   await expect(page.getByTestId('view-columns')).toBeVisible()
   await expect(page.getByTestId('view-columns-list')).toHaveAttribute('aria-checked', 'true')
+  await expect(page.getByTestId('view-columns-list')).toHaveText('Status')
+  await expect(page.getByTestId('view-columns-members')).toHaveText('Members')
   if (SHOTS) {
     /* Once the panel has slid in. */
     await page.waitForTimeout(500)
@@ -317,4 +319,123 @@ test.describe('on a phone', () => {
     /* The address is left as it was. */
     await expect(page).toHaveURL(/[?&]group=who/)
   })
+})
+
+/* A face that is a picture, as the author's is. */
+const PHOTO = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAFAAAAAoCAIAAADmAupWAAAATklEQVR4nO3PAQ3AIADAMEAO5hCMmbv4k71VsM197viT9XXA2wzXGa4zXGe4znCd4TrDdYbrDNcZrjNcZ7jOcJ3hOsN1husM1xmuM1z3AL/zAcRgtCDyAAAAAElFTkSuQmCC',
+  'base64',
+)
+
+/**
+ * Carry a card to a column, let it go, and watch every frame until it has
+ * landed: whether the landed card was ever drawn while its copy was still
+ * in the air (two of it on the screen), and whether the face it lands with
+ * is drawn, in the very place the copy's face was, on the first frame the
+ * copy is gone.
+ */
+async function landsWhole(page: Page, card: Locator, target: Locator, taskId: string) {
+  await page.evaluate((taskId) => {
+    type Seen = { flight: DOMRect | null; card: DOMRect | null; shown: boolean; drawn: boolean }
+    const w = window as unknown as { seen: Seen[]; on: boolean }
+    w.seen = []
+    w.on = true
+    const look = () => {
+      const flight = document.querySelector('[data-in-flight] img')
+      const landed = [...document.querySelectorAll(`[data-card$="${taskId}"]`)].find(
+        (c) => !c.closest('[data-in-flight]') && !c.closest('[hidden]') && c.querySelector('img'),
+      )
+      const img = landed?.querySelector('img') ?? null
+      w.seen.push({
+        flight: flight?.getBoundingClientRect() ?? null,
+        card: img?.getBoundingClientRect() ?? null,
+        shown: !!landed && getComputedStyle(landed).visibility !== 'hidden',
+        drawn: !!img && img.complete && img.naturalWidth > 0,
+      })
+      if (w.on) requestAnimationFrame(look)
+    }
+    requestAnimationFrame(look)
+  }, taskId)
+  const from = (await card.boundingBox())!
+  const onto = (await target.boundingBox())!
+  await page.mouse.move(from.x + 40, from.y + 12)
+  await page.mouse.down()
+  await page.mouse.move(from.x + 56, from.y + 26, { steps: 4 })
+  await page.mouse.move(onto.x + onto.width / 2, onto.y + 120, { steps: 20 })
+  await page.evaluate(() => {
+    ;(window as unknown as { seen: unknown[] }).seen = []
+  })
+  await page.mouse.up()
+  await page.waitForTimeout(600)
+  const seen = await page.evaluate(() => {
+    const w = window as unknown as { seen: { flight: DOMRect | null; card: DOMRect | null; shown: boolean; drawn: boolean }[]; on: boolean }
+    w.on = false
+    return w.seen.map((s) => ({
+      flight: s.flight && { x: s.flight.x, y: s.flight.y },
+      card: s.card && { x: s.card.x, y: s.card.y },
+      shown: s.shown,
+      drawn: s.drawn,
+    }))
+  })
+  const flying = seen.filter((s) => s.flight)
+  expect(flying.length, 'the copy flies home').toBeGreaterThan(0)
+  expect(
+    flying.filter((s) => s.shown),
+    'the landed card drawn while its copy was in the air',
+  ).toEqual([])
+  const last = flying[flying.length - 1]!
+  const first = seen[seen.indexOf(last) + 1]!
+  expect(first.shown && first.drawn, 'the face drawn on the first frame without the copy').toBe(true)
+  expect(Math.abs(first.card!.x - last.flight!.x), 'the face where the copy’s was, across').toBeLessThanOrEqual(1)
+  expect(Math.abs(first.card!.y - last.flight!.y), 'the face where the copy’s was, down').toBeLessThanOrEqual(1)
+}
+
+test('a card let go lands as one, its face drawn where the copy’s was — on the board of lists and of members', async ({ page }) => {
+  await page.setViewportSize({ width: 1800, height: 900 })
+  await login(page)
+  const s = await stage(page, Date.now())
+  const token = await page.evaluate(() => JSON.parse(localStorage.getItem('session')!).access_token as string)
+  const h = { authorization: `Bearer ${token}`, 'x-api-version': '1' }
+  const up = await page.request.post('/api/me/avatar', {
+    headers: h,
+    multipart: { file: { name: 'me.png', mimeType: 'image/png', buffer: PHOTO } },
+  })
+  expect(up.ok()).toBe(true)
+
+  /* The board of lists: my card, with my face, to the next list. */
+  await page.goto(`/${s.ws}/${s.slug}/tasks?view=board`)
+  const mine = page.locator(`[data-card="${s.tasks.mine.id}"]`)
+  await expect(mine.locator('img')).toHaveCount(1, { timeout: 15_000 })
+  await landsWhole(page, mine, page.locator('[data-list]').nth(1), s.tasks.mine.id)
+
+  /*
+   * The board of members: a second agent with work of its own, and the
+   * task the agent and I share carried from the agent's column to it — it
+   * lands there with my face in its corner, while the agent's column, now
+   * empty, goes and the columns beside it widen.
+   */
+  const { projects } = (await (await page.request.get('/api/projects', { headers: h })).json()) as {
+    projects: { id: string; slug: string }[]
+  }
+  const pid = projects.find((p) => p.slug === s.slug)!.id
+  const two = (await (
+    await page.request.post('/api/agents', {
+      headers: { ...h, 'content-type': 'application/json' },
+      data: { name: 'Second', project_ids: [pid], reach: 'mcp' },
+    })
+  ).json()) as { agent_id: string }
+  await page.request.post(`/api/projects/${pid}/tasks`, {
+    headers: { ...h, 'content-type': 'application/json' },
+    data: { title: 'The second one’s own', assignee_ids: [two.agent_id] },
+  })
+  await page.request.patch(`/api/tasks/${s.tasks.agents.id}`, {
+    headers: { ...h, 'content-type': 'application/json' },
+    data: { assignee_ids: [s.me] },
+  })
+  await page.goto(`/${s.ws}/${s.slug}/tasks?view=board&group=who`)
+  const column = (key: string) => page.locator(`[data-person-column="${key}"]`)
+  await expect(column(two.agent_id).locator('[data-card]')).toHaveCount(1, { timeout: 15_000 })
+  await expect(column(s.agent).locator('[data-card]')).toHaveCount(1)
+  await landsWhole(page, column(s.agent).locator('[data-card]').first(), column(two.agent_id), s.tasks.shared.id)
+  await expect.poll(() => assignees(page, s.tasks.shared.id), { timeout: 10_000 }).toEqual([s.me, two.agent_id].sort())
 })

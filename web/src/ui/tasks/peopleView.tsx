@@ -517,6 +517,7 @@ export function peopleView({
                             t={t}
                             col={c.key}
                             slot={landing ? drag.id : slot}
+                            landing={!!landing}
                             taken={taken.has(t.id)}
                             look={look}
                             parts={partsSaid(t.id)}
@@ -546,6 +547,7 @@ export function peopleView({
                 style={{ left: drag.x - drag.grabX, top: drag.y - drag.grabY, width: drag.w }}
               >
                 <div
+                  data-lift
                   className="relative px-4 py-3"
                   style={{
                     background: 'color-mix(in oklch, var(--ink) 4%, var(--surface))',
@@ -555,7 +557,19 @@ export function peopleView({
                     transformOrigin: `${drag.grabX}px ${drag.grabY}px`,
                   }}
                 >
-                  {card(held, from ?? '', from ?? '')}
+                  {/*
+                   * Drawn for the column it is going to once it is let go of.
+                   * Drawn for the one it came from, the copy took the new
+                   * assignees with it on the drop and showed them from the old
+                   * column's side: carried from an agent to me, my face
+                   * appeared in its corner for the length of the flight and
+                   * went with it, on a card that lands with no face at all —
+                   * the face that flickered on release.
+                   */}
+                  {(() => {
+                    const whose = drag.settling && drag.spot && drag.spot.column !== GONE ? drag.spot.column : (from ?? '')
+                    return card(held, whose, whose)
+                  })()}
                 </div>
               </div>
             )}
