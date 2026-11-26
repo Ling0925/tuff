@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { ACTS, HEADS, MAKE } from '../data/words.js'
 import { TASKS as W } from '../words/tasks.js'
 import { NewButton } from './New.jsx'
@@ -8,6 +9,7 @@ import { UndoBar } from './UndoToast.jsx'
 import { View } from './tasks/view.jsx'
 import { boardView } from './tasks/boardView.jsx'
 import { listView } from './tasks/listView.jsx'
+import { peopleView, personCards, peopleWalk } from './tasks/peopleView.jsx'
 import { takenBar } from './tasks/takenBar.jsx'
 import { taskMenu } from './tasks/taskMenu.jsx'
 import { useColumnPanes } from './tasks/useColumnPanes.js'
@@ -270,6 +272,13 @@ export function Tasks({
     take,
     card,
   })
+  /* Each assignee's open work, from the board's own columns — only while
+     the people view is on the screen. */
+  const cards = useMemo(
+    () => (view === 'people' ? personCards({ lists, byColumn, people, who, meId }) : []),
+    [view, lists, byColumn, people, who, meId],
+  )
+  const walk = useMemo(() => peopleWalk(cards), [cards])
   const { columnPane, paneNode, paneReady, pane, before, after, pageTo } = useColumnPanes({
     projectId,
     mode,
@@ -284,6 +293,7 @@ export function Tasks({
     walkable,
     indexOf,
     setAt,
+    peopleWalk: walk,
   })
 
   if (open) {
@@ -388,13 +398,20 @@ export function Tasks({
           is two chips, and a second row of chrome above a board is a board
           that starts forty pixels further down for no answer it gives.
         */}
+        {/*
+          And People, on a desk: each assignee's open work as a card.
+          Not offered below 1024, where a
+          wall of cards has no room to be one; `?view=people` draws the
+          list there and keeps the address.
+        */}
         <Segments
           items={[
             { key: 'list', label: ACTS.list, icon: 'list' as const, testId: 'view-list-mode' },
             { key: 'board', label: W.board, icon: 'board' as const, testId: 'view-board' },
+            ...(wide ? [{ key: 'people', label: W.people, icon: 'people' as const, testId: 'view-people' }] : []),
           ]}
-          value={view === 'board' ? 'board' : 'list'}
-          onPick={(k) => onNavigate({ mode: k === 'board' ? 'board' : 'list' })}
+          value={view}
+          onPick={(k) => onNavigate({ mode: k })}
         />
         <View
           on={view}
@@ -485,6 +502,31 @@ export function Tasks({
         paneNode,
         paneReady,
         pane,
+      })}
+
+      {peopleView({
+        view,
+        wide,
+        panel,
+        shows,
+        setShows,
+        people,
+        lists,
+        setOpen,
+        tasks,
+        group,
+        sort,
+        dir,
+        who,
+        list,
+        labels,
+        meId,
+        onNavigate,
+        allLabels,
+        cards,
+        pane,
+        paneNode,
+        paneReady,
       })}
 
       {boardView({

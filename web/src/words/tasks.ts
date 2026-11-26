@@ -40,6 +40,20 @@ export const TASKS = say({
 
   /* The bar over the work. */
   board: ['Board', 'Tableau'],
+  /* The third drawing: each assignee's open work as a card.
+     Slack and Asana's "People", "Personnes". */
+  people: ['People', 'Personnes'],
+
+  /* A card in the people view. */
+  notOnProject: ['Not on this project', 'Hors du projet'],
+  doneCount: [(n: number) => `${n} done`, (n: number) => (one(n) ? `${n} terminée` : `${n} terminées`)],
+  noneDone: ['Nothing done yet', 'Rien de terminé pour l’instant'],
+  openCount: [
+    (n: number) => (n === 1 ? '1 open task' : `${n} open tasks`),
+    (n: number) => (one(n) ? `${n} tâche en cours` : `${n} tâches en cours`),
+  ],
+  noOpenTasks: ['No open tasks', 'Aucune tâche en cours'],
+  noOpenTasksBody: ['Tasks that aren’t done show up here, by assignee.', 'Les tâches non terminées s’affichent ici, par responsable.'],
 
   /* A column on the board. */
   expand: [(name: string) => `Expand ${name}`, (name: string) => `Développer la colonne ${name}`],

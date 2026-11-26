@@ -236,7 +236,9 @@ export function readShows(view: 'list' | 'board'): Shows {
  * the board and back should leave them.
  */
 type ViewProps = {
-  on: 'list' | 'board'
+  /** Which drawing is on the screen. The people view is offered what the
+      board is, less what a card shows: it draws no board cards. */
+  on: 'list' | 'board' | 'people'
   group: string
   sort: string
   dir: string
@@ -291,10 +293,13 @@ function ViewAnswers({ on, group, sort, dir, who, labels, people, meId, allLabel
    * defaults of this surface rather than the list's.
    */
   const base = arranging ? SHOWS_DEFAULT : SHOWS_BOARD
+  /* The people view has no switches for what a card shows, so what the
+     board keeps there is not this surface's to report or to reset. */
+  const cards = on !== 'people'
   const untouched =
     who === 'all' &&
     !labels &&
-    (Object.keys(base) as (keyof Shows)[]).every((k) => shows[k] === base[k]) &&
+    (!cards || (Object.keys(base) as (keyof Shows)[]).every((k) => shows[k] === base[k])) &&
     (!arranging || (list === null && group === 'list' && sort === 'manual' && dir === 'asc'))
   return (
     <>
@@ -455,51 +460,55 @@ function ViewAnswers({ on, group, sort, dir, who, labels, people, meId, allLabel
           </div>
         </div>
       )}
-      <div className="px-4 pt-3 pb-1 text-base text-ink-3">
-        {/* On this machine, not in the address: which columns somebody
+      {cards && (
+        <div className="px-4 pt-3 pb-1 text-base text-ink-3">
+          {/* On this machine, not in the address: which columns somebody
             likes is not a thing a team has an answer to, and a link
             should not rearrange the rows of whoever opens it. */}
-        {arranging ? W.showOnRow : W.showOnCard}
-      </div>
+          {arranging ? W.showOnRow : W.showOnCard}
+        </div>
+      )}
       {/* Two by two, across the width like the answers above. Three fitted
           on one line and four do not — "Due date" folds in half at a
           quarter of 280 pixels — and a row of switches at their own sizes
           leaves a ragged second line under a column of controls that all
           end in the same place. */}
-      <div className="grid grid-cols-2 gap-2 px-4 pt-1 pb-3">
-        {(
-          [
-            ...((bare ? [] : [['priority', FACTS.priority]]) as ['priority', string][]),
-            ...((bare ? [] : [['labels', FACTS.labels]]) as ['labels', string][]),
-            ...((bare ? [] : [['id', W.number]]) as ['id', string][]),
-            ...((bare ? [] : [['due', W.dueDate]]) as ['due', string][]),
-            ['who', FACTS.assignee],
-            ...((bare ? [] : [['cycle', FACTS.cycle]]) as ['cycle', string][]),
-            /*
-             * When it was made and when it last moved — on the board only,
-             * because that is the only place it has ever drawn.
-             *
-             * A row has no line for it: the switch sat under "What a row
-             * shows" and turned nothing on or off, which is a control that
-             * means nothing where it lands — the fault the project's handbook names
-             * about `?view=`, in a panel instead of an address. A person
-             * pressing it on a list learns the panel lies.
-             */
-            ...(arranging ? [] : [['dates', W.dates] as const]),
-            /* Board-only, like Dates: a row has no line for how long a
+      {cards && (
+        <div className="grid grid-cols-2 gap-2 px-4 pt-1 pb-3">
+          {(
+            [
+              ...((bare ? [] : [['priority', FACTS.priority]]) as ['priority', string][]),
+              ...((bare ? [] : [['labels', FACTS.labels]]) as ['labels', string][]),
+              ...((bare ? [] : [['id', W.number]]) as ['id', string][]),
+              ...((bare ? [] : [['due', W.dueDate]]) as ['due', string][]),
+              ['who', FACTS.assignee],
+              ...((bare ? [] : [['cycle', FACTS.cycle]]) as ['cycle', string][]),
+              /*
+               * When it was made and when it last moved — on the board only,
+               * because that is the only place it has ever drawn.
+               *
+               * A row has no line for it: the switch sat under "What a row
+               * shows" and turned nothing on or off, which is a control that
+               * means nothing where it lands — the fault the project's handbook names
+               * about `?view=`, in a panel instead of an address. A person
+               * pressing it on a list learns the panel lies.
+               */
+              ...(arranging ? [] : [['dates', W.dates] as const]),
+              /* Board-only, like Dates: a row has no line for how long a
                task has sat in its list, and a switch that turns nothing
                on or off is a control that means nothing where it lands. */
-            ...(arranging ? [] : [['age', W.ageSwitch] as const]),
-            /* Board-only for the same reason: a row has no room for a
+              ...(arranging ? [] : [['age', W.ageSwitch] as const]),
+              /* Board-only for the same reason: a row has no room for a
                picture. */
-            ...(arranging ? [] : [['pictures', W.images] as const]),
-          ] as const
-        ).map(([key, said]) => (
-          <Toggle key={key} testId={`shows-${key}`} on={shows[key]} onChange={(on) => onShows({ ...shows, [key]: on })} wide>
-            {said}
-          </Toggle>
-        ))}
-      </div>
+              ...(arranging ? [] : [['pictures', W.images] as const]),
+            ] as const
+          ).map(([key, said]) => (
+            <Toggle key={key} testId={`shows-${key}`} on={shows[key]} onChange={(on) => onShows({ ...shows, [key]: on })} wide>
+              {said}
+            </Toggle>
+          ))}
+        </div>
+      )}
       {/*
         The one line in the panel, and it is here rather than between the
         questions.
@@ -531,7 +540,7 @@ function ViewAnswers({ on, group, sort, dir, who, labels, people, meId, allLabel
             /* The defaults of the surface being reset, not the list's: a
              board put back to the list's answer would lose its due date
              and grow an age nobody asked for. */
-            onShows(arranging ? SHOWS_DEFAULT : SHOWS_BOARD)
+            if (cards) onShows(arranging ? SHOWS_DEFAULT : SHOWS_BOARD)
           }}
           className="w-full px-4 py-3 text-left text-base text-ink-2"
         >
@@ -597,7 +606,9 @@ export function View(
      board showing exactly what a board starts with would wear the mark
      from the first time it was opened. */
   const drawnFrom = arranging ? SHOWS_DEFAULT : SHOWS_BOARD
-  const drawnPlain = (Object.keys(drawnFrom) as (keyof Shows)[]).every((k) => shows[k] === drawnFrom[k])
+  /* The people view offers no switches for a card, so the board's answers
+     there are not its to report. */
+  const drawnPlain = on === 'people' || (Object.keys(drawnFrom) as (keyof Shows)[]).every((k) => shows[k] === drawnFrom[k])
   const plain =
     who === 'all' &&
     !props.labels &&
