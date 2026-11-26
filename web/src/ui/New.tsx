@@ -72,6 +72,8 @@ export type What =
        * would be the interface inventing one.
        */
       who?: string
+      /** The labels the screen has already decided, when it is grouped by one. */
+      labels?: Label[]
     }
   | { kind: 'project' }
   /** An announcement: a title and its words. */
@@ -201,6 +203,7 @@ export function NewDialog({
         /* Empty is said too: the people view's No assignee column asks for
            nobody, not for whoever the last task was given to. */
         assignees: what.who !== undefined ? (what.who ? [what.who] : []) : project === was.project ? was.assignees : [],
+        labels: what.labels !== undefined ? what.labels : project === was.project ? was.labels : [],
       }
     })
   }, [open])

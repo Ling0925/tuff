@@ -197,7 +197,7 @@ export function labelView({
                           label={MAKE.addTask}
                           variant="bare"
                           testId={`add-for-label-${c.key}`}
-                          what={{ kind: 'task', projectId, list: into }}
+                          what={{ kind: 'task', projectId, list: into, labels: c.label ? [c.label] : [] }}
                           onMade={load}
                         />
                       )}
@@ -224,6 +224,7 @@ export function labelView({
                           look={look}
                           parts={partsSaid(t.id)}
                           fns={fns}
+                          drag={false}
                         />
                       ))}
                       {/* Finished work is counted, not drawn — quietly, under the rest. */}

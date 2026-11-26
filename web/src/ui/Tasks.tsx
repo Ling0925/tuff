@@ -418,14 +418,15 @@ export function Tasks({
           that starts forty pixels further down for no answer it gives.
         */}
         {/*
-          Two drawings and no third: a board of members is a way of drawing
-          the board, chosen in its View menu.
+          Labels is a third drawing because the task switch names it beside List
+          and Board; a board of members stays a way of drawing the board, chosen
+          in its View menu.
         */}
         <Segments
           items={[
             { key: 'list', label: ACTS.list, icon: 'list' as const, testId: 'view-list-mode' },
             { key: 'board', label: W.board, icon: 'board' as const, testId: 'view-board' },
-            { key: 'labels', label: FACTS.labels, icon: 'tag' as const, testId: 'view-labels' },
+            { key: 'labels', label: FACTS.labels, icon: 'tag' as const, testId: 'view-labels-mode' },
           ]}
           value={view === 'list' ? 'list' : view === 'labels' ? 'labels' : 'board'}
           onPick={(k) => onNavigate({ mode: k })}
