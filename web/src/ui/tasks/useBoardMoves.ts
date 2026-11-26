@@ -256,7 +256,7 @@ export function useBoardMoves({
   type Step =
     | { kind: 'move'; back: Back[] }
     | { kind: 'delete'; ids: string[] }
-    | { kind: 'assign'; id: string; before: string[]; after?: string | null; key?: string }
+    | { kind: 'assign'; id: string; before: string[]; after?: string | null; key?: string; list?: string | null }
   const undone = useRef<Step[]>([])
   /** The last delete, while the toast still offers it back. */
   const [undo, setUndo] = useState<{ ids: string[]; said: string } | null>(null)
@@ -409,10 +409,11 @@ export function useBoardMoves({
     }
     if (step.kind === 'assign') {
       const placed = step.after !== undefined
+      const listed = step.list !== undefined
       void patch(
         step.id,
-        { ...given(step.before), ...(placed && step.key ? { sort_key: step.key } : {}) },
-        { ...given(step.before), ...(placed ? { after: step.after } : {}) },
+        { ...given(step.before), ...(placed && step.key ? { sort_key: step.key } : {}), ...(listed ? { list_id: step.list ?? null } : {}) },
+        { ...given(step.before), ...(placed ? { after: step.after } : {}), ...(listed && step.list ? { list_id: step.list } : {}) },
       )
       return true
     }

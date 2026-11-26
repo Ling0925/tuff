@@ -263,6 +263,114 @@ test('on a desk, the board’s Columns choice draws a column per member, and its
   await expect(cards(s.me).filter({ hasText: s.tasks.mine.title })).toHaveCount(1)
 })
 
+/** Which list the server says a task is in. */
+async function listOf(page: Page, id: string): Promise<string> {
+  return page.evaluate(async (id) => {
+    const s = JSON.parse(localStorage.getItem('session') ?? '{}') as { access_token?: string }
+    const r = await fetch(`/api/tasks/${id}`, { headers: { authorization: `Bearer ${s.access_token}`, 'x-api-version': '1' } })
+    return ((await r.json()) as { task: { list_id: string } }).task.list_id
+  }, id)
+}
+
+/*
+ * With Manual on, the gap travels the whole of a member column, and a place
+ * among another list's cards is that list.
+ * To the very end: the last card's list, last. To the very
+ * top: the first card's list, first. ⌘Z puts the list and the place back. And
+ * a long column scrolls itself while a card is held at its foot, so its end
+ * can be reached.
+ */
+test('on the board of members a card can be carried to the end or the top of a column, and takes the list it lands among', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1800, height: 900 })
+  await login(page)
+  const s = await stage(page, Date.now())
+  const token = await page.evaluate(() => JSON.parse(localStorage.getItem('session')!).access_token as string)
+  const h = { authorization: `Bearer ${token}`, 'x-api-version': '1', 'content-type': 'application/json' }
+  const { projects } = (await (await page.request.get('/api/projects', { headers: h })).json()) as {
+    projects: { id: string; slug: string }[]
+  }
+  const pid = projects.find((p) => p.slug === s.slug)!.id
+  const { lists } = (await (await page.request.get(`/api/projects/${pid}/lists`, { headers: h })).json()) as {
+    lists: { id: string; name: string; finishes: boolean; intake?: boolean }[]
+  }
+  const open = lists.filter((l) => !l.finishes && !l.intake)
+  const [first, second] = [open[0]!, open[1]!]
+  /* A card of the second list on me, so my column holds two lists: the draft, the shared and mine in the first, then this. */
+  const made = (await (
+    await page.request.post(`/api/projects/${pid}/tasks`, { headers: h, data: { title: `Later on ${s.slug}`, assignee_ids: [s.me] } })
+  ).json()) as { id: string }
+  await page.request.patch(`/api/tasks/${made.id}`, { headers: h, data: { list_id: second.id } })
+  /* And a long No assignee column, longer than the window. */
+  for (let i = 0; i < 14; i++)
+    await page.request.post(`/api/projects/${pid}/tasks`, { headers: h, data: { title: `Loose ${i} ${s.slug}`, assignee_ids: [] } })
+
+  await page.goto(`/${s.ws}/${s.slug}/tasks?view=board&group=who`)
+  const column = (key: string) => page.locator(`[data-person-column="${key}"]`)
+  const cards = (key: string) => column(key).locator('[data-card]')
+  const later = `Later on ${s.slug}`
+  await expect
+    .poll(() => order(column(s.me)), { timeout: 15_000 })
+    .toEqual([s.tasks.draft.title, s.tasks.shared.title, s.tasks.mine.title, later])
+
+  /* The first card of the first list, to the very end, under the card of the second: last, and in the second list. */
+  const end = (await cards(s.me).last().boundingBox())!
+  await carryTo(page, cards(s.me).filter({ hasText: s.tasks.draft.title }), column(s.me), end.y + end.height + 8)
+  await expect.poll(() => order(column(s.me))).toEqual([s.tasks.shared.title, s.tasks.mine.title, later, s.tasks.draft.title])
+  await expect.poll(() => listOf(page, s.tasks.draft.id), { timeout: 10_000 }).toBe(second.id)
+  await expect(cards(s.me).filter({ hasText: s.tasks.draft.title }).locator(`[data-status="${second.name}"]`)).toHaveCount(1)
+
+  /* A card of the second list, to the very top, above a card of the first: first, and in the first list. */
+  const top = (await cards(s.me).first().boundingBox())!.y
+  await carryTo(page, cards(s.me).filter({ hasText: later }), column(s.me), top)
+  await expect.poll(() => order(column(s.me))).toEqual([later, s.tasks.shared.title, s.tasks.mine.title, s.tasks.draft.title])
+  await expect.poll(() => listOf(page, made.id), { timeout: 10_000 }).toBe(first.id)
+
+  /* ⌘Z: back to the second list, where it was. */
+  await page.waitForLoadState('networkidle')
+  await page.keyboard.press('ControlOrMeta+z')
+  await expect.poll(() => listOf(page, made.id), { timeout: 10_000 }).toBe(second.id)
+  await expect.poll(() => order(column(s.me))).toEqual([s.tasks.shared.title, s.tasks.mine.title, later, s.tasks.draft.title])
+
+  /* After a reload, the server's lists and places. */
+  await page.waitForLoadState('networkidle')
+  await page.reload()
+  await expect
+    .poll(() => order(column(s.me)), { timeout: 15_000 })
+    .toEqual([s.tasks.shared.title, s.tasks.mine.title, later, s.tasks.draft.title])
+
+  /* A long column scrolls itself under a card held at its foot, and its end is reached. */
+  const nobody = column('~')
+  const pane = nobody.locator('[data-column-scroll]')
+  await expect(cards('~')).toHaveCount(15)
+  expect(await pane.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
+  const carried = cards(s.me).filter({ hasText: s.tasks.mine.title })
+  const from = (await carried.boundingBox())!
+  const foot = (await pane.boundingBox())!
+  await page.mouse.move(from.x + 40, from.y + 12)
+  await page.mouse.down()
+  await page.mouse.move(from.x + 56, from.y + 26, { steps: 4 })
+  await page.mouse.move(foot.x + foot.width / 2, foot.y + foot.height - 12, { steps: 20 })
+  await expect
+    .poll(() => pane.evaluate((el) => Math.ceil(el.scrollTop + el.clientHeight) >= el.scrollHeight), { timeout: 10_000 })
+    .toBe(true)
+  await page.mouse.move(foot.x + foot.width / 2 + 2, foot.y + foot.height - 8, { steps: 2 })
+  await expect(nobody.locator('[data-hole]')).toHaveCount(1)
+  expect(
+    await pane.evaluate((el) =>
+      [...el.children]
+        .filter((c) => (c as HTMLElement).dataset.slot !== undefined)
+        .at(-1)
+        ?.hasAttribute('data-hole'),
+    ),
+  ).toBe(true)
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/board-members-end.png` })
+  await page.mouse.up()
+  await expect.poll(() => assignees(page, s.tasks.mine.id), { timeout: 10_000 }).toEqual([])
+  await expect.poll(async () => (await order(nobody)).at(-1)).toBe(s.tasks.mine.title)
+})
+
 test('one answer to grouped by what: a list grouped by assignee opens the board on its members, and Reset puts the lists back', async ({
   page,
 }) => {

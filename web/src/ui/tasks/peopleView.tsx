@@ -7,7 +7,7 @@ import { columnAt, useBoardDrag, slid, stopSlides, type Drag, type Spot } from '
 import { Avatar, Fluid, doingSaid, whoOf } from '../kit.jsx'
 import { Icon } from '../glyphs.jsx'
 import { NewButton, type What } from '../New.jsx'
-import { type Task, type List, given, inOrder, inKeyOrder, chainKeys } from './model.jsx'
+import { type Task, type List, given, inOrder, inKeyOrder, chainKeys, takenBy } from './model.jsx'
 import { ViewPanel } from './view.jsx'
 import { ListBar } from './listBar.jsx'
 import { BoardCard, BoardBar, ColumnFade, type CardFns } from './board.jsx'
@@ -145,12 +145,11 @@ export function reassigned(was: string[], from: string, to: string, known: Set<s
  * The board's machinery picks the card up, follows the pointer, scrolls the
  * board at its edges and flies the copy home; what is different is the
  * question a drop answers. On the board it is which list and where in it;
- * here it is whose, and — with Manual ordering — where among that person's
- * cards of the task's own list. A task's manual place is kept within its
- * list (`sort_key`, compared only within a list on the server), so a card is
- * placed among the cards of its list in the column it lands in: the gap
- * opens there and nowhere else, and the drop keeps its list, which the ring
- * before its title changes.
+ * here it is whose, and — with Manual ordering — where in that person's
+ * column, anywhere in it. A task's manual place is kept within its list
+ * (`sort_key`, compared only within a list on the server) and a column reads
+ * list by list, so a place in it is a place in a list: let go among another
+ * list's cards, the card takes that list (`landsIn`).
  *
  * With any other Ordering there is no place to choose: the card's own slot
  * stays open while it is carried, the column under the pointer lights as a
@@ -175,8 +174,8 @@ export function usePeopleMoves({
   Pick<TaskData, 'tasks' | 'patch' | 'people' | 'lists' | 'EDGE'> &
   Pick<BoardMoves, 'undone'> & { columns: PersonColumn[] }) {
   /* What a drop is measured against, read when the pointer moves. */
-  const now = useRef({ columns, lists, tasks, sort })
-  now.current = { columns, lists, tasks, sort }
+  const now = useRef({ tasks, sort })
+  now.current = { tasks, sort }
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: board is a ref, read when the pointer moves
   const resolve = useCallback(
@@ -188,7 +187,7 @@ export function usePeopleMoves({
       const pane = column.querySelector('[data-column-scroll]')
       const slots = [...(pane?.children ?? [])].filter((n): n is HTMLElement => n instanceof HTMLElement && n.dataset.slot !== undefined)
       const at = slots.findIndex((s) => s.dataset.slot === id)
-      const { columns, lists, tasks, sort } = now.current
+      const { sort } = now.current
       if (sort !== 'manual' || key === GONE) return { column: key, index: at === -1 ? 0 : at }
       /* The cards staying, as the board measures them: any card of this
          task left out, the hole and another person's copy of it alike. */
@@ -208,16 +207,9 @@ export function usePeopleMoves({
           break
         }
       }
-      /* Among the cards of its own list, which is the only order it has. */
-      const t = tasks?.find((x) => x.id === task)
-      const c = columns.find((x) => x.key === key)
-      if (!t || !c) return { column: key, index }
-      const order = new Map(lists.map((l, i) => [l.id, i]))
-      const mine = order.get(t.list_id ?? '') ?? 0
-      const rest = c.open.filter((x) => x.id !== task)
-      const lo = rest.filter((x) => (order.get(x.list_id ?? '') ?? 0) < mine).length
-      const hi = lo + rest.filter((x) => x.list_id === t.list_id).length
-      return { column: key, index: Math.min(hi, Math.max(lo, index)) }
+      /* Anywhere in the column, to its very end: a place among another
+         list's cards is that list — `landsIn`. */
+      return { column: key, index }
     },
     [EDGE],
   )
@@ -231,49 +223,77 @@ export function usePeopleMoves({
       const was = whoOf(t)
       const next = spot.column === from ? was : reassigned(was, from, spot.column, new Set(people.map((p) => p.actor_id)))
       const moved = next.join() !== was.join()
-      /*
-       * Where it lands, with Manual on: behind the card above it, when that
-       * card is of its list; at the top of its list when it lands first
-       * among them. Into a column that holds nothing of its list there is
-       * no neighbour to be placed against, and its place is left as it is.
-       */
-      let after: string | null | undefined
+      /* Where it lands, with Manual on — `landsIn`. Put back where it was
+         picked up, it is not a move. */
+      let place: Landing = null
       const into = columns.find((c) => c.key === spot.column)
       if (sort === 'manual' && into) {
-        const rest = into.open.filter((x) => x.id !== task)
-        if (rest.some((x) => x.list_id === t.list_id)) {
-          const above = rest[spot.index - 1]
-          after = above && above.list_id === t.list_id ? above.id : null
-          /* Already there: the card above it in this column is the one above it now. */
-          const at = into.open.findIndex((x) => x.id === task)
-          if (at !== -1) {
-            const prev = into.open[at - 1]
-            if ((prev && prev.list_id === t.list_id ? prev.id : null) === after) after = undefined
-          }
-        }
+        const at = into.open.findIndex((x) => x.id === task)
+        if (!(spot.column === from && at === spot.index)) place = landsIn(t, into.open, spot.index)
+        if (place && place.list === t.list_id && at !== -1 && JSON.stringify(landsIn(t, into.open, at)) === JSON.stringify(place))
+          place = null
       }
-      if (!moved && after === undefined) return
-      /* For ⌘Z: who had it, and the card above it in its whole list. */
+      if (!moved && !place) return
+      const list = place && place.list !== t.list_id ? lists.find((l) => l.id === place.list) : undefined
+      /* For ⌘Z: who had it, its list, and the card above it in that list. */
       const own = (tasks ?? []).filter((x) => !x.parent_id && x.list_id === t.list_id).sort(inKeyOrder)
       const below = own.findIndex((x) => x.id === task)
       undone.current.push({
         kind: 'assign',
         id: task,
         before: was,
-        ...(after !== undefined ? { after: below > 0 ? own[below - 1]!.id : null, key: t.sort_key } : {}),
+        ...(place ? { after: below > 0 ? own[below - 1]!.id : null, key: t.sort_key } : {}),
+        ...(list ? { list: t.list_id } : {}),
       })
-      const key = after !== undefined && t.list_id ? chainKeys(tasks ?? [], t.list_id, [t], after).get(task) : undefined
+      const key = place?.list ? chainKeys(tasks ?? [], place.list, [t], place.after).get(task) : undefined
       void patch(
         task,
-        { ...(moved ? given(next) : {}), ...(key ? { sort_key: key } : {}) },
-        { ...(moved ? given(next) : {}), ...(after !== undefined ? { after } : {}) },
+        {
+          ...(moved ? given(next) : {}),
+          /* Given to the list's agent when it takes the list's new tasks and
+             nobody is on it — as a move on the board says before the server
+             does. */
+          ...(list ? { ...takenBy(list, { ...t, assignee_ids: next }), list_id: list.id } : {}),
+          ...(list ? { completed_at: list.finishes ? (t.completed_at ?? new Date().toISOString()) : null } : {}),
+          ...(key ? { sort_key: key } : {}),
+          ...(place ? { decided_at: new Date().toISOString() } : {}),
+        },
+        {
+          ...(moved ? given(next) : {}),
+          ...(list ? { list_id: list.id } : {}),
+          ...(place ? { after: place.after } : {}),
+        },
       )
     },
-    [tasks, patch, undone, people, columns, sort],
+    [tasks, patch, undone, people, columns, sort, lists],
   )
   const { drag, board, layer, handlers } = useBoardDrag({ enabled: canWrite, resolve, onDrop: commit })
   useSlides(board, drag, sort)
   return { drag, board, layer, handlers } as const
+}
+
+/** Where a drop puts a task: its list and the card it goes behind there, or null for no move. */
+type Landing = { list: string | null; after: string | null } | null
+
+/**
+ * Where a card let go at `index` among a member column's other cards goes.
+ *
+ * The column reads in status order, list by list, so a place in it is a
+ * place in a list. Beside cards of its own list it stays in its list — a
+ * reorder, never a change of status. Otherwise it takes the list of the
+ * card above it and goes behind that card; at the very top, the first
+ * card's list, first. Into a column with nothing else in it there is no
+ * neighbour to be placed against, and it keeps its list and its place.
+ */
+export function landsIn(t: Task, column: Task[], index: number): Landing {
+  const rest = column.filter((x) => x.id !== t.id)
+  const above = rest[index - 1]
+  const below = rest[index]
+  if (!above && !below) return null
+  if (above && above.list_id === t.list_id) return { list: t.list_id, after: above.id }
+  if (below && below.list_id === t.list_id) return { list: t.list_id, after: null }
+  if (above) return { list: above.list_id, after: above.id }
+  return { list: below!.list_id, after: null }
 }
 
 /**
