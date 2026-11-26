@@ -95,6 +95,9 @@ export type Hosts = {
   /** A connected, branded domain by the id the server sealed into a
       provider's start: where its ticket may go. */
   byId(domainId: string): Promise<{ hostname: string; workspaceId: string } | null>
+  /** Whether a name still opens this workspace: a session made on it is
+      nobody anywhere once it does not. */
+  answers(hostname: string, workspaceId: string): Promise<boolean>
 }
 
 /** A loop the worker runs, waiting `every` milliseconds between runs. */

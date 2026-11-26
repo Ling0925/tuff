@@ -542,7 +542,9 @@ if (existsSync(join(client, 'index.html'))) {
   const ways = waysOf(offeredProviders())
   const withWays = (html: string, said = ways) => html.replace('</head>', `${said}</head>`)
   /* The app's page as a workspace's own domain writes it — `cloud/domains/hosts.ts`. */
-  hostPage.html = () => withWays(readFileSync(join(client, 'index.html'), 'utf8'))
+  /* Read once, as the page's hashes above were: a deploy is a new process. */
+  const hostHtml = withWays(page)
+  hostPage.html = () => hostHtml
   hostPage.headers = hostGuarded
   /* The public pages the build wrote, and what `/` is before the app
      answers it — the landing on the service, the app's own sign-in on your

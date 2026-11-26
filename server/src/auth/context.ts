@@ -279,6 +279,11 @@ export async function authenticate(header: string | undefined): Promise<AuthCont
   ])
   /* Signed for a page that is gone: it is nobody now. */
   if (claims.via === 'feedback' && !feedbackProject) return null
+  /* Made on a workspace's own domain that no longer opens this workspace —
+     removed, paused, taken: nobody, here as there. Its session was ended
+     when the name stopped (migration 326); this holds before the worker
+     has written so. */
+  if (claims.host && !(edition.hosts && (await edition.hosts.answers(claims.host, claims.workspace_id).catch(() => false)))) return null
   return ctx
     ? {
         ...ctx,

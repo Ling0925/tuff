@@ -1,6 +1,7 @@
 import { Hono, type Context, type Next } from 'hono'
 import { DEFAULT_SETTINGS } from '@tracker/shared-schema'
 import { authSql, bounded, sql, withoutActor } from '../db.js'
+import { hostOf } from '../host.js'
 import { edition } from '../edition.js'
 import { brandOfInvite } from '../brand.js'
 import { faced } from '../storage.js'
@@ -55,6 +56,8 @@ nowhere.use('*', async (c, next) => {
   if (edition.openApi(path)) return next()
   const claims = await verifyNowhereToken(token)
   if (!claims) return next()
+  /* Never made on a workspace's own domain, and nobody there. */
+  if (hostOf(c)) return c.json({ error: { code: 'unauthorized' } }, 401)
   const [[alive], [person]] = await Promise.all([
     /* With the moment it was asked, by the database's clock: a session
        this request makes is dated from it (`Meta.since`). */

@@ -258,6 +258,11 @@ export function fromInside(): Record<string, string> {
  * the careful way — `addressOf`.
  */
 export function clientOf(c: Asking): string {
+  /* On a workspace's own domain, the address the hosts Worker signed —
+     set by the edition only after the signature held. Never a header a
+     client wrote. */
+  const signed = (c as { get?: (k: string) => unknown }).get?.('clientIp')
+  if (typeof signed === 'string' && signed) return signed
   const cloudflare = c.req.header('cf-connecting-ip')
   if (cloudflare && fromOurEdge(c)) return cloudflare.trim()
   return addressOf(c.req.header('x-forwarded-for'), cloudflare)

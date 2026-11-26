@@ -195,7 +195,7 @@ export async function sendDigests(): Promise<number> {
       /* Only one workspace's notes, and it wears its own name: its links go
          to its own domain when it has one. */
       const own = brand && edition.hosts ? await asWorker((tx) => edition.hosts!.originOf(tx, notes[0]!.workspace_id)) : null
-      if (own) for (const it of items) it.url = own + it.url.slice(env.appUrl.length)
+      if (own) for (const it of items) if (it.url.startsWith(`${env.appUrl}/`)) it.url = own + it.url.slice(env.appUrl.length)
       const mail = digestLetter(person.name, items, more, off, language, brand?.name ?? null)
       /* From "Acme" alone, where branded: a digest goes only to the
          workspace's own members, who chose to be mailed it. */

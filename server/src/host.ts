@@ -1,7 +1,4 @@
 import type { Context } from 'hono'
-import type { Tx } from './db.js'
-import { edition } from './edition.js'
-import { origin } from './publicUrl.js'
 
 /**
  * A workspace's own domain, as the core sees one.
@@ -41,14 +38,3 @@ export function usableHere(c: Context, ctx: { host?: string | undefined; workspa
  * `main.ts` where there is a built page, empty in the tests.
  */
 export const hostPage: { html: (() => string) | null; headers: Record<string, string> } = { html: null, headers: {} }
-
-/**
- * Where a workspace's own links point: its connected domain on a branded
- * plan, read from the row and never from a request; otherwise this
- * server's own address (`origin`). Used only by what the workspace sends —
- * the shared document links the app copies and a digest of only its notes.
- */
-export async function workspaceOrigin(c: Context, tx: Tx, workspaceId: string): Promise<string> {
-  const own = edition.hosts ? await edition.hosts.originOf(tx, workspaceId) : null
-  return own ?? origin(c)
-}

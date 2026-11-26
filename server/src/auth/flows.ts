@@ -573,6 +573,11 @@ async function tradeFor(
   /* As the person from here, as `withActorEverywhere` was: the membership
      reads and the insert policy both ask who. */
   await actAs(row.actor_id)
+  /* The domain the spent session was made on, whatever this request says:
+     carried on and never cleared, so a host's session stays one wherever
+     it is refreshed. */
+  const [hosted] = await tx<{ host: string | null }[]>`select auth_session_host(${row.session_id}) as host`
+  const host = hosted?.host ?? null
   const workspaceId = await (async () => {
     if (row.workspace_id) {
       const [still] = await tx<{ workspace_id: string }[]>`
@@ -589,6 +594,9 @@ async function tradeFor(
       order by (role = 'owner') desc, created_at limit 1`
     return m?.workspace_id ?? null
   })()
+  /* And never renewed into another workspace than its own: out of it, it is
+     nobody. */
+  if (host && (!row.workspace_id || workspaceId !== row.workspace_id)) return null
   /* The browser the traded session belonged to, carried on when the request
      does not say: a session's device is what signing out and ending it from
      Account end together, and a trade that dropped it left the access
@@ -597,11 +605,6 @@ async function tradeFor(
     const [was] = await tx<{ device: string | null }[]>`select auth_device_of(${row.actor_id}, ${row.session_id}) as device`
     if (was?.device) meta = { ...meta, device: was.device }
   }
-  /* The domain the spent session was made on, whatever this request says:
-     carried on and never cleared, so a host's session stays one wherever
-     it is refreshed. */
-  const [was] = await tx<{ host: string | null }[]>`select auth_session_host(${row.session_id}) as host`
-  const host = was?.host ?? null
   const sid = uuidv7()
   const refreshToken = successorToken(token, sid)
   const next = {

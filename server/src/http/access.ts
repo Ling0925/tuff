@@ -1136,6 +1136,9 @@ async function toHost(c: Context, p: Provider, params: { code?: string; state?: 
   })
   if (!member) return there('oauth=notin')
   await asAuth((tx) => tx`select auth_identity_link(${found}, ${p}, ${said.subject}, ${said.email || null})`)
+  /* Found by its address and given a new way in: the address is told, as
+     the usetuff.com callback tells it. */
+  if (seen.byAddress) await tellWayIn(origin(c), found, 'added', p, said.email || null)
   const ticket = generateToken('hof')
   const made = await asAuth(async (tx) => {
     await tx`select auth_not_put_out_since(${found}, ${seen.claimed ? null : since}::timestamptz)`

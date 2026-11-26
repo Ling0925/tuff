@@ -632,6 +632,11 @@ export const NEVER_ON_A_HOST: readonly Action[] = [
   'workspace.create', 'workspace.enter', 'workspace.confirm', 'workspace.leave',
   'workspace.billing', 'workspace.transfer', 'workspace.delete', 'workspace.domain',
   'token.issue.own', 'token.revoke.any', 'agent.connect', 'agent.manage',
+  /* People let in or given a role, and what sends the workspace's work out
+     of it — webhooks, Slack, GitHub (behind `audit.read`), a room's
+     incoming hooks, a public feedback page: each outlives the session. A
+     document shared to the web is not here: sharing a link is the work. */
+  'people.invite', 'people.role', 'audit.read', 'hook.manage', 'feedback.manage',
   'operator', 'instance',
 ]
 
