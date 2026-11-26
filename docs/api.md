@@ -1512,7 +1512,11 @@ know one person mean. `GET /api/tasks/:id/card` answers `assignees: [{ id,
 name, avatar_url }]` beside the first one's `assignee_name` and
 `assignee_avatar_url`.
 
-**`POST /api/projects`** answers `{ id, name, tools, slug, key }`. The slug
+**`POST /api/projects`** answers `{ id, name, tools, slug, key }`. Whoever
+makes a project — by `POST /api/projects`, the sample, a copy, or an import
+from Slack or Linear — is put on it holding every right
+(`RIGHTS_OF_ITS_MAKER`: `manage` and the five it carries); people an import
+puts on it arrive with the ordinary two. The slug
 and the key are filled by the database — what is free depends on what is
 already there — so answering with the id alone meant a second request before
 anybody could open what they had just made.

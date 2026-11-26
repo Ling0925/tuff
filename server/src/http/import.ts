@@ -1,3 +1,4 @@
+import { RIGHTS_OF_ITS_MAKER } from '@tracker/shared-schema'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { v7 as uuidv7 } from 'uuid'
@@ -220,8 +221,8 @@ importer.post('/import/:source', async (c) => {
     await tx`
       insert into project (id, workspace_id, name) values (${projectId}, ${ctx.workspaceId}, ${plan.name})`
     await tx`
-      insert into project_member (id, workspace_id, project_id, actor_id, added_by)
-      values (${uuidv7()}, ${ctx.workspaceId}, ${projectId}, ${ctx.actorId}, ${ctx.actorId})`
+      insert into project_member (id, workspace_id, project_id, actor_id, added_by, rights)
+      values (${uuidv7()}, ${ctx.workspaceId}, ${projectId}, ${ctx.actorId}, ${ctx.actorId}, ${[...RIGHTS_OF_ITS_MAKER]})`
     await tx`
       insert into conversation (id, workspace_id, project_id, name)
       values (${uuidv7()}, ${ctx.workspaceId}, ${projectId}, 'main')`

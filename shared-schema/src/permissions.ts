@@ -317,6 +317,15 @@ export type Right = z.infer<typeof Right>
 /** What somebody added to a project arrives with. */
 export const RIGHTS_ON_JOINING: readonly Right[] = ['task.create', 'channel.create']
 
+/**
+ * What whoever makes a project holds on it: every right, which `manage`
+ * carries anyway. A member who starts a project runs it — decides who is on
+ * it, its tools, its settings — and was arriving on it with nothing at all,
+ * the column's empty default, so the one person who wanted the project could
+ * not invite anybody to it or even make a task there.
+ */
+export const RIGHTS_OF_ITS_MAKER: readonly Right[] = Right.options
+
 /** What `manage` carries, because those powers are about the project itself. */
 const MANAGING: readonly Action[] = ['project.archive', 'project.member.remove', 'project.tools', 'time.any', 'feedback.manage']
 
