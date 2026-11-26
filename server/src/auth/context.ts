@@ -332,6 +332,11 @@ async function sessionAlive(sid: string): Promise<boolean> {
  * which otherwise went on hearing everything after its person signed out.
  */
 export async function alive(ctx: AuthContext): Promise<boolean> {
+  /* Made on a workspace's own domain that no longer opens this workspace —
+     the plan dropped, the name removed or taken: the same question the API
+     asks (`authenticate`), so a socket does not outlive what a request may
+     not do. */
+  if (ctx.host && !(edition.hosts && (await edition.hosts.answers(ctx.host, ctx.workspaceId).catch(() => false)))) return false
   /* And still in the workspace: removing somebody left a socket of theirs
      open as long as the session behind it lived —
      `docs/specs/removing-someone.md`. */

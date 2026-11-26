@@ -64,6 +64,7 @@ export const AUTH_DEFINERS = [
   'digest_off',
   'github_person_retoken',
   'github_person_token',
+  'host_code_live',
   'host_code_make',
   'host_code_spend',
   'host_code_try',

@@ -655,7 +655,8 @@ app.use('/api/*', async (c, next) => {
      account rather than the workspace: the password, the address, the
      second factor, the devices signed in, the ways in, an agent's
      connection, the account's data and its deletion — wherever it is used. */
-  if (ctx.host && ACCOUNT_ONLY.test(c.req.path)) return c.json(NOT_ON_A_HOST, 403)
+  if (ctx.host && (ACCOUNT_ONLY.test(c.req.path) || (c.req.method !== 'GET' && SENT_OUT.test(c.req.path))))
+    return c.json(NOT_ON_A_HOST, 403)
   /* A token held back by the edition does nothing, and says why, to the
      agent holding it — which says it to the person. On your own server,
      never. */
@@ -670,7 +671,11 @@ app.use('/api/*', async (c, next) => {
 })
 
 /* What belongs to the account, never to a session made on a host. */
-const ACCOUNT_ONLY = /^\/api\/(me\/(password|email|inbox-code|ways-in|delete|export)|2fa|sessions|oauth\/authorize|invite|push)(\/|$)/
+const ACCOUNT_ONLY =
+  /^\/api\/(me\/(password|email|inbox-code|ways-in|delete|export|invitations|unconfirmed)|github\/me|2fa|sessions|oauth\/authorize|invite|push)(\/|$)/
+/* And, from a project, a link that sends its work out of the workspace — a
+   Slack channel, a GitHub repository — made or taken away. */
+const SENT_OUT = /^\/api\/projects\/[^/]+\/(slack|github)$/
 const NOT_ON_A_HOST = {
   error: { code: 'not_on_a_host', message: 'Open Tuff at usetuff.com to change this.' },
 } as const

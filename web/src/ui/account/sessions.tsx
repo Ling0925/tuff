@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
+import { onHost } from '../../data/host.js'
 import { dayMonth, HEADS, MORE, SAYS } from '../../data/words.js'
 import { ACCOUNT as W } from '../../words/account.jsx'
 import { api } from '../../data/api.js'
@@ -196,6 +197,8 @@ export function Sessions() {
  */
 let pushAsk: Promise<void> | null = null
 export function warmPush(): Promise<void> {
+  /* Nothing is asked about push on a workspace's own domain. */
+  if (onHost()) return Promise.resolve()
   pushAsk ??= ahead<{ key: string | null }>('/push')
     .then(async (r) => void remember('push:state', await pushState(r.key)))
     .catch(() => {})

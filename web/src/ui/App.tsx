@@ -844,7 +844,9 @@ export function App() {
                 here to change. */}
                             <Face me={me} onChanged={load} />
                             <Tongue />
-                            <Notifications />
+                            {/* This device's notifications are push, which a workspace's
+                own domain does not offer. */}
+                            {!host && <Notifications />}
                             {/* On a workspace's own domain, what belongs to the account is
                 changed at usetuff.com. */}
                             {host ? (
