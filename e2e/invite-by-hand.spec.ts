@@ -1,20 +1,19 @@
 import { test, expect, type Page } from '@playwright/test'
-import { drawnWhole, login, PASSWORD } from './helpers.js'
+import { drawnWhole, login, PASSWORD, withoutMail } from './helpers.js'
 
 /*
  * An invitation handed over by hand.
  *
  * Only against a server of one's own with no mail set up: that is the one
  * place the invitation answers with its link, and the service never does.
- * The check's server is the service's edition, so this is skipped there and
- * says so. To run it, start the server with `edition.community.ts` in
- * `edition.ts`'s place, on a database of its own, no `SMTP_URL` and no
- * `RESEND_API_KEY`, with an owner who signed in once (E2E_EMAIL, the usual
- * password), then:
- *
- *   E2E_COMMUNITY=1 E2E_EMAIL=owner@example.com npx playwright test e2e/invite-by-hand.spec.ts
+ * So it asks the server what the screens ask (`withoutMail`) and skips
+ * itself anywhere else, saying so — the service's check among them. The
+ * community edition's own check starts its server with no mail, and there
+ * it runs with the rest.
  */
-test.skip(!process.env.E2E_COMMUNITY, 'needs a server of one’s own with no mail — E2E_COMMUNITY=1, see the top of this file')
+test.beforeEach(async () => {
+  test.skip(!(await withoutMail()), 'needs a server of one’s own with no mail set up')
+})
 
 const me = (page: Page) =>
   page.evaluate(async () => {

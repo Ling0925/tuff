@@ -228,6 +228,10 @@ export const ERRORS_FR: Record<string, string> = {
   'You’re the only one in this channel. Delete it instead.': 'Vous êtes la seule personne de ce canal. Supprimez-le plutôt.',
   'You own this workspace. Hand it over to someone else before you leave.':
     'Vous êtes propriétaire de cet espace de travail. Transférez-le à quelqu’un d’autre avant de partir.',
+  'This workspace isn’t waiting for an answer.': 'Cet espace de travail n’attend pas de réponse.',
+  'Say join or leave.': 'Indiquez rejoindre ou quitter.',
+  'You own this workspace, so you can’t leave it. Join it to hand it over.':
+    'Vous êtes propriétaire de cet espace de travail, vous ne pouvez donc pas le quitter. Rejoignez-le pour le transférer.',
   'Connected tools can’t turn on notifications.': 'Les outils connectés ne peuvent pas activer les notifications.',
   'Connected tools can’t send notifications.': 'Les outils connectés ne peuvent pas envoyer de notifications.',
   'Sign in again to turn on notifications on this device.': 'Reconnectez-vous pour activer les notifications sur cet appareil.',
@@ -299,6 +303,7 @@ export const ERRORS_FR: Record<string, string> = {
   'Only whoever installed the app on GitHub can connect it.':
     'Seule la personne qui a installé l’application sur GitHub peut la connecter.',
   'That repository is linked to another project.': 'Ce dépôt est lié à un autre projet.',
+  'A sample project can’t be linked to a repository.': 'Un projet d’exemple ne peut pas être lié à un dépôt.',
   'Somebody you chose isn’t on this project.': 'Une des personnes choisies ne fait pas partie de ce projet.',
   'That sprint belongs to another project.': 'Ce sprint appartient à un autre projet.',
   'A task can’t wait on itself.': 'Une tâche ne peut pas s’attendre elle-même.',
@@ -347,6 +352,8 @@ export const ERRORS_FR: Record<string, string> = {
   /* An invitation sent again. */
   'Too many invitations sent today. Try again tomorrow.': 'Trop d’invitations envoyées aujourd’hui. Réessayez demain.',
   'Couldn’t send the invitation. Try again.': 'Impossible d’envoyer l’invitation. Réessayez.',
+  'This invitation’s email address isn’t valid. Revoke it and invite again.':
+    'L’adresse e-mail de cette invitation n’est pas valide. Révoquez-la et invitez à nouveau.',
   'You can only invite people onto projects you are on.':
     'Vous ne pouvez inviter des personnes que dans les projets dont vous faites partie.',
   'Use a PNG, JPEG, GIF or WebP image.': 'Utilisez une image PNG, JPEG, GIF ou WebP.',
@@ -370,6 +377,9 @@ export const ERRORS_FR: Record<string, string> = {
   'Give a project or a conversation, and 1 to 50 task handles like ACM-41, separated by commas.':
     'Indiquez un projet ou une conversation, et de 1 à 50 identifiants de tâche comme ACM-41, séparés par des virgules.',
   'Only a written document can be shared to the web.': 'Seul un document rédigé peut être partagé sur le Web.',
+  /* An announcement kept as a draft. */
+  'A draft has no schedule.': 'Un brouillon ne peut pas être programmé.',
+  'Publish it before anyone can reply.': 'Publiez-la avant que quiconque puisse y répondre.',
   /* Who a document is for. */
   'Publish this document to everyone on the project before sharing it to the web.':
     'Publiez ce document pour toutes les personnes du projet avant de le partager sur le Web.',
@@ -378,6 +388,13 @@ export const ERRORS_FR: Record<string, string> = {
   // A list an agent takes.
   'Choose an agent on this project.': 'Choisissez un agent de ce projet.',
   'A list that finishes tasks can’t have an agent.': 'Une liste qui termine les tâches ne peut pas avoir d’agent.',
+  'This link is for another account. Sign in to the account that asked for the change, then confirm.':
+    'Ce lien est destiné à un autre compte. Connectez-vous au compte qui a demandé le changement, puis confirmez.',
+  'Open this link in a browser and confirm the change there.': 'Ouvrez ce lien dans un navigateur et confirmez le changement.',
+  'Open this link in a browser signed in to the account that asked for the change, and confirm it there.':
+    'Ouvrez ce lien dans un navigateur connecté au compte qui a demandé le changement, et confirmez-le.',
+  'Open this link in a browser and approve the change there.': 'Ouvrez ce lien dans un navigateur et approuvez le changement.',
+  'Open the link from the email and press Confirm.': 'Ouvrez le lien de l’e-mail et appuyez sur Confirmer.',
   'a list is taken only by an agent of its workspace': 'Seul un agent de cet espace de travail peut prendre une liste.',
   'Only a written document holds pictures and files.': 'Seul un document rédigé peut contenir des images et des fichiers.',
   'Only a written document can be a template.': 'Seul un document rédigé peut servir de modèle.',
@@ -576,6 +593,9 @@ export const ERRORS_ZH: Record<string, string> = {
   'You can’t leave a direct message, but you can hide it.': '你不能退出私信，但可以将其隐藏。',
   'You’re the only one in this channel. Delete it instead.': '你是此频道中唯一的人。请改为删除频道。',
   'You own this workspace. Hand it over to someone else before you leave.': '你是此工作区的所有者。请先转让给他人再退出。',
+  'This workspace isn’t waiting for an answer.': '此工作区没有在等待回复。',
+  'Say join or leave.': '请指明加入或退出。',
+  'You own this workspace, so you can’t leave it. Join it to hand it over.': '你拥有此工作区，所以不能退出。加入后才能转让。',
   'Connected tools can’t turn on notifications.': '已连接的工具无法开启通知。',
   'Connected tools can’t send notifications.': '已连接的工具无法发送通知。',
   'Sign in again to turn on notifications on this device.': '请重新登录以在此设备上开启通知。',
@@ -637,6 +657,7 @@ export const ERRORS_ZH: Record<string, string> = {
   'Waiting for GitHub. Try again in a moment.': '正在等待 GitHub。请稍后再试。',
   'Only whoever installed the app on GitHub can connect it.': '只有在 GitHub 上安装该应用的人可以连接。',
   'That repository is linked to another project.': '该仓库已关联到另一个项目。',
+  'A sample project can’t be linked to a repository.': '示例项目不能关联仓库。',
   'Somebody you chose isn’t on this project.': '你选择的某人不在该项目中。',
   'That sprint belongs to another project.': '该迭代属于另一个项目。',
   'A task can’t wait on itself.': '任务不能等待自身。',
@@ -674,6 +695,7 @@ export const ERRORS_ZH: Record<string, string> = {
   'Only a link has an address to change.': '只有链接才有可更改的地址。',
   'Too many invitations sent today. Try again tomorrow.': '今天发送的邀请过多。请明天再试。',
   'Couldn’t send the invitation. Try again.': '无法发送邀请，请重试。',
+  'This invitation’s email address isn’t valid. Revoke it and invite again.': '此邀请的邮箱地址无效。请撤销后重新邀请。',
   'You can only invite people onto projects you are on.': '你只能邀请他人加入你所在的项目。',
   'Use a PNG, JPEG, GIF or WebP image.': '请使用 PNG、JPEG、GIF 或 WebP 图片。',
   'Pick one of the faces.': '请选择一个头像。',
@@ -694,11 +716,20 @@ export const ERRORS_ZH: Record<string, string> = {
   'Give a project or a conversation, and 1 to 50 task handles like ACM-41, separated by commas.':
     '请提供项目或对话，以及 1–50 个任务编号（如 ACM-41），用逗号分隔。',
   'Only a written document can be shared to the web.': '只有撰写的文档才能共享到网络。',
+  'A draft has no schedule.': '草稿不能设置日程。',
+  'Publish it before anyone can reply.': '发布后才能有人回复。',
   'Publish this document to everyone on the project before sharing it to the web.': '请先将此文档发布给项目中的所有成员，再共享到网络。',
   'Only a written document can be kept to some people.': '只有撰写的文档才能限定给部分人。',
   'Choose people who are on this project.': '请选择该项目中的成员。',
   'Choose an agent on this project.': '请选择该项目中的代理。',
   'A list that finishes tasks can’t have an agent.': '完成任务的列表不能有代理。',
+  'This link is for another account. Sign in to the account that asked for the change, then confirm.':
+    '此链接属于另一个账户。请登录请求更改的账户，然后确认。',
+  'Open this link in a browser and confirm the change there.': '请在浏览器中打开此链接并确认更改。',
+  'Open this link in a browser signed in to the account that asked for the change, and confirm it there.':
+    '请在已登录请求更改账户的浏览器中打开此链接并确认。',
+  'Open this link in a browser and approve the change there.': '请在浏览器中打开此链接并批准更改。',
+  'Open the link from the email and press Confirm.': '请打开邮件中的链接并点击「确认」。',
   'a list is taken only by an agent of its workspace': '列表只能由其工作区中的代理领取',
   'Only a written document holds pictures and files.': '只有撰写的文档可以包含图片和文件。',
   'Only a written document can be a template.': '只有撰写的文档可以用作模板。',
@@ -759,6 +790,8 @@ export const ERRORS_FR_LIKE: [RegExp, (m: RegExpExecArray) => string][] = [
     /^You can have (\d+) tokens at a time\. Revoke one you don’t use to make another\.$/,
     (m) => `Vous pouvez avoir ${m[1]} jetons à la fois. Révoquez-en un que vous n’utilisez pas pour en créer un autre.`,
   ],
+  /* `waysIn.ts`: a server's own provider that could not be read, by its name (`OIDC_NAME`). */
+  [/^Couldn’t reach (.+)\. Try again later\.$/, (m) => `Impossible de joindre ${m[1]}. Réessayez plus tard.`],
 ]
 
 /* And the edition's own routes' (`edition.errorsFr`); on your own server,
@@ -781,6 +814,7 @@ export const ERRORS_ZH_LIKE: [RegExp, (m: RegExpExecArray) => string][] = [
     /^You can have (\d+) tokens at a time\. Revoke one you don’t use to make another\.$/,
     (m) => `最多同时拥有 ${m[1]} 个令牌。请撤销一个不再使用的令牌以创建新的。`,
   ],
+  [/^Couldn’t reach (.+)\. Try again later\.$/, (m) => `无法连接 ${m[1]}。请稍后再试。`],
 ]
 
 /** The same, in Simplified Chinese: `frenchError`, and this file's and

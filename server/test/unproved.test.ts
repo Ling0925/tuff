@@ -195,14 +195,17 @@ test('changing the address while unproved sends the new address the letter that 
   const moved = `moved-${stamp()}@example.com`
   const t = generateToken('eml')
   await asAuth((tx) => tx`select auth_email_ticket(${hashToken(t)}, 'email', ${id}, ${moved}, interval '1 day')`)
-  const r = await send('/auth/verify', null, { token: t })
+  /* Pressed from the account's own session. */
+  const r = await send('/api/me/email/confirm', acc.body.access_token as string, { token: t, pressed: true })
   assert.equal(r.status, 200, JSON.stringify(r.body))
   assert.equal(r.body.changed, true)
   // The confirmation took the password typed before; the new address chooses one.
   const chs = chooseLink(moved)
   assert.ok(chs, 'a letter to the new address')
   assert.equal((await send('/auth/password/reset', null, { token: chs, password: 'chosen-at-the-new-one' })).status, 200)
-  assert.equal((await send('/auth/login', null, { email: moved, password: 'chosen-at-the-new-one' })).status, 200)
+  /* Into no workspace: the one the link put the account in waits for its
+     Join (`password-after-proof.md`, "Workspaces joined before the proof"). */
+  assert.equal((await send('/auth/login', null, { email: moved, password: 'chosen-at-the-new-one', nowhere: true })).status, 200)
 })
 
 test('a GitHub account linked while the address was unproved is not linked after its proof', async () => {

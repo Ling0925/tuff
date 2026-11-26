@@ -43,10 +43,28 @@ export const BoardCard = memo(function BoardCard({
   col,
   taken,
   fns,
+  slot = t.id,
+  landing = false,
 }: {
   t: Task
   col: string
   taken: boolean
+  /** What the drag knows it by, where one task is drawn in two columns —
+      the people view's `column/task`. The task's own id everywhere else. */
+  slot?: string
+  /**
+   * The copy of it is still flying home to it — `useDrag`, `settling`.
+   *
+   * Held in its place but not drawn until the copy lands: drawn at once, it
+   * stood finished in its slot while the copy was still on its way, so for
+   * the length of the flight there were two of it on the screen — two
+   * titles, two faces — and the copy then slid over the real one. Measured
+   * frame by frame on a drop below a column's last card: the landed card's
+   * face drawn in the first frame after the release, the copy's face
+   * eighty pixels away, and the copy's body passing over the landed face on
+   * its way in. That doubled face was the flicker on release.
+   */
+  landing?: boolean
   /** Changes when anything a card draws changes; read by `memo`, not here. */
   look: object
   /** Its parts' count, which lives outside the task. */
@@ -60,8 +78,8 @@ export const BoardCard = memo(function BoardCard({
         e.preventDefault()
         fns.current.setOnTask({ id: t.id, x: e.clientX, y: e.clientY })
       }}
-      data-slot={t.id}
-      data-card={t.id}
+      data-slot={slot}
+      data-card={slot}
       /* Read ahead, as a row in the list does: under the
          pointer on a desk, on the first touch on a phone. */
       onPointerEnter={() => near(t.id)}
@@ -166,6 +184,7 @@ export const BoardCard = memo(function BoardCard({
          * that tells you it can be moved.
          */
         cursor: 'default',
+        visibility: landing ? 'hidden' : undefined,
       }}
     >
       {fns.current.card(t, col)}

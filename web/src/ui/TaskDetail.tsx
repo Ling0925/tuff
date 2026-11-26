@@ -818,7 +818,12 @@ export function TaskDetail({
 
   const assigned = whoOf(task)
   /* The first agent it is given to, to talk to without leaving it. */
-  const agentOn = doors?.beside ? assigned.map((id) => people.find((p) => p.actor_id === id)).find((p) => p?.agent) : undefined
+  /* Who a message beside the task goes to: an agent on it first, as it
+     always was — it is the one asked about its work — and otherwise
+     somebody else on it, so the person the task is given to is one press
+     away too. Never yourself. */
+  const onIt = assigned.map((id) => people.find((p) => p.actor_id === id)).filter((p) => p && p.actor_id !== meId)
+  const talkTo = doors?.beside ? (onIt.find((p) => p?.agent) ?? onIt[0]) : undefined
   /* An agent at it now. */
   const working = workingAgent(task, underWay(lists.find((l) => l.id === task.list_id)?.icon), people)
 
@@ -1314,7 +1319,26 @@ export function TaskDetail({
                 {/* Everybody it is given to: pressing a person puts them on or
                 takes them off, and Nobody takes everybody off.
                 The menu every row has. */}
-                <Fact chip={chips} icon="person" label={MORE.assigned} testId="task-assignees">
+                <Fact
+                  chip={chips}
+                  icon="person"
+                  label={MORE.assigned}
+                  testId="task-assignees"
+                  after={
+                    talkTo && (
+                      <button
+                        type="button"
+                        data-testid="talk-beside"
+                        aria-label={CHAT.messageWho(talkTo.name)}
+                        title={CHAT.messageWho(talkTo.name)}
+                        onClick={() => doors?.beside?.open(talkTo.actor_id)}
+                        className="flex size-8 shrink-0 items-center justify-center rounded-full text-ink-2 transition-[color,background-color,transform] bg-track active:scale-[0.94] mouse:hover:bg-[var(--hover)] mouse:hover:text-ink"
+                      >
+                        <Icon name="bubble" size={16} />
+                      </button>
+                    )
+                  }
+                >
                   <WhoPick
                     people={people}
                     value={assigned}
@@ -1338,18 +1362,6 @@ export function TaskDetail({
                       </span>
                     }
                   />
-                  {agentOn && (
-                    <button
-                      type="button"
-                      data-testid="talk-beside"
-                      aria-label={CHAT.messageWho(agentOn.name)}
-                      title={CHAT.messageWho(agentOn.name)}
-                      onClick={() => doors?.beside?.open(agentOn.actor_id)}
-                      className="-mr-1 flex size-6 shrink-0 items-center justify-center rounded-full text-ink-3 transition-[color,transform] active:scale-[0.94] mouse:hover:text-ink"
-                    >
-                      <Icon name="bubble" size={16} />
-                    </button>
-                  )}
                 </Fact>
                 <Fact chip={chips} snug={(task.labels ?? []).length === 1} icon="tag" label={FACTS.labels}>
                   <LabelPick

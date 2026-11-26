@@ -27,6 +27,16 @@ test('the Apple app is the one APPLE_APP_ID names, and none on a server that nam
     const said = (await r.json()) as { applinks: { details: { appIDs: string[] }[] }; webcredentials: { apps: string[] } }
     assert.deepEqual(said.applinks.details[0]?.appIDs, ['TEAM123456.org.example.tuff'])
     assert.deepEqual(said.webcredentials.apps, ['TEAM123456.org.example.tuff'])
+    /* A change of address's links stay the browser's, where they are
+       pressed; every other confirmation link is still the app's. */
+    const rules = (said.applinks.details[0] as unknown as { components: { '/': string; exclude?: boolean }[] }).components
+    for (const path of ['/verify/eml_*', '/verify/apv_*']) {
+      assert.equal(rules.find((r) => r['/'] === path)?.exclude, true, path)
+    }
+    assert.equal(
+      rules.some((r) => r['/'] === '/verify/*'),
+      false,
+    )
   } finally {
     if (was === undefined) delete process.env.APPLE_APP_ID
     else process.env.APPLE_APP_ID = was

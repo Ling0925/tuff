@@ -402,3 +402,56 @@ test('a task deleted is words again in its document, and comes back a chip when 
   await expect(body.locator('[data-task-chip]')).not.toHaveAttribute('data-gone', 'true', { timeout: 15_000 })
   await expect(body.locator('[data-task-chip] [data-task-tick]')).toBeVisible()
 })
+
+/* A chip that wraps keeps a gap between its lines' tints, in a heading as in
+   the body: at the old padding a heading's two tints lay over each other. */
+test('a chip wrapped over two lines keeps its tints apart, in a heading and in the body', async ({ page }) => {
+  await page.setViewportSize({ width: 700, height: 900 })
+  await login(page)
+  const api = <T>(method: string, path: string, body?: unknown) =>
+    page.evaluate(
+      async ([method, path, body]) => {
+        const s = JSON.parse(localStorage.getItem('session') ?? 'null') as { access_token: string }
+        const r = await fetch(`/api${path}`, {
+          method,
+          headers: { authorization: `Bearer ${s.access_token}`, 'x-api-version': '1', 'content-type': 'application/json' },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        })
+        return (await r.json()) as T
+      },
+      [method, path, body] as const,
+    ) as Promise<T>
+  const { projects } = await api<{ projects: { id: string; slug: string; key: string; name: string }[] }>('GET', '/projects')
+  const site = projects.find((p) => p.name === 'Website')!
+  const title = `The session is renewed ahead of time, not after a burst of refusals ${Date.now()}`
+  const made = await api<{ id?: string; task?: { id: string; number: number }; number?: number }>('POST', `/projects/${site.id}/tasks`, {
+    title,
+  })
+  const taskId = made.id ?? made.task!.id
+  const task = await api<{ task: { number: number } }>('GET', `/tasks/${taskId}`)
+  const chip = { type: 'taskref', attrs: { id: taskId, projectId: site.id, number: task.task.number, key: site.key, title } }
+  const body = {
+    type: 'doc',
+    content: [
+      { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'What the review found ' }, chip] },
+      { type: 'paragraph', content: [{ type: 'text', text: 'And in the words of a paragraph, ' }, chip] },
+    ],
+  }
+  const file = await api<{ id: string }>('POST', `/projects/${site.id}/files`, { name: `Chips ${Date.now()}`, body })
+  const read = await api<{ file: { number: number } }>('GET', `/files/${file.id}`)
+  const ws = new URL(page.url()).pathname.split('/')[1]
+  await page.goto(`/${ws}/${site.slug}/files/${read.file.number}`)
+  for (const where of ['h2', 'p']) {
+    const el = page.locator(`.ProseMirror ${where} [data-task-chip]`).first()
+    await expect(el).toBeVisible({ timeout: 15_000 })
+    /* Polled: the chip's view is drawn again once its task is read, and a
+       read taken between the two found a node with no boxes at all. */
+    await expect
+      .poll(() => el.evaluate((n) => n.getClientRects().length), { message: `the chip in the ${where} wraps`, timeout: 5_000 })
+      .toBeGreaterThan(1)
+    const rects = await el.evaluate((n) => [...n.getClientRects()].map((r) => ({ top: r.top, bottom: r.bottom })))
+    for (let i = 1; i < rects.length; i++) {
+      expect(rects[i]!.top - rects[i - 1]!.bottom, `the ${where} chip's line ${i} lies over the one above`).toBeGreaterThan(0)
+    }
+  }
+})

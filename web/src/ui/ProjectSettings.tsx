@@ -84,6 +84,7 @@ export function ProjectSettings({
     icon_url?: string | null | undefined
     mark_icon?: string | null | undefined
     mark_tint?: number | null | undefined
+    sample?: boolean | undefined
   }
   can: string[]
   onChanged: () => Promise<void>
@@ -521,8 +522,10 @@ export function ProjectSettings({
           />
         )}
 
-        {/* Its repository on GitHub. */}
-        {tools.includes('tasks') && <ProjectGithub projectId={project.id} may={mayTools} />}
+        {/* Its repository on GitHub. Not for a
+            sample, which anybody on it deletes for good in one press: the
+            server refuses it one. */}
+        {tools.includes('tasks') && !project.sample && <ProjectGithub projectId={project.id} may={mayTools} />}
 
         {/* The Slack channel it posts its news to. */}
         <ProjectSlack projectId={project.id} may={mayTools} />

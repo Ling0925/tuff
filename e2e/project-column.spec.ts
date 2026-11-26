@@ -204,3 +204,79 @@ test('a tool lit under the pointer in the sidebar goes dark when its rows fold a
   await expect(files).toBeHidden()
   await expect.poll(lit).not.toContain(where)
 })
+
+test('a project opened from behind "n more" takes the last place before it, and its tools fold under it', async ({ page }) => {
+  /* The window's own height, on purpose: the point is a column that cuts. */
+  test.setTimeout(60_000)
+  await login(page)
+  const rows = page.locator('aside [data-project]')
+  await rows.first().waitFor({ timeout: 30_000 })
+  /* The projects' own "n more" — the rooms' list has one too. */
+  const more = page.locator('aside [data-order-list]:has([data-project]) > [data-testid="show-more"]')
+
+  /* More projects than the column has room for, made through the API only
+     if the studio has not got them already, and put away again after. */
+  const token = await page.evaluate(() => JSON.parse(localStorage.getItem('session')!).access_token as string)
+  const h = { authorization: `Bearer ${token}`, 'x-api-version': '1', 'content-type': 'application/json' }
+  const made: string[] = []
+  const stamp = Date.now()
+  for (let round = 0; round < 4 && (await more.count()) === 0; round++) {
+    for (let i = 0; i < 6; i++) {
+      const r = await page.request.post('/api/projects', { headers: h, data: { name: `Crowd ${stamp} ${round}${i}` } })
+      expect(r.ok()).toBe(true)
+      made.push(((await r.json()) as { id: string }).id)
+    }
+    await page.reload()
+    await rows.first().waitFor({ timeout: 30_000 })
+    await more.waitFor({ timeout: 3_000 }).catch(() => {})
+  }
+  await expect(more).toHaveAttribute('aria-expanded', 'false')
+
+  /* Where each row is, the column scrolled to its head: pressing a row in
+     the open list may have scrolled it, and that is not a row moving. */
+  const drawn = async () => {
+    await page
+      .locator('aside [data-fluid]')
+      .first()
+      .evaluate((el) => (el.scrollTop = 0))
+    return rows.evaluateAll((els) =>
+      els.map((e) => ({ id: (e as HTMLElement).dataset.order!, y: Math.round(e.getBoundingClientRect().top) })),
+    )
+  }
+  const before = await drawn()
+  const said = (await more.textContent())!.trim()
+
+  // The last project in the order is behind "n more".
+  await more.click()
+  const all = await rows.evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.order!))
+  const last = all[all.length - 1]!
+  expect(before.map((r) => r.id)).not.toContain(last)
+  await page.locator(`aside [data-project][data-order="${last}"]`).click()
+  await expect(page.getByTestId('tool-tasks')).toBeVisible({ timeout: 30_000 })
+  await more.click()
+  await expect(more).toHaveAttribute('aria-expanded', 'false')
+
+  /* In the column now, lit, in the last place before "n more": as many rows
+     as before, every other one where it was, and "n more" counting the same. */
+  const open = page.locator(`aside [data-project][data-order="${last}"]`)
+  await expect(open).toBeVisible()
+  await expect(page.locator(`aside [data-project][data-selected][data-order="${last}"]`)).toBeVisible()
+  const after = await drawn()
+  expect(after).toHaveLength(before.length)
+  expect(after.slice(0, -1)).toEqual(before.slice(0, -1))
+  expect(after[after.length - 1]).toEqual({ id: last, y: before[before.length - 1]!.y })
+  await expect(more).toHaveText(said)
+
+  // So its tools have somewhere to fold into, and do.
+  await page.getByTestId('tools-fold').click()
+  await expect(page.locator('[data-tools-column]')).toHaveAttribute('data-folded', '')
+  const tool = page.locator('aside [data-fold-tools] [data-side-tool]').first()
+  await expect(tool).toBeVisible()
+  const row = (await open.boundingBox())!
+  expect((await tool.boundingBox())!.y).toBeGreaterThan(row.y + row.height - 1)
+  expect(await drawn()).toEqual(after)
+
+  // Back as it was: the column open, and the projects made here put away.
+  await page.getByTestId('tools-fold').click()
+  for (const id of made) await page.request.post(`/api/projects/${id}/archive`, { headers: h })
+})

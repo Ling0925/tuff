@@ -14,6 +14,7 @@ import { NewChannel } from './newChannel.jsx'
 import { RoomPeople, FirstAndMore } from './roomPeople.jsx'
 import { type ChatProps } from '../Chat.jsx'
 import { type RoomHistory } from './useRoomHistory.js'
+import { ROOM_KEEPS, useThreadWidth } from './threadWidth.js'
 
 /**
  * What is done in a room: sending, threads, finding a message, reacting,
@@ -283,21 +284,22 @@ export function useRoomTools({
    */
   const frame = useRef<HTMLDivElement | null>(null)
   const [beside, setBeside] = useState(true)
+  const threadW = useThreadWidth()
   useLayoutEffect(() => {
     const host = frame.current?.parentElement
     if (!host) return
     /* The room keeps four hundred and some — a short line, but a line —
-       beside a thread of 360 and the gap between them. */
+       beside the thread, at whatever width the reader gave it. */
     const measure = () => {
       const pad = getComputedStyle(host)
       const inner = host.clientWidth - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight)
-      setBeside(inner >= 820)
+      setBeside(inner >= ROOM_KEEPS + threadW)
     }
     measure()
     const watch = new ResizeObserver(measure)
     watch.observe(host)
     return () => watch.disconnect()
-  }, [])
+  }, [threadW])
   /* The bar over the room widens with it while a thread is beside it. */
   const wideNow = Boolean(head && beside)
   useEffect(() => {

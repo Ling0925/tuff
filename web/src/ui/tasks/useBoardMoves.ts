@@ -2,7 +2,7 @@ import { useRef, useCallback, useState, useEffect } from 'react'
 import { api } from '../../data/api.js'
 import { isKey } from '../../data/keys.js'
 import { type Spot, columnAt, slid, useBoardDrag } from '../useDrag.js'
-import { type Task, chainKeys, takenBy } from './model.jsx'
+import { type Task, chainKeys, takenBy, given } from './model.jsx'
 import { type TasksProps } from '../Tasks.jsx'
 import { type TaskData } from './useTaskData.js'
 
@@ -249,7 +249,14 @@ export function useBoardMoves({
    * cards, delete one" undid the move and the delete at once. One stack and
    * one key: the press takes back the last thing done, whichever it was.
    */
-  type Step = { kind: 'move'; back: Back[] } | { kind: 'delete'; ids: string[] }
+  /* And a card carried on the board of members: taken back, the task is
+     given to whoever had it before and, when the drop placed it, put back
+     after the card that was above it in its list — one `PATCH`, the one
+     the drop sent. */
+  type Step =
+    | { kind: 'move'; back: Back[] }
+    | { kind: 'delete'; ids: string[] }
+    | { kind: 'assign'; id: string; before: string[]; after?: string | null; key?: string; list?: string | null }
   const undone = useRef<Step[]>([])
   /** The last delete, while the toast still offers it back. */
   const [undo, setUndo] = useState<{ ids: string[]; said: string } | null>(null)
@@ -398,6 +405,16 @@ export function useBoardMoves({
     if (step.kind === 'delete') {
       setUndo((u) => (u && u.ids.join() === step.ids.join() ? null : u))
       void Promise.all(step.ids.map(back)).then(() => load())
+      return true
+    }
+    if (step.kind === 'assign') {
+      const placed = step.after !== undefined
+      const listed = step.list !== undefined
+      void patch(
+        step.id,
+        { ...given(step.before), ...(placed && step.key ? { sort_key: step.key } : {}), ...(listed ? { list_id: step.list ?? null } : {}) },
+        { ...given(step.before), ...(placed ? { after: step.after } : {}), ...(listed && step.list ? { list_id: step.list } : {}) },
+      )
       return true
     }
     const last = step.back

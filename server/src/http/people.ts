@@ -30,7 +30,13 @@ people.get('/people', async (c) => {
      the same connection rather than after it. */
   const [rows, doing] = await withActor(ctx.actorId, ctx.workspaceId, (tx) =>
     Promise.all([
-      tx`select m.actor_id, a.name, a.avatar_key, a.title, m.role, m.joined_at,
+      /* A member waiting for their own Join since their address was proved
+         (no `joined_at`) is shown by name and face, which every line the
+         account wrote here already shows, and nothing they keep for the
+         workspaces they are in: no title, and no presence, which would say
+         when they are online elsewhere — `password-after-proof.md`. */
+      tx`select m.actor_id, a.name, a.avatar_key, case when m.joined_at is not null then a.title end as title,
+              m.role, m.joined_at,
               m.may_create_projects, m.may_create_channels,
               m.may_see_members, m.may_invite_people, m.may_connect_agents,
               -- An agent is in the workspace as a person is, and drawn
@@ -38,7 +44,7 @@ people.get('/people', async (c) => {
               exists (select 1 from agent g where g.actor_id = m.actor_id and g.deleted_at is null) as agent,
               -- Here, away or busy -- docs/specs/presence.md. One function
               -- answers it so no screen invents its own threshold.
-              presence_of(a.seen_at, a.presence) as presence,
+              case when m.joined_at is not null then presence_of(a.seen_at, a.presence) end as presence,
               -- An agent's last visit, which a task it is working on shows.
               h.active_at
        from membership m
@@ -115,10 +121,13 @@ people.get('/people/:actorId', async (c) => {
 
   const found = await withActor(ctx.actorId, ctx.workspaceId, async (tx) => {
     const [person] = await tx`
-      select m.actor_id, a.name, a.avatar_key, a.title, m.role, m.joined_at,
-             presence_of(a.seen_at, a.presence) as presence,
+      select m.actor_id, a.name, a.avatar_key, case when m.joined_at is not null then a.title end as title,
+             m.role, m.joined_at,
+             -- None for a member waiting for their own Join, as in the list.
+             case when m.joined_at is not null then presence_of(a.seen_at, a.presence) end as presence,
              -- The email and the zone, through the one function that may
              -- read another person's account row: docs/specs/person-card.md.
+             -- Between joined members only (migration 315).
              card.email, card.timezone
       from membership m join actor a on a.id = m.actor_id
       left join lateral colleague_card(a.id) card on true
@@ -442,8 +451,10 @@ people.post('/me/leave', async (c) => {
         and m.deleted_at is null and m.joined_at is not null and w.deleted_at is null
       order by w.name limit 1`,
   )
-  if (!elsewhere) return c.json({ ok: true, session: await startNowhereSession(ctx.actorId, metaOf(c)), workspace: null })
-  const session = await startSession(ctx.actorId, elsewhere.id, metaOf(c), 'switch')
+  /* Dated from the check of the session this came from (`Meta.since`). */
+  const meta = { ...metaOf(c), since: ctx.checkedAt ?? null }
+  if (!elsewhere) return c.json({ ok: true, session: await startNowhereSession(ctx.actorId, meta), workspace: null })
+  const session = await startSession(ctx.actorId, elsewhere.id, meta, 'switch')
   return c.json({ ok: true, session, workspace: elsewhere })
 })
 

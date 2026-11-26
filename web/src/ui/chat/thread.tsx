@@ -185,27 +185,48 @@ export function ThreadPane({
   })
 
   return (
-    <div data-thread className={`flex min-h-0 min-w-px flex-col ${beside ? 'w-[360px] shrink-0' : 'flex-1'}`}>
+    <div
+      data-thread
+      className={`flex min-h-0 min-w-px flex-col ${beside ? 'shrink-0' : 'flex-1'}`}
+      /* Beside the room, the width the reader gave it — `threadWidth.ts`. */
+      style={beside ? { width: 'var(--thread-w, 360px)' } : undefined}
+    >
       {/* Clear of the line above it by what the room's own head stands
           off its bar's edge, sixteen, and drawn on a row as tall as the ×'s
           round so the two share one middle. The words start where the
           messages' faces do; the × keeps the pane's right edge, the edge
           the line to write in ends on. */}
       <div data-thread-head className={`flex h-8 shrink-0 items-center gap-2 pt-4 pb-2 box-content ${beside ? 'pl-3' : ''}`}>
-        {!beside && (
+        {beside ? (
+          <>
+            <span data-thread-title className="text-base font-medium text-ink">
+              {W.thread}
+            </span>
+            <span className="min-w-px truncate text-base text-ink-3">{roomName}</span>
+          </>
+        ) : (
+          /* Over the room, the whole head is the way back: the arrow, the
+             word and the room's name are one press, with one ground under
+             the pointer — the arrow alone was a sixteen-pixel target beside
+             words that looked like they ought to do something and did not.
+             Pulled out by its own padding so the arrow stays where it was. */
           <button
+            type="button"
             data-testid="close-thread"
             aria-label={MORE.backToTheChannel}
+            title={MORE.backToTheChannel}
             onClick={onClose}
-            className="flex size-6 shrink-0 items-center justify-center rounded-full text-ink-2"
+            className="-ml-2 flex h-8 min-w-px items-center gap-2 rounded-full pr-3 pl-2 transition-colors mouse:hover:bg-[var(--hover)]"
           >
-            <Icon name="chevL" size={16} />
+            <span className="flex size-6 shrink-0 items-center justify-center text-ink-2">
+              <Icon name="chevL" size={16} />
+            </span>
+            <span data-thread-title className="shrink-0 text-base font-medium text-ink">
+              {W.thread}
+            </span>
+            <span className="min-w-px truncate text-base text-ink-3">{roomName}</span>
           </button>
         )}
-        <span data-thread-title className="text-base font-medium text-ink">
-          {W.thread}
-        </span>
-        <span className="min-w-px truncate text-base text-ink-3">{roomName}</span>
         {beside && (
           <button
             data-testid="close-thread"

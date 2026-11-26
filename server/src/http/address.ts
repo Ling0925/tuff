@@ -2,8 +2,8 @@ import { Hono, type Context } from 'hono'
 import { z } from 'zod'
 import { asAuth } from '../db.js'
 import type { AuthContext } from '../auth/context.js'
-import { asksOf, byInbox, emailOf, itIsThem, mailCode, masked, sendForApproval, sendToNew } from '../auth/address.js'
-import { origin } from './access.js'
+import { asksOf, byInbox, emailOf, itIsThem, mailCode, masked, peekLink, sendForApproval, sendToNew } from '../auth/address.js'
+import { answerConfirmation, origin } from './access.js'
 import { reask } from './limits.js'
 import { heard } from '../words.js'
 
@@ -112,6 +112,49 @@ address.post('/me/email/again', async (c) => {
   else await sendToNew(origin(c), ctx.actorId, pending.email, heard(c))
   return c.json({ pending: pending.email }, 202)
 })
+
+const Confirm = z.object({ token: z.string().min(10).max(512), pressed: z.literal(true) })
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const notThisAccount = (c: Context) =>
+  c.json(
+    {
+      error: {
+        code: 'not_this_account',
+        message: 'This link is for another account. Sign in to the account that asked for the change, then confirm.',
+      },
+    },
+    403,
+  )
+
+/**
+ * The new address confirmed. Only by a press on the page the link
+ * opened (`pressed: true`, which nothing but that press sends), and only
+ * from a session of the account the change belongs to: the link proves
+ * the new inbox, the session proves it is the person who asked. Opening
+ * the link changes nothing (`/auth/verify/peek`).
+ *
+ * A session, not a token of any kind — an agent does not move its owner's
+ * account, as it does not ask to — and the database asks again that the
+ * session is the account's and live (`auth_email_confirm`, migration 316).
+ * Refused, the link is not spent: signing in to the right account and
+ * pressing again works. Named, for a session in no workspace too —
+ * `nowhere.ts`.
+ */
+export async function confirmAddress(c: Context<{ Variables: Vars }>) {
+  const ctx = c.get('ctx')
+  if (ctx.viaMcp || ctx.viaGithub || ctx.viaImport || ctx.feedbackPage || ctx.board) return refused(c)
+  const body = Confirm.safeParse(await c.req.json().catch(() => ({})))
+  if (!body.success) {
+    return c.json({ error: { code: 'invalid', message: 'Open the link from the email and press Confirm.' } }, 400)
+  }
+  const about = await peekLink(body.data.token)
+  if (about?.kind !== 'email') {
+    return c.json({ error: { code: 'gone', message: 'This link has already been used or has expired.' } }, 410)
+  }
+  if (about.actorId !== ctx.actorId || !ctx.sessionId || !UUID.test(ctx.sessionId)) return notThisAccount(c)
+  return answerConfirmation(c, body.data.token, ctx.sessionId)
+}
+address.post('/me/email/confirm', (c) => confirmAddress(c))
 
 /**
  * Six digits to the inbox, for an account with nothing to type, before it

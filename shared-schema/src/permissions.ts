@@ -28,6 +28,14 @@ export const Action = z.enum([
    * first, never an agent, never through a token.
    */
   'workspace.leave',
+  /*
+   * Saying Join or Leave about a workspace the account was in before its
+   * address was proved.
+   * The person's own, in person: never through a
+   * token, never an agent, and never an unproved address, which has
+   * nothing waiting for it.
+   */
+  'workspace.confirm',
   'people.invite',
   'people.role',
   'people.read',
@@ -111,6 +119,16 @@ export const Action = z.enum([
    * words to more people. Never an agent's and never through a token.
    */
   'file.share',
+  /*
+   * Publishing an announcement kept as its author's draft.
+   * Its author's, while they may post on the
+   * project; nobody else's, since nobody else can see it. Never an agent's
+   * and never through a token: publishing tells everybody on the project,
+   * and "publish your drafts" is a sentence anybody can write in a task.
+   * Asked too of whoever asks for a draft, since a draft somebody cannot
+   * publish is one nobody would ever see.
+   */
+  'post.publish',
   /*
    * Marking one written document as the project's instructions for agents,
    * or taking the mark off. Whoever may change
@@ -256,6 +274,7 @@ type Grant = readonly Role[]
 const FIXED: Partial<Record<Action, Grant>> = {
   'workspace.create': ['owner', 'member'],
   'workspace.enter': ['owner', 'member'],
+  'workspace.confirm': ['owner', 'member'],
   'workspace.billing': ['owner'],
   'workspace.transfer': ['owner'],
   'workspace.delete': ['owner'],
@@ -297,6 +316,24 @@ export type Right = z.infer<typeof Right>
 
 /** What somebody added to a project arrives with. */
 export const RIGHTS_ON_JOINING: readonly Right[] = ['task.create', 'channel.create']
+
+/**
+ * What whoever makes a project holds on it: every right, which `manage`
+ * carries anyway. A member who starts a project runs it — decides who is on
+ * it, its tools, its settings — and was arriving on it with nothing at all,
+ * the column's empty default, so the one person who wanted the project could
+ * not invite anybody to it or even make a task there.
+ */
+export const RIGHTS_OF_ITS_MAKER: readonly Right[] = Right.options
+
+/**
+ * The rights a project's maker is stored with. The owner holds every right
+ * everywhere by being the owner, so a row of all six would decide nothing
+ * while they are — and would outlive a handover: `transfer_workspace` leaves
+ * rows it finds, and the former owner would run every project they ever
+ * started. The owner's own row says the ordinary two, as migration 119 meant.
+ */
+export const rightsOfItsMaker = (role: string): Right[] => [...(role === 'owner' ? RIGHTS_ON_JOINING : RIGHTS_OF_ITS_MAKER)]
 
 /** What `manage` carries, because those powers are about the project itself. */
 const MANAGING: readonly Action[] = ['project.archive', 'project.member.remove', 'project.tools', 'time.any', 'feedback.manage']
@@ -342,6 +379,15 @@ export type PermissionInput = {
   rights?: readonly string[]
   /** Whether the call arrived through MCP rather than from a person typing. */
   viaMcp?: boolean
+  /**
+   * Whether the call came through anything but a person's own press: a
+   * token of any kind (`viaMcp`), a change GitHub caused, or an import
+   * writing as somebody. Set by the server after whatever a handler says,
+   * so no handler turns a tool back into a person. Read where "never
+   * through a token" has to hold for every kind of one — so far, an
+   * agent's words changed by its connector.
+   */
+  viaTool?: boolean
   /** The plan the workspace is on, where the edition has plans. Unsaid
       holds nothing back: a caller that does not know asks nothing about
       agents. */
@@ -364,7 +410,8 @@ export type PermissionInput = {
   mayConnectAgents?: boolean
   /** Whether the one asking is an agent. */
   agent?: boolean
-  /** Whether the one asking connected the agent in question — `agent.manage`. */
+  /** Whether the one asking connected the agent in question — `agent.manage`;
+      for `content.edit.said`, the live agent that wrote the words. */
   connectedIt?: boolean
   /** Whether the deployment trusts this person to run the product. */
   operator?: boolean
@@ -383,6 +430,14 @@ export type PermissionInput = {
    * the workspace it joined, and nothing more, whatever its role says.
    */
   unproved?: boolean
+  /**
+   * Whether the address is proved only by a link handed over where there is
+   * no mail ('s weak proof). Proved enough to sign in and work, not
+   * to hand a workspace over: a by-hand account handed one, its maker gone,
+   * was a workspace the real owner's proof would land them in unasked
+   * (M2).
+   */
+  byHand?: boolean
   /**
    * Whether the call came with a token made for some projects only.
    * Such a token does nothing about the workspace
@@ -419,6 +474,8 @@ export const NEVER_VIA_MCP: readonly Action[] = [
   /* A session's to open, never a token's: a narrow key turned wide. */
   'workspace.create',
   'workspace.enter',
+  /* Which workspaces the account is in is a person's to answer, in person. */
+  'workspace.confirm',
   'workspace.billing',
   'workspace.transfer',
   'workspace.delete',
@@ -447,6 +504,8 @@ export const NEVER_VIA_MCP: readonly Action[] = [
   /* Who reads a document is a person's press — "share this with everyone"
      is a sentence anybody can write in a task. */
   'file.share',
+  /* And an announcement's draft, told to everybody. */
+  'post.publish',
   /* Who is on a project is a person's decision, as what they may do there
      already was — the rights are never set through a token either. "Take
      everyone off the project" is a sentence anybody can write in a task. */
@@ -491,10 +550,10 @@ const has = (input: PermissionInput, right: Right): boolean =>
  * project").
  */
 const NEVER_AN_AGENT: readonly Action[] = [
-  'workspace.create', 'workspace.enter',
+  'workspace.create', 'workspace.enter', 'workspace.confirm',
   'project.create', 'project.member.add', 'project.member.remove', 'project.leave', 'project.archive', 'project.tools',
   'people.invite', 'people.role', 'members.read', 'agent.connect', 'agent.manage', 'agent.remove', 'agent.work.read', 'token.issue.own',
-  'channel.create', 'channel.create.workspace', 'channel.delete', 'task.delete', 'file.delete', 'file.share', 'time.any', 'feedback.manage',
+  'channel.create', 'channel.create.workspace', 'channel.delete', 'task.delete', 'file.delete', 'file.share', 'post.publish', 'time.any', 'feedback.manage',
   'instance', 'task.remind', 'hook.manage', 'question.answer', 'workspace.leave', 'channel.leave', 'list.agent',
   'file.for_agents',
 ]
@@ -506,7 +565,7 @@ const NEVER_AN_AGENT: readonly Action[] = [
  * Members screen and the audit are no project's.
  */
 const NEVER_A_LIMITED_TOKEN: readonly Action[] = [
-  'workspace.create', 'workspace.enter',
+  'workspace.create', 'workspace.enter', 'workspace.confirm',
   'workspace.billing', 'workspace.transfer', 'workspace.delete',
   'people.invite', 'people.role', 'members.read',
   'project.create', 'channel.create.workspace',
@@ -541,7 +600,7 @@ export const ON_A_FEEDBACK_PAGE: readonly Action[] = ['task.create', 'content.cr
  * built it still inside.
  */
 export const NEVER_UNPROVED: readonly Action[] = [
-  'workspace.create', 'workspace.enter', 'workspace.billing', 'workspace.transfer', 'workspace.delete',
+  'workspace.create', 'workspace.enter', 'workspace.confirm', 'workspace.billing', 'workspace.transfer', 'workspace.delete',
   'people.invite', 'people.role', 'token.issue.own', 'token.revoke.any', 'audit.read',
   'agent.connect', 'agent.manage', 'agent.remove', 'feedback.manage', 'operator', 'instance', 'hook.manage',
 ]
@@ -559,6 +618,7 @@ export function can(action: Action, input: PermissionInput): boolean {
     if (NEVER_UNPROVED.includes(action)) return false
     if (role === 'owner') role = 'member'
   }
+  if (input.byHand && action === 'workspace.transfer') return false
 
   if (input.viaMcp && NEVER_VIA_MCP.includes(action)) return false
   if (input.agent && NEVER_AN_AGENT.includes(action)) return false
@@ -676,6 +736,11 @@ export function can(action: Action, input: PermissionInput): boolean {
     return can(input.isAuthor ? 'content.edit.own' : 'content.edit.any', input)
   }
 
+  /* An announcement's draft: its author's, as posting is. */
+  if (action === 'post.publish') {
+    return input.isAuthor === true && can('content.create', input)
+  }
+
   /* The project's instructions for agents: changing the document, and
      running the project. */
   if (action === 'file.for_agents') {
@@ -684,9 +749,26 @@ export function can(action: Action, input: PermissionInput): boolean {
 
   if (action === 'content.edit.any' || action === 'content.edit.said') {
     if (role === 'owner' || has(input, 'edit.any') || has(input, 'manage')) return true
+    /*
+     * An agent's words are its connector's to change, as their own are —
+     * on the project, in person: never through a token and never by an
+     * agent, nor by GitHub or an import acting as somebody (`viaTool`),
+     * since "rewrite what your agent said" is a sentence anybody can write
+     * in a task. Said only by an announcement's endpoints, which pass
+     * `connectedIt` when its author is a live agent the asker connected;
+     * a comment's and a message's do not.
+     */
+    if (action === 'content.edit.said') {
+      return (
+        input.connectedIt === true &&
+        input.agent !== true &&
+        input.viaMcp !== true &&
+        input.viaTool !== true &&
+        can('content.edit.own', { ...input, isAuthor: true })
+      )
+    }
     // The switch is about documents. Somebody else's words are theirs
     // whatever it says.
-    if (action === 'content.edit.said') return false
     return role === 'member' && settings.edit_others_content === 'documents_too'
   }
 

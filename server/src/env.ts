@@ -181,6 +181,25 @@ export function readTryLocalhost(raw: string | undefined, appUrl: string | undef
   return true
 }
 
+/**
+ * `OIDC_NAME` — what the button of a server's own provider calls it:
+ * plain text, at most 40 characters, drawn
+ * as text and never as markup. Empty is "SSO". A longer one, or one with a
+ * control, line-break or invisible formatting character in it (a
+ * right-to-left override would turn the button's words round), refuses to
+ * start: a label that would be cut, break its line or read other than it
+ * is written is a setting somebody wants to hear about.
+ */
+export function readOidcName(raw: string | undefined): string {
+  const v = (raw ?? '').trim()
+  if (!v) return 'SSO'
+  if (/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(v)) throw new Error('OIDC_NAME is plain text on one line.')
+  if ([...v].length > 40) throw new Error('OIDC_NAME is at most 40 characters.')
+  return v
+}
+/* Read once at start as well, so a name it refuses stops the server there. */
+readOidcName(process.env.OIDC_NAME)
+
 export const env = {
   /** The table owner. Migrations and seed only: it bypasses RLS. */
   databaseUrl: required('DATABASE_URL'),
@@ -304,6 +323,24 @@ export const env = {
   appleKeyId: process.env.APPLE_KEY_ID ?? '',
   /** The .p8 key's contents; `\n` may stand for its newlines. */
   applePrivateKey: (process.env.APPLE_PRIVATE_KEY ?? '').replace(/\\n/g, '\n'),
+  /*
+   * A server's own OpenID Connect provider.
+   * On when the issuer, the client and its secret are all set. Read at
+   * each ask, so a test can set them.
+   */
+  get oidcIssuer(): string {
+    return (process.env.OIDC_ISSUER ?? '').trim()
+  },
+  get oidcClientId(): string {
+    return (process.env.OIDC_CLIENT_ID ?? '').trim()
+  },
+  get oidcClientSecret(): string {
+    return (process.env.OIDC_CLIENT_SECRET ?? '').trim()
+  },
+  /** What its button calls it — `readOidcName`. */
+  get oidcName(): string {
+    return readOidcName(process.env.OIDC_NAME)
+  },
   /*
    * The Tuff app on GitHub. Not required: without
    * them Settings says GitHub is not set up here and nothing else changes.

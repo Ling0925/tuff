@@ -53,6 +53,24 @@ export const TASKS = say({
 
   /* The bar over the work. */
   board: ['Board', 'Tableau', '看板'],
+  /* What a board's columns are, in its View menu: the lists, or the members.
+     Members, as the project's own people are
+     called on its Settings and in Linear's and Asana's grouping. */
+  columns: ['Columns', 'Colonnes', '列'],
+  columnsLists: ['Status', 'Statut', '状态'],
+  columnsMembers: ['Members', 'Membres', '成员'],
+  /* The ring before a card's title on the board of members, for whoever
+     cannot see it: the list the task is in. */
+  statusIs: [(list: string) => `Status: ${list}`, (list: string) => `Statut : ${list}`, (list: string) => `状态：${list}`],
+
+  /* A column in the people view. */
+  notOnProject: ['Not on this project', 'Hors du projet', '不在此项目中'],
+  doneCount: [(n: number) => `${n} done`, (n: number) => (one(n) ? `${n} terminée` : `${n} terminées`), (n: number) => `${n} 已完成`],
+  openCount: [
+    (n: number) => (n === 1 ? '1 open task' : `${n} open tasks`),
+    (n: number) => (one(n) ? `${n} tâche en cours` : `${n} tâches en cours`),
+    (n: number) => `${n} 个未完成任务`,
+  ],
 
   /* A column on the board. */
   expand: [(name: string) => `Expand ${name}`, (name: string) => `Développer la colonne ${name}`, (name: string) => `展开 ${name}`],

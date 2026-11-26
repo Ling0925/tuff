@@ -9,6 +9,7 @@
 import './localOnly.js'
 import { v7 as uuidv7 } from 'uuid'
 import { withActor } from '../src/db.js'
+import { edition } from '../src/edition.js'
 import { sweep } from './sweep.js'
 import { asOwner, makeOperator } from './owner.js'
 import { registerUser, issueApiToken } from '../src/auth/flows.js'
@@ -238,6 +239,33 @@ const ws = session.workspace_id
 const owner = asOwner()
 const [first] = await owner<{ actor_id: string }[]>`select actor_id from app_user where email = ${logins[0]!}`
 if (first) await makeOperator(owner, first.actor_id)
+/*
+ * On a server of one's own, that account owns the server as well, and
+ * sign-up is open.
+ *
+ * Left unclaimed, the server was claimed by whichever browser test first
+ * confirmed an address, in the middle of the run, and sign-up closed behind
+ * it: every test that signed somebody up after that one was refused, and
+ * which tests those were depended on the order they ran in. A server whose
+ * owner opened sign-up is the state those tests are about.
+ *
+ * The owners an earlier seed made are let go when nothing is left for them
+ * to sign in to — the sweep above took their studios, and the database
+ * keeps an owner's account for as long as they own the server. An owner
+ * with a workspace still is somebody's, and stays.
+ */
+if (first && edition.instance) {
+  await owner`insert into instance_owner (actor_id) values (${first.actor_id}) on conflict do nothing`
+  await owner`
+    update instance_setting set claimed_at = coalesce(claimed_at, now()), sign_up_open = true, updated_at = now()
+    where id`
+  await owner`
+    delete from instance_owner o
+    where o.actor_id <> ${first.actor_id}
+      and not exists (
+        select 1 from membership m join workspace w on w.id = m.workspace_id
+        where m.actor_id = o.actor_id and m.deleted_at is null and w.deleted_at is null)`
+}
 await owner.end()
 const token = await issueApiToken(session.actor_id, ws, 'local', [], 90)
 

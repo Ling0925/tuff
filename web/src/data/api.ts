@@ -2,6 +2,7 @@ import { now } from './words.js'
 import { API as W } from '../words/api.js'
 import { forget } from './memory.js'
 import { boardAsProjects, boardPath, boardSecret } from './boardApi.js'
+import { type Ahead, renewAhead, stamped } from './renewAhead.js'
 const BASE = '/api'
 
 export type Session = {
@@ -11,6 +12,11 @@ export type Session = {
   /** Null for a session in no workspace. */
   workspace_id: string | null
   nowhere?: true
+  /** Seconds the access token lives, as the server said when it gave it. */
+  expires_in?: number
+  /** When it ends on this machine's clock, written as it arrives —
+      `data/renewAhead.ts`. */
+  expires_at?: number
 }
 
 const KEY = 'session'
@@ -65,10 +71,14 @@ export function remember(s: Session | null): void {
 
 let session: Session | null = stored()
 let onSignedOut: (() => void) | null = null
+/* Renewed ahead of the token's end — made below, once `renewOnce` is. */
+let ahead: Ahead | null = null
 
-export function setSession(s: Session | null): void {
+export function setSession(given: Session | null): void {
+  const s = given ? stamped(given) : null
   session = s
   remember(s)
+  ahead?.reschedule()
   /* Signed in again: the sentence about being removed has been read. */
   if (s) {
     try {
@@ -114,11 +124,49 @@ export function whyRemoved(): string | null {
  * same workspace — a tab in another workspace has a session of its own.
  */
 const sameRoom = (a: Session | null, b: Session | null) => Boolean(a && b && a.workspace_id === b.workspace_id)
+/* Another tab's session, taken up here — and the timer set by its end. */
+function takeUp(s: Session): void {
+  session = s
+  ahead?.reschedule()
+}
+/*
+ * A renewal this tab no longer holds the session for, handed to the tabs
+ * that do.
+ *
+ * Creating a workspace, leaving one and taking an invitation each set a
+ * session for another workspace and go on working in it, and a renewal
+ * started ahead for the old one can land after that. Kept here it would put
+ * the old workspace back under this tab — the invitations typed next sent
+ * there — so it is not kept. But it spent the refresh token the tabs still
+ * in the old workspace hold, so they are told: under a key of its own,
+ * written and removed in one step, which exists only as the event other
+ * tabs hear. Nothing that reads the kept session (`stored()`) can read it,
+ * in this tab or another. With no storage, those tabs renew with the spent
+ * token, and the server's grace answers them for ten seconds.
+ */
+const HANDED = 'session:handed'
+function handOn(s: Session): void {
+  try {
+    localStorage.setItem(HANDED, JSON.stringify(s))
+    localStorage.removeItem(HANDED)
+  } catch {
+    // No storage: left to the grace, as above.
+  }
+}
+function parsed(raw: string | null): Session | null {
+  try {
+    return raw ? (JSON.parse(raw) as Session) : null
+  } catch {
+    return null
+  }
+}
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (e) => {
-    if (e.key !== KEY) return
-    const now = stored()
-    if (now && sameRoom(now, session)) session = now
+    if (e.key !== KEY && e.key !== HANDED) return
+    /* The kept session as it is now; a handed one as the event carries it,
+       since it is gone from storage by the time the event is heard. */
+    const now = e.key === KEY ? stored() : parsed(e.newValue)
+    if (now && sameRoom(now, session)) takeUp(now)
   })
 }
 
@@ -133,29 +181,62 @@ if (typeof window !== 'undefined') {
  * throw somebody's session away.
  */
 async function renew(): Promise<boolean> {
+  const asked = session?.access_token
   const run = async (): Promise<boolean> => {
     const mine = session
     if (!mine) return false
+    /* Another tab's renewal, taken up while this one waited for the lock
+       (the `storage` event, above): that is the renewal asked for, and
+       spending the new refresh token too would only renew twice. */
+    if (mine.access_token !== asked) return true
+    /* Read in the same step as `mine`, before anything is awaited: the
+       session cannot have moved in between. */
     const latest = stored()
     if (latest && sameRoom(latest, mine) && latest.refresh_token !== mine.refresh_token) {
-      session = latest
+      takeUp(latest)
       return true
     }
+    /* After the answer the session may be another workspace's — created,
+       left, an invitation taken — or none: signed out. */
+    const moved = () => !sameRoom(session, mine)
+    /* When the new token's quarter of an hour starts, at the latest: a slow
+       answer must not make it seem to live longer than it does. */
+    const askedAt = Date.now()
+    /* No timeout and no abort, on purpose: the server spends the token the
+       moment it takes the request, so a refresh given up on is a token
+       spent with nothing kept. A connection that dies is an error to try
+       again, and a try within ten seconds is answered by the server's grace
+       with the same session. */
     const r = await fetch(`${BASE.replace('/api', '')}/auth/refresh`, {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({ refresh_token: mine.refresh_token }),
     })
     if (r.ok) {
-      setSession((await r.json()) as Session)
+      const fresh = stamped((await r.json()) as Session, askedAt)
+      /* Signed out while it was on its way: the server has ended the line
+         already, and writing it back would put a dead session in storage. */
+      if (!session) return false
+      /* In another workspace now: not kept here, handed to the tabs still
+         in the old one (`handOn`). True, not false: the request waiting on
+         this is sent again with the session there is now, and a false would
+         sign out a tab that is signed in. */
+      if (moved()) {
+        handOn(fresh)
+        return true
+      }
+      setSession(fresh)
       return true
     }
     if (r.status === 401 || r.status === 400) {
       const said = (await r.json().catch(() => ({}))) as { error?: { code?: string; workspace?: { name?: string } } }
+      /* The old workspace's token refused, after this tab left it: not this
+         tab's to answer, nor its sign-out to say. */
+      if (moved()) return Boolean(session)
       if (said.error?.code === 'removed') removedFrom = said.error.workspace?.name ?? ''
       const after = stored()
       if (after && sameRoom(after, mine) && after.refresh_token !== mine.refresh_token) {
-        session = after
+        takeUp(after)
         return true
       }
       return false
@@ -164,6 +245,38 @@ async function renew(): Promise<boolean> {
   }
   const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined
   return locks ? locks.request('tuff:renew-session', run) : run()
+}
+
+/* The one renewal of this tab: a 401, the timer, a tab come back and a
+   request with a spent token all join it rather than each spending the
+   refresh token. */
+function renewOnce(): Promise<boolean> {
+  renewing ??= renew().finally(() => {
+    renewing = null
+  })
+  return renewing
+}
+
+/*
+ * Renewed ahead, not after a burst of 401s — `data/renewAhead.ts`,
+ * A minute before the token
+ * ends, when the tab comes back (or loads) with less than two minutes
+ * left, and before a request that would carry a spent token; all through
+ * `renewOnce`, so across tabs it is the same lock and the same look at
+ * what is stored.
+ */
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  const a = renewAhead({ current: () => session, renew: renewOnce })
+  ahead = a
+  a.reschedule()
+  /* Just loaded counts as come back: a tab reloaded while its renewal was
+     on its way renews at once, inside the server's grace, and gets the
+     answer it lost. */
+  a.returned()
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') a.returned()
+  })
+  window.addEventListener('focus', () => a.returned())
 }
 
 /**
@@ -383,12 +496,14 @@ async function call<T>(path: string, init: RequestInit): Promise<T> {
       },
     })
 
+  /* A spent token is not sent to be refused: the renewal is waited for
+     first. Whatever it comes to, the request then goes, and a refusal is
+     the 401 path's below, as it always was. */
+  const waiting = session ? ahead?.before() : null
+  if (waiting) await waiting
   let res = await send()
   if (res.status === 401 && session) {
-    renewing ??= renew().finally(() => {
-      renewing = null
-    })
-    if (await renewing) res = await send()
+    if (await renewOnce()) res = await send()
   }
 
   if (res.status === 401) {

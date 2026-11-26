@@ -4,6 +4,8 @@
  * `tracker_auth` by name; 311 takes each from `tracker_app`. `docs/api.md`
  * names the same list ("The sign-in role's definers"), and a function
  * added to either side fails `auth-role.test.ts` until it is named.
+ * `auth_invite_delivered` is 313's, granted to the sign-in role
+ * from the start.
  */
 export const AUTH_DEFINERS = [
   'accept_invite',
@@ -15,17 +17,29 @@ export const AUTH_DEFINERS = [
   'auth_confirm_email',
   'auth_confirm_if_invited',
   'auth_email_cancel',
-  'auth_email_change',
+  /* 316: a new address confirmed from the account's own session. */
+  'auth_email_confirm',
   'auth_email_ticket',
   'auth_email_ticket_peek',
+  /* 321: an account a server's own provider made on an address it did not vouch for, held weakly. */
+  'auth_email_weak',
   'auth_end_session',
+  /* 317: the account's hold for a password read, before a password is read. */
+  'auth_hold_account',
   'auth_identity_forget',
   'auth_identity_link',
   'auth_identity_remove',
+  'auth_invite_delivered',
   'auth_lookup_user',
+  /* 315: Join or Leave a workspace joined before the proof. */
+  'auth_membership_answer',
+  /* 317: whether an account was put out since a provider's callback found it. */
+  'auth_not_put_out_since',
   'auth_password_hash',
   'auth_recovery_replace',
   'auth_recovery_spend',
+  /* 312: a refresh asked again. */
+  'auth_refresh_again',
   'auth_revoke_others',
   'auth_revoke_session',
   'auth_set_password',

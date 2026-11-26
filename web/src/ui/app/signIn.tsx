@@ -28,7 +28,9 @@ export function SignIn({ onDone }: { onDone: () => void }) {
   /* The ticket a provider's callback left in the address, traded for a
      session here — and kept while a second factor is asked for. */
   const [handoff] = useState(() => new URLSearchParams(location.search).get('handoff'))
-  /* An invitation that waits for the second factor comes back beside it. */
+  /* An invitation followed through a provider by somebody who already has
+     an account comes back beside the ticket: opened once signed in, to be
+     pressed there. */
   const [invited] = useState(() => new URLSearchParams(location.search).get('invite'))
   const [trading, setTrading] = useState(Boolean(handoff))
   /* The password was right and the address is not confirmed yet: a link
@@ -45,10 +47,15 @@ export function SignIn({ onDone }: { onDone: () => void }) {
     const r = await fetch('/auth/oauth/exchange', {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ handoff, nowhere: true, ...(totp ? { totp } : {}), ...(invited ? { invite: invited } : {}) }),
+      body: JSON.stringify({ handoff, nowhere: true, ...(totp ? { totp } : {}) }),
     }).catch(() => null)
     if (r?.ok) {
       setSession((await r.json()) as Session)
+      /* Joining is a press on the invitation's page, never the sign-in. */
+      if (invited && /^[\w.~-]{10,200}$/.test(invited)) {
+        location.assign(`/invite/${encodeURIComponent(invited)}`)
+        return
+      }
       history.replaceState(null, '', '/')
       onDone()
       return

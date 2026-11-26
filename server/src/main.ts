@@ -9,7 +9,7 @@ import { createNodeWebSocket } from '@hono/node-ws'
 import type { WSContext } from 'hono/ws'
 import type { Context } from 'hono'
 import { app } from './http/routes.js'
-import { offeredProviders, providersNow } from './http/access.js'
+import { offeredProviders, providersMeta, providersNow } from './http/access.js'
 import { whereBytesGo } from './storage.js'
 import { env } from './env.js'
 import { mailFrom, mailOn } from './mail.js'
@@ -519,8 +519,9 @@ if (existsSync(join(client, 'index.html'))) {
   })
   /* Which ways in this deployment has keys for, said in the page itself:
      asked for after it, Google and Apple arrived a moment late and pushed
-     the form down under the pointer. */
-  const waysOf = (on: string[]) => `<meta name="tuff-providers" content="${on.join(' ')}" />`
+     the form down under the pointer. A server's
+     own provider's name goes beside them — `providersMeta`. */
+  const waysOf = providersMeta
   const ways = waysOf(offeredProviders())
   const withWays = (html: string, said = ways) => html.replace('</head>', `${said}</head>`)
   /* The public pages the build wrote, and what `/` is before the app

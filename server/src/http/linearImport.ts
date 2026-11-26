@@ -1,3 +1,4 @@
+import { RIGHTS_ON_JOINING, rightsOfItsMaker } from '@tracker/shared-schema'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { v7 as uuidv7 } from 'uuid'
@@ -238,8 +239,8 @@ linearImport.post('/import/linear/project', async (c) => {
         await insert(null)
       }
       await tx`
-        insert into project_member (id, workspace_id, project_id, actor_id, added_by)
-        values (${uuidv7()}, ${ctx.workspaceId}, ${projectId}, ${ctx.actorId}, ${ctx.actorId})`
+        insert into project_member (id, workspace_id, project_id, actor_id, added_by, rights)
+        values (${uuidv7()}, ${ctx.workspaceId}, ${projectId}, ${ctx.actorId}, ${ctx.actorId}, ${rightsOfItsMaker(ctx.role)})`
       await tx`
         insert into conversation (id, workspace_id, project_id, name)
         values (${uuidv7()}, ${ctx.workspaceId}, ${projectId}, 'main')`
@@ -473,8 +474,8 @@ linearImport.post('/import/linear/issues', async (c) => {
       if (onProject.has(actor)) return
       onProject.add(actor)
       await tx`
-        insert into project_member (id, workspace_id, project_id, actor_id, added_by)
-        values (${uuidv7()}, ${ctx.workspaceId}, ${projectId}, ${actor}, ${ctx.actorId})`
+        insert into project_member (id, workspace_id, project_id, actor_id, added_by, rights)
+        values (${uuidv7()}, ${ctx.workspaceId}, ${projectId}, ${actor}, ${ctx.actorId}, ${[...RIGHTS_ON_JOINING]})`
     }
     const labelOf = async (name: string) => {
       const known = labels.get(name.toLowerCase())

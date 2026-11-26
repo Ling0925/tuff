@@ -4,21 +4,29 @@ import { ACCOUNT as W } from '../words/account.jsx'
 import { MORE } from '../data/words.js'
 import { api, Refused } from '../data/api.js'
 import { ahead, known } from '../data/ahead.js'
-import { APPLE, GITHUB, GOOGLE } from './Access.jsx'
+import { APPLE, GITHUB, GOOGLE, KEY, ownProviderName } from './Access.jsx'
 import { Button, Dialog, Hairline, InboxCode, Panel, SectionHead, quietLook } from './kit.jsx'
 
 type Provider = Ways['offered'][number]
 type Way = Ways['ways'][number]
 
-const NAMES: Record<Provider, string> = { google: 'Google', apple: 'Apple', github: 'GitHub' }
-const MARKS: Record<Provider, React.ReactNode> = { google: GOOGLE, apple: APPLE, github: GITHUB }
+/* A server's own provider by what the server calls it. */
+const nameOf = (p: Provider, ways: Ways | null): string =>
+  p === 'oidc' ? ways?.oidc_name || ownProviderName() : { google: 'Google', apple: 'Apple', github: 'GitHub' }[p]
+const MARKS: Record<Provider, React.ReactNode> = { google: GOOGLE, apple: APPLE, github: GITHUB, oidc: KEY }
 
 /** What the callback said on the way back — `?ways=` — once, then gone from the address. */
 function cameBack(): string | null {
   const said = new URLSearchParams(window.location.search).get('ways')
   if (!said) return null
   window.history.replaceState(window.history.state, '', window.location.pathname)
-  return said === 'added' ? W.wayAdded : said === 'taken' ? W.wayTaken : W.wayFailed
+  return said === 'added'
+    ? W.wayAdded
+    : said === 'taken'
+      ? W.wayTaken
+      : said === 'unreachable'
+        ? W.wayUnreachable(known<Ways>('/me/ways-in')?.oidc_name || ownProviderName())
+        : W.wayFailed
 }
 
 /**
@@ -56,7 +64,7 @@ export function WaysIn() {
             <div data-way={r.provider} className="flex min-h-[56px] items-center gap-4 px-4 py-3">
               <span className="flex size-5 shrink-0 items-center justify-center text-ink">{MARKS[r.provider]}</span>
               <div className="flex min-w-px flex-1 flex-col gap-1">
-                <span className="text-base text-ink">{NAMES[r.provider]}</span>
+                <span className="text-base text-ink">{nameOf(r.provider, ways)}</span>
                 <span className="truncate text-sm text-ink-3">{r.way ? (r.way.email ?? W.connected) : W.notConnected}</span>
               </div>
               <button
@@ -86,6 +94,7 @@ export function WaysIn() {
       {asking && (
         <Prove
           provider={asking.provider}
+          name={nameOf(asking.provider, ways)}
           {...(asking.way ? { way: asking.way } : {})}
           asks={ways.asks}
           onClose={() => setAsking(null)}
@@ -106,12 +115,14 @@ export function WaysIn() {
  */
 function Prove({
   provider,
+  name,
   way,
   asks,
   onClose,
   onRemoved,
 }: {
   provider: Provider
+  name: string
   way?: Way
   asks: Ways['asks']
   onClose: () => void
@@ -121,7 +132,6 @@ function Prove({
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [said, setSaid] = useState<string | null>(null)
-  const name = NAMES[provider]
   const ready = asks === 'email' ? code.trim().length > 0 : password.length > 0 && (asks !== 'password_and_code' || code.trim().length > 0)
 
   async function go() {
@@ -153,9 +163,11 @@ function Prove({
             ? W.tooManyAttempts
             : status === 409
               ? W.wayLast
-              : way
-                ? W.couldntRemove
-                : W.wayFailed,
+              : status === 503 && !way
+                ? W.wayUnreachable(name)
+                : way
+                  ? W.couldntRemove
+                  : W.wayFailed,
       )
     }
     setBusy(false)

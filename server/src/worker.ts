@@ -36,6 +36,10 @@ const DELIVER_EVERY_MS = 2_000
 /** Once an hour is plenty for a retention window measured in days. */
 const PURGE_EVERY_MS = 60 * 60 * 1000
 const PURGE_AFTER_DAYS = purgeAfterDays()
+/* Spent sessions a call, and calls an hour: `refresh_session_sweep` takes
+   no more than five thousand however many are asked. */
+const SWEEP_BATCH = 5_000
+const SWEEP_BATCHES = 20
 
 /* Every error line to where somebody is told — the edition's to say where. */
 edition.watchErrors('worker')
@@ -152,6 +156,26 @@ async function purge(): Promise<void> {
     if (off > 0) console.log(`worker: took ${off} devices signed in nowhere off push`)
   } catch (e) {
     console.error('worker: taking signed-out devices off push failed', e)
+  }
+  /* Sessions nothing reads any more, a week on: every refresh spends a row
+     and writes the next, a hundred a day per open browser, and nothing took
+     the spent ones (migration 314). In
+     batches, again while a batch comes back full, and no more than
+     `SWEEP_BATCHES` of them an hour, so a backlog is taken over hours
+     rather than in one long run. */
+  try {
+    let swept = 0
+    for (let i = 0; i < SWEEP_BATCHES; i++) {
+      const n = await asWorker(async (tx) => {
+        const [r] = await tx<{ n: number }[]>`select refresh_session_sweep(${SWEEP_BATCH}) as n`
+        return r?.n ?? 0
+      })
+      swept += n
+      if (n < SWEEP_BATCH) break
+    }
+    if (swept > 0) console.log(`worker: cleared ${swept} spent sessions`)
+  } catch (e) {
+    console.error('worker: clearing spent sessions failed', e)
   }
   /* And the apps' sign-in challenges past their hour (`handoff.md`) — on
      their own, so a database without 185 yet still clears the rest. */

@@ -16,6 +16,60 @@ before the update: the app takes one before it migrates, and
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-25
+
+### Added
+
+- Sign in through your own OpenID Connect provider: Keycloak, Pocket-ID,
+  Authentik, Authelia, Zitadel and others. Set `OIDC_ISSUER`,
+  `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` and `OIDC_NAME` in `.env`, and a
+  "Continue with …" button appears on the sign-in screen, on invitations
+  and in Account → Ways to sign in. See "Signing in with your own
+  provider" in the self-hosting guide.
+- An announcement can be saved as a draft that only its author sees, and
+  published to the project when it's ready.
+- Code blocks show their language and highlight it, can wrap or number
+  their lines, and copy in one press.
+- "What leaves your server" in the self-hosting guide: every outside
+  service Tuff can reach, when, and what goes to it. A test fails when the
+  code reaches an address the list doesn't name.
+
+### Changed
+
+- Documents and announcements are as wide as a task, so the three open in
+  one column. An announcement's title takes as many lines as it needs.
+- A document's Subscribe is a switch in its menu.
+- The person on a task is chosen from a list beside the field, as an agent
+  is.
+- A thread beside its room can be dragged to any width.
+- A new workspace asks for its mark first, then its name and address.
+- The session is renewed a minute before it ends, so a tab back from a
+  break no longer sends a burst of requests that are refused.
+- `scripts/check.sh` uses the Postgres already answering at
+  `DATABASE_URL` instead of starting a second one, and the browser tests
+  pass on a server with no mail.
+
+### Fixed
+
+- A notification switch pressed while its screen was still loading no
+  longer flips back.
+- A segmented control's highlight stays centred when a scrollbar appears.
+- A task chip that wraps keeps a gap between its lines.
+- A project that ever had a GitHub repository is deleted completely by the
+  clear-out, and a sample project can't be linked to one.
+
+### Security
+
+- A new email address is confirmed only by a press from the account that
+  asked for it, so a forwarded letter can't move an account to somebody
+  else's address.
+- When somebody proves an address is theirs and takes its account back,
+  whoever held it before keeps nothing: their sessions, tokens and ways to
+  sign in end, and nothing they had in flight is written after.
+- An account your provider makes on an email it didn't verify can be taken
+  back by the address's real owner, and an address is told when a provider
+  is linked to its account by email.
+
 ## [1.1.0] - 2026-11-22
 
 ### Added
@@ -119,6 +173,7 @@ The first public release of Tuff for your own server.
 - A release with a `### Security` section in this changelog is a security
   release.
 
-[Unreleased]: https://github.com/usetuff/tuff/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/usetuff/tuff/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/usetuff/tuff/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/usetuff/tuff/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/usetuff/tuff/releases/tag/v1.0.0

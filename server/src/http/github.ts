@@ -394,8 +394,12 @@ githubApi.put('/projects/:id/github', async (c) => {
     )
   }
   const done = await withActor(ctx.actorId, ctx.workspaceId, async (tx) => {
-    const [p] = await tx`select 1 from project where id = ${projectId} and deleted_at is null`
+    const [p] = await tx<{ sample: boolean }[]>`select sample from project where id = ${projectId} and deleted_at is null`
     if (!p) return 'missing' as const
+    /* A sample is nobody's work, and anybody on it deletes it for good in
+       one press (`drop_sample`), its link with it. A repository's issues
+       synced into it, and written back to GitHub, would be somebody's. */
+    if (p.sample) return 'sample' as const
     const [elsewhere] = await tx`
       select 1 from github_link
       where workspace_id = ${ctx.workspaceId} and repo_id = ${repo.id} and project_id <> ${projectId} and deleted_at is null`
@@ -415,6 +419,7 @@ githubApi.put('/projects/:id/github', async (c) => {
     return 'ok' as const
   })
   if (done === 'missing') return c.json(missing, 404)
+  if (done === 'sample') return c.json({ error: { code: 'sample', message: 'A sample project can’t be linked to a repository.' } }, 409)
   if (done === 'taken') return c.json({ error: { code: 'conflict', message: 'That repository is linked to another project.' } }, 409)
   return c.json({ repo_name: repo.full_name }, 200)
 })

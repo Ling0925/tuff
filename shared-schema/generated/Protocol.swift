@@ -17,6 +17,9 @@ public enum API {
         public let activityLine: ActivityLine?
         public let activityPage: ActivityPage?
         public let actor: Actor?
+        public let addressLink: AddressLink?
+        public let addressLinkAccount: AddressLinkAccount?
+        public let addressLinkKind: AddressLinkKind?
         public let agentFacePick: AgentFacePick?
         public let agentInRoom: AgentInRoom?
         public let agentInRoomList: AgentInRoomList?
@@ -136,6 +139,7 @@ public enum API {
         public let postInList: PostInList?
         public let postInProject: PostInProject?
         public let postPage: PostPage?
+        public let postPublished: PostPublished?
         public let postRead: PostRead?
         public let project: ProjectClass?
         public let projectBin: ProjectBin?
@@ -215,6 +219,8 @@ public enum API {
         public let tokens: Tokens?
         public let twoFactor: TwoFactor?
         public let twoFactorBegun: TwoFactorBegun?
+        public let unconfirmedAnswered: UnconfirmedAnswered?
+        public let unconfirmedWorkspaces: UnconfirmedWorkspaces?
         public let user: User?
         public let verified: Verified?
         public let versionContributor: VersionContributor?
@@ -223,6 +229,7 @@ public enum API {
         public let wayInAdded: WayInAdded?
         public let wayInStart: WayInStart?
         public let waysIn: WaysIn?
+        public let webhookChanged: WebhookChanged?
         public let webhookMade: WebhookMade?
         public let webhookRow: WebhookRow?
         public let webhooks: Webhooks?
@@ -241,6 +248,9 @@ public enum API {
             case activityLine = "ActivityLine"
             case activityPage = "ActivityPage"
             case actor = "Actor"
+            case addressLink = "AddressLink"
+            case addressLinkAccount = "AddressLinkAccount"
+            case addressLinkKind = "AddressLinkKind"
             case agentFacePick = "AgentFacePick"
             case agentInRoom = "AgentInRoom"
             case agentInRoomList = "AgentInRoomList"
@@ -360,6 +370,7 @@ public enum API {
             case postInList = "PostInList"
             case postInProject = "PostInProject"
             case postPage = "PostPage"
+            case postPublished = "PostPublished"
             case postRead = "PostRead"
             case project = "Project"
             case projectBin = "ProjectBin"
@@ -439,6 +450,8 @@ public enum API {
             case tokens = "Tokens"
             case twoFactor = "TwoFactor"
             case twoFactorBegun = "TwoFactorBegun"
+            case unconfirmedAnswered = "UnconfirmedAnswered"
+            case unconfirmedWorkspaces = "UnconfirmedWorkspaces"
             case user = "User"
             case verified = "Verified"
             case versionContributor = "VersionContributor"
@@ -447,6 +460,7 @@ public enum API {
             case wayInAdded = "WayInAdded"
             case wayInStart = "WayInStart"
             case waysIn = "WaysIn"
+            case webhookChanged = "WebhookChanged"
             case webhookMade = "WebhookMade"
             case webhookRow = "WebhookRow"
             case webhooks = "Webhooks"
@@ -461,11 +475,14 @@ public enum API {
             case workspaceSettings = "WorkspaceSettings"
         }
 
-        public init(activityEvent: ActivityEvent?, activityLine: ActivityLine?, activityPage: ActivityPage?, actor: Actor?, agentFacePick: AgentFacePick?, agentInRoom: AgentInRoom?, agentInRoomList: AgentInRoomList?, agentList: AgentList?, agentMade: AgentMade?, agentReachChanged: AgentReachChanged?, agentRow: AgentRow?, agentStatus: AgentStatus?, agentStatusList: AgentStatusList?, agentStatusSet: AgentStatusSet?, agentTokenMade: AgentTokenMade?, agentWork: AgentWork?, agentWorkTask: AgentWorkTask?, agentWorkTasks: AgentWorkTasks?, apiError: APIError?, apiToken: APIToken?, atNumber: AtNumber?, audienceChanged: AudienceChanged?, auditEvent: AuditEvent?, auditPage: AuditPage?, auditPeople: AuditPeople?, blockerAdded: BlockerAdded?, comment: Comment?, commentOnObject: CommentOnObject?, commentsPage: CommentsPage?, conversation: Conversation?, conversationInList: ConversationInList?, conversationList: ConversationList?, count: Count?, countOrNone: CountOrNone?, created: Created?, cycleInProject: CycleInProject?, cyclesInProject: CyclesInProject?, deletedFile: DeletedFile?, deletedFilesPage: DeletedFilesPage?, deletionPlan: DeletionPlan?, directMade: DirectMade?, docVersion: DocVersion?, docVersionPage: DocVersionPage?, docVersionRead: DocVersionRead?, docVersionRestored: DocVersionRestored?, feedbackPublic: FeedbackPublic?, feedbackSettings: FeedbackSettings?, file: File?, fileChanged: FileChanged?, fileImported: FileImported?, fileInDetail: FileInDetail?, fileInList: FileInList?, fileLink: FileLink?, fileRead: FileRead?, filesInProject: FilesInProject?, forAgentsChanged: ForAgentsChanged?, gifKey: GIFKey?, githubHello: GithubHello?, githubLink: GithubLink?, githubRepo: GithubRepo?, githubRepos: GithubRepos?, hoursByPerson: HoursByPerson?, hoursList: HoursList?, importProgress: ImportProgress?, importTeam: ImportTeam?, importTeams: ImportTeams?, inbox: Inbox?, inboxCodeSent: InboxCodeSent?, inboxSettings: InboxSettings?, instance: Instance?, instanceLetter: InstanceLetter?, instanceOwner: InstanceOwner?, invite: Invite?, inviteForMe: InviteForMe?, inviteList: InviteList?, inviteMade: InviteMade?, invitePreview: InvitePreview?, inviteRow: InviteRow?, labelInProject: LabelInProject?, labelOnTask: LabelOnTask?, labelsInProject: LabelsInProject?, leftWorkspace: LeftWorkspace?, linkBack: LinkBack?, linkPreview: LinkPreview?, linksBack: LinksBack?, listInProject: ListInProject?, listPage: ListPage?, listsInProject: ListsInProject?, mailSetup: MailSetup?, me: Me?, meActor: MeActor?, meEmail: MeEmail?, membership: Membership?, message: Message?, messageInRoom: MessageInRoom?, messagePage: MessagePage?, messagesImported: MessagesImported?, meWorkspace: MeWorkspace?, myTask: MyTask?, myTaskList: MyTaskList?, nameable: Nameable?, nameables: Nameables?, notification: Notification?, notificationInInbox: NotificationInInbox?, nowhereMe: NowhereMe?, nowhereSession: NowhereSession?, objectLink: ObjectLink?, openOnPerson: OpenOnPerson?, passwordChanged: PasswordChanged?, passwordSet: PasswordSet?, pending: PendingClass?, peopleList: PeopleList?, personDay: PersonDay?, personHours: PersonHours?, personInProject: PersonInProject?, personInWorkspace: PersonInWorkspace?, personOnPage: PersonOnPage?, personPage: PersonPage?, personWeek: PersonWeek?, post: Post?, postInList: PostInList?, postInProject: PostInProject?, postPage: PostPage?, postRead: PostRead?, project: ProjectClass?, projectBin: ProjectBin?, projectGithub: ProjectGithub?, projectInBin: ProjectInBin?, projectInList: ProjectInList?, projectMember: ProjectMember?, projectMembers: ProjectMembers?, projectPage: ProjectPage?, projectSlack: ProjectSlack?, providers: Providers?, publicShare: PublicShare?, pullOnTask: PullOnTask?, pushDevice: PushDevice?, pushDevices: PushDevices?, pushTried: PushTried?, pushTriedDevice: PushTriedDevice?, questionAnswer: QuestionAnswer?, questionChoice: QuestionChoice?, questionInInbox: QuestionInInbox?, realtimeEvent: RealtimeEvent?, recoveryCodes: RecoveryCodes?, removedFrom: RemovedFrom?, contractRepeat: Repeat?, rewait: Rewait?, roomHook: RoomHook?, roomHookAddress: RoomHookAddress?, roomHooks: RoomHooks?, roomPeople: RoomPeople?, roomPerson: RoomPerson?, savedTemplate: SavedTemplate?, savedTemplates: SavedTemplates?, searchResult: SearchResult?, searchResults: SearchResults?, serverRelease: ServerRelease?, serverUpdate: ServerUpdate?, serverVersion: ServerVersion?, session: SessionClass?, sessionRow: SessionRow?, sessions: Sessions?, setupMail: SetupMail?, setupState: SetupState?, sharedProject: SharedProject?, slackChannel: SlackChannel?, slackChannels: SlackChannels?, slackHello: SlackHello?, slackLink: SlackLink?, spendList: SpendList?, spendOnTask: SpendOnTask?, step: Step?, stepChanged: StepChanged?, stepMade: StepMade?, subscription: Subscription?, task: Task?, taskCard: TaskCard?, taskCardFace: TaskCardFace?, taskChanged: TaskChanged?, taskCopied: TaskCopied?, taskDeleted: TaskDeleted?, taskDuplicated: TaskDuplicated?, taskInDetail: TaskInDetail?, taskInList: TaskInList?, taskInProject: TaskInProject?, taskList: TaskList?, taskPage: TaskPage?, taskPicture: TaskPicture?, taskPrompt: TaskPrompt?, taskRead: TaskRead?, taskRelated: TaskRelated?, taskReminder: TaskReminder?, taskReminderSet: TaskReminderSet?, tasksImported: TasksImported?, templateChanged: TemplateChanged?, timeOnObject: TimeOnObject?, tokenMade: TokenMade?, tokenRow: TokenRow?, tokens: Tokens?, twoFactor: TwoFactor?, twoFactorBegun: TwoFactorBegun?, user: User?, verified: Verified?, versionContributor: VersionContributor?, waitingInvitations: WaitingInvitations?, wayIn: WayIn?, wayInAdded: WayInAdded?, wayInStart: WayInStart?, waysIn: WaysIn?, webhookMade: WebhookMade?, webhookRow: WebhookRow?, webhooks: Webhooks?, workspace: WorkspaceClass?, workspaceAddress: WorkspaceAddress?, workspaceErasing: WorkspaceErasing?, workspaceImport: WorkspaceImport?, workspaceImports: WorkspaceImports?, workspaceInList: WorkspaceInList?, workspaceList: WorkspaceList?, workspaceMade: WorkspaceMade?, workspaceSettings: WorkspaceSettings?) {
+        public init(activityEvent: ActivityEvent?, activityLine: ActivityLine?, activityPage: ActivityPage?, actor: Actor?, addressLink: AddressLink?, addressLinkAccount: AddressLinkAccount?, addressLinkKind: AddressLinkKind?, agentFacePick: AgentFacePick?, agentInRoom: AgentInRoom?, agentInRoomList: AgentInRoomList?, agentList: AgentList?, agentMade: AgentMade?, agentReachChanged: AgentReachChanged?, agentRow: AgentRow?, agentStatus: AgentStatus?, agentStatusList: AgentStatusList?, agentStatusSet: AgentStatusSet?, agentTokenMade: AgentTokenMade?, agentWork: AgentWork?, agentWorkTask: AgentWorkTask?, agentWorkTasks: AgentWorkTasks?, apiError: APIError?, apiToken: APIToken?, atNumber: AtNumber?, audienceChanged: AudienceChanged?, auditEvent: AuditEvent?, auditPage: AuditPage?, auditPeople: AuditPeople?, blockerAdded: BlockerAdded?, comment: Comment?, commentOnObject: CommentOnObject?, commentsPage: CommentsPage?, conversation: Conversation?, conversationInList: ConversationInList?, conversationList: ConversationList?, count: Count?, countOrNone: CountOrNone?, created: Created?, cycleInProject: CycleInProject?, cyclesInProject: CyclesInProject?, deletedFile: DeletedFile?, deletedFilesPage: DeletedFilesPage?, deletionPlan: DeletionPlan?, directMade: DirectMade?, docVersion: DocVersion?, docVersionPage: DocVersionPage?, docVersionRead: DocVersionRead?, docVersionRestored: DocVersionRestored?, feedbackPublic: FeedbackPublic?, feedbackSettings: FeedbackSettings?, file: File?, fileChanged: FileChanged?, fileImported: FileImported?, fileInDetail: FileInDetail?, fileInList: FileInList?, fileLink: FileLink?, fileRead: FileRead?, filesInProject: FilesInProject?, forAgentsChanged: ForAgentsChanged?, gifKey: GIFKey?, githubHello: GithubHello?, githubLink: GithubLink?, githubRepo: GithubRepo?, githubRepos: GithubRepos?, hoursByPerson: HoursByPerson?, hoursList: HoursList?, importProgress: ImportProgress?, importTeam: ImportTeam?, importTeams: ImportTeams?, inbox: Inbox?, inboxCodeSent: InboxCodeSent?, inboxSettings: InboxSettings?, instance: Instance?, instanceLetter: InstanceLetter?, instanceOwner: InstanceOwner?, invite: Invite?, inviteForMe: InviteForMe?, inviteList: InviteList?, inviteMade: InviteMade?, invitePreview: InvitePreview?, inviteRow: InviteRow?, labelInProject: LabelInProject?, labelOnTask: LabelOnTask?, labelsInProject: LabelsInProject?, leftWorkspace: LeftWorkspace?, linkBack: LinkBack?, linkPreview: LinkPreview?, linksBack: LinksBack?, listInProject: ListInProject?, listPage: ListPage?, listsInProject: ListsInProject?, mailSetup: MailSetup?, me: Me?, meActor: MeActor?, meEmail: MeEmail?, membership: Membership?, message: Message?, messageInRoom: MessageInRoom?, messagePage: MessagePage?, messagesImported: MessagesImported?, meWorkspace: MeWorkspace?, myTask: MyTask?, myTaskList: MyTaskList?, nameable: Nameable?, nameables: Nameables?, notification: Notification?, notificationInInbox: NotificationInInbox?, nowhereMe: NowhereMe?, nowhereSession: NowhereSession?, objectLink: ObjectLink?, openOnPerson: OpenOnPerson?, passwordChanged: PasswordChanged?, passwordSet: PasswordSet?, pending: PendingClass?, peopleList: PeopleList?, personDay: PersonDay?, personHours: PersonHours?, personInProject: PersonInProject?, personInWorkspace: PersonInWorkspace?, personOnPage: PersonOnPage?, personPage: PersonPage?, personWeek: PersonWeek?, post: Post?, postInList: PostInList?, postInProject: PostInProject?, postPage: PostPage?, postPublished: PostPublished?, postRead: PostRead?, project: ProjectClass?, projectBin: ProjectBin?, projectGithub: ProjectGithub?, projectInBin: ProjectInBin?, projectInList: ProjectInList?, projectMember: ProjectMember?, projectMembers: ProjectMembers?, projectPage: ProjectPage?, projectSlack: ProjectSlack?, providers: Providers?, publicShare: PublicShare?, pullOnTask: PullOnTask?, pushDevice: PushDevice?, pushDevices: PushDevices?, pushTried: PushTried?, pushTriedDevice: PushTriedDevice?, questionAnswer: QuestionAnswer?, questionChoice: QuestionChoice?, questionInInbox: QuestionInInbox?, realtimeEvent: RealtimeEvent?, recoveryCodes: RecoveryCodes?, removedFrom: RemovedFrom?, contractRepeat: Repeat?, rewait: Rewait?, roomHook: RoomHook?, roomHookAddress: RoomHookAddress?, roomHooks: RoomHooks?, roomPeople: RoomPeople?, roomPerson: RoomPerson?, savedTemplate: SavedTemplate?, savedTemplates: SavedTemplates?, searchResult: SearchResult?, searchResults: SearchResults?, serverRelease: ServerRelease?, serverUpdate: ServerUpdate?, serverVersion: ServerVersion?, session: SessionClass?, sessionRow: SessionRow?, sessions: Sessions?, setupMail: SetupMail?, setupState: SetupState?, sharedProject: SharedProject?, slackChannel: SlackChannel?, slackChannels: SlackChannels?, slackHello: SlackHello?, slackLink: SlackLink?, spendList: SpendList?, spendOnTask: SpendOnTask?, step: Step?, stepChanged: StepChanged?, stepMade: StepMade?, subscription: Subscription?, task: Task?, taskCard: TaskCard?, taskCardFace: TaskCardFace?, taskChanged: TaskChanged?, taskCopied: TaskCopied?, taskDeleted: TaskDeleted?, taskDuplicated: TaskDuplicated?, taskInDetail: TaskInDetail?, taskInList: TaskInList?, taskInProject: TaskInProject?, taskList: TaskList?, taskPage: TaskPage?, taskPicture: TaskPicture?, taskPrompt: TaskPrompt?, taskRead: TaskRead?, taskRelated: TaskRelated?, taskReminder: TaskReminder?, taskReminderSet: TaskReminderSet?, tasksImported: TasksImported?, templateChanged: TemplateChanged?, timeOnObject: TimeOnObject?, tokenMade: TokenMade?, tokenRow: TokenRow?, tokens: Tokens?, twoFactor: TwoFactor?, twoFactorBegun: TwoFactorBegun?, unconfirmedAnswered: UnconfirmedAnswered?, unconfirmedWorkspaces: UnconfirmedWorkspaces?, user: User?, verified: Verified?, versionContributor: VersionContributor?, waitingInvitations: WaitingInvitations?, wayIn: WayIn?, wayInAdded: WayInAdded?, wayInStart: WayInStart?, waysIn: WaysIn?, webhookChanged: WebhookChanged?, webhookMade: WebhookMade?, webhookRow: WebhookRow?, webhooks: Webhooks?, workspace: WorkspaceClass?, workspaceAddress: WorkspaceAddress?, workspaceErasing: WorkspaceErasing?, workspaceImport: WorkspaceImport?, workspaceImports: WorkspaceImports?, workspaceInList: WorkspaceInList?, workspaceList: WorkspaceList?, workspaceMade: WorkspaceMade?, workspaceSettings: WorkspaceSettings?) {
             self.activityEvent = activityEvent
             self.activityLine = activityLine
             self.activityPage = activityPage
             self.actor = actor
+            self.addressLink = addressLink
+            self.addressLinkAccount = addressLinkAccount
+            self.addressLinkKind = addressLinkKind
             self.agentFacePick = agentFacePick
             self.agentInRoom = agentInRoom
             self.agentInRoomList = agentInRoomList
@@ -585,6 +602,7 @@ public enum API {
             self.postInList = postInList
             self.postInProject = postInProject
             self.postPage = postPage
+            self.postPublished = postPublished
             self.postRead = postRead
             self.project = project
             self.projectBin = projectBin
@@ -664,6 +682,8 @@ public enum API {
             self.tokens = tokens
             self.twoFactor = twoFactor
             self.twoFactorBegun = twoFactorBegun
+            self.unconfirmedAnswered = unconfirmedAnswered
+            self.unconfirmedWorkspaces = unconfirmedWorkspaces
             self.user = user
             self.verified = verified
             self.versionContributor = versionContributor
@@ -672,6 +692,7 @@ public enum API {
             self.wayInAdded = wayInAdded
             self.wayInStart = wayInStart
             self.waysIn = waysIn
+            self.webhookChanged = webhookChanged
             self.webhookMade = webhookMade
             self.webhookRow = webhookRow
             self.webhooks = webhooks
@@ -868,6 +889,44 @@ public enum API {
         }
     }
 
+    // MARK: - AddressLink
+    public struct AddressLink: Codable, Sendable {
+        public let account: AddressLinkAccount
+        public let email: String
+        public let kind: AddressLinkKind
+        public let needsSession: Bool
+
+        public enum CodingKeys: String, CodingKey {
+            case account, email, kind
+            case needsSession = "needs_session"
+        }
+
+        public init(account: AddressLinkAccount, email: String, kind: AddressLinkKind, needsSession: Bool) {
+            self.account = account
+            self.email = email
+            self.kind = kind
+            self.needsSession = needsSession
+        }
+    }
+
+    // MARK: - AddressLinkAccount
+    public struct AddressLinkAccount: Codable, Sendable {
+        public let email: String
+        public let id: String
+        public let name: String
+
+        public init(email: String, id: String, name: String) {
+            self.email = email
+            self.id = id
+            self.name = name
+        }
+    }
+
+    public enum AddressLinkKind: String, Codable, Sendable {
+        case approve = "approve"
+        case email = "email"
+    }
+
     // MARK: - AgentFacePick
     public struct AgentFacePick: Codable, Sendable {
         public let preset: Preset
@@ -958,7 +1017,10 @@ public enum API {
         public let offeredProjectIDS, projectIDS: [String]
         public let reach: String
         public let status: AgentStatus?
-        public let webhookShape, webhookURL: String?
+        public let stopped: Bool?
+        public let webhookShape: String?
+        public let webhookStopped: Bool?
+        public let webhookURL: String?
 
         public enum CodingKeys: String, CodingKey {
             case activeAt = "active_at"
@@ -974,12 +1036,13 @@ public enum API {
             case name
             case offeredProjectIDS = "offered_project_ids"
             case projectIDS = "project_ids"
-            case reach, status
+            case reach, status, stopped
             case webhookShape = "webhook_shape"
+            case webhookStopped = "webhook_stopped"
             case webhookURL = "webhook_url"
         }
 
-        public init(activeAt: String?, actorID: String, authorizationSet: Bool?, avatarURL: String?, canDisconnect: Bool, canManage: Bool, connections: [ConnectionElement]?, createdAt: String, createdBy: String, createdByName: String, name: String, offeredProjectIDS: [String], projectIDS: [String], reach: String, status: AgentStatus?, webhookShape: String?, webhookURL: String?) {
+        public init(activeAt: String?, actorID: String, authorizationSet: Bool?, avatarURL: String?, canDisconnect: Bool, canManage: Bool, connections: [ConnectionElement]?, createdAt: String, createdBy: String, createdByName: String, name: String, offeredProjectIDS: [String], projectIDS: [String], reach: String, status: AgentStatus?, stopped: Bool?, webhookShape: String?, webhookStopped: Bool?, webhookURL: String?) {
             self.activeAt = activeAt
             self.actorID = actorID
             self.authorizationSet = authorizationSet
@@ -995,7 +1058,9 @@ public enum API {
             self.projectIDS = projectIDS
             self.reach = reach
             self.status = status
+            self.stopped = stopped
             self.webhookShape = webhookShape
+            self.webhookStopped = webhookStopped
             self.webhookURL = webhookURL
         }
     }
@@ -4539,6 +4604,7 @@ public enum API {
 
     // MARK: - PostInProject
     public struct PostInProject: Codable, Sendable {
+        public let audience: String?
         public let authorAvatarURL: String?
         public let authorID: String?
         public let authorName: String?
@@ -4555,6 +4621,7 @@ public enum API {
         public let updatedAt: String?
 
         public enum CodingKeys: String, CodingKey {
+            case audience
             case authorAvatarURL = "author_avatar_url"
             case authorID = "author_id"
             case authorName = "author_name"
@@ -4568,7 +4635,8 @@ public enum API {
             case updatedAt = "updated_at"
         }
 
-        public init(authorAvatarURL: String?, authorID: String?, authorName: String?, body: [String: JSONAny]?, category: String?, createdAt: String, id: String, number: Int?, projectID: String?, publishedAt: String?, replyCount: Count?, schedule: String?, title: String, updatedAt: String?) {
+        public init(audience: String?, authorAvatarURL: String?, authorID: String?, authorName: String?, body: [String: JSONAny]?, category: String?, createdAt: String, id: String, number: Int?, projectID: String?, publishedAt: String?, replyCount: Count?, schedule: String?, title: String, updatedAt: String?) {
+            self.audience = audience
             self.authorAvatarURL = authorAvatarURL
             self.authorID = authorID
             self.authorName = authorName
@@ -4588,17 +4656,38 @@ public enum API {
 
     // MARK: - PostPage
     public struct PostPage: Codable, Sendable {
+        public let drafts: [PostInProject]?
         public let nextCursor: String?
         public let posts: [PostInProject]
 
         public enum CodingKeys: String, CodingKey {
+            case drafts
             case nextCursor = "next_cursor"
             case posts
         }
 
-        public init(nextCursor: String?, posts: [PostInProject]) {
+        public init(drafts: [PostInProject]?, nextCursor: String?, posts: [PostInProject]) {
+            self.drafts = drafts
             self.nextCursor = nextCursor
             self.posts = posts
+        }
+    }
+
+    // MARK: - PostPublished
+    public struct PostPublished: Codable, Sendable {
+        public let audience: String
+        public let ok: Bool
+        public let publishedAt: String?
+
+        public enum CodingKeys: String, CodingKey {
+            case audience, ok
+            case publishedAt = "published_at"
+        }
+
+        public init(audience: String, ok: Bool, publishedAt: String?) {
+            self.audience = audience
+            self.ok = ok
+            self.publishedAt = publishedAt
         }
     }
 
@@ -4623,6 +4712,8 @@ public enum API {
 
     // MARK: - PostClass
     public struct PostClass: Codable, Sendable {
+        public let audience: String?
+        public let authorAgent: Bool?
         public let authorAvatarURL: String?
         public let authorID: String?
         public let authorName: String?
@@ -4630,6 +4721,7 @@ public enum API {
         public let category: String?
         public let createdAt: String
         public let id: String
+        public let mayDelete, mayEdit: Bool?
         public let number: Int?
         public let projectID: String?
         public let publishedAt: String?
@@ -4640,12 +4732,17 @@ public enum API {
         public let updatedAt: String?
 
         public enum CodingKeys: String, CodingKey {
+            case audience
+            case authorAgent = "author_agent"
             case authorAvatarURL = "author_avatar_url"
             case authorID = "author_id"
             case authorName = "author_name"
             case body, category
             case createdAt = "created_at"
-            case id, number
+            case id
+            case mayDelete = "may_delete"
+            case mayEdit = "may_edit"
+            case number
             case projectID = "project_id"
             case publishedAt = "published_at"
             case replyCount = "reply_count"
@@ -4653,7 +4750,9 @@ public enum API {
             case updatedAt = "updated_at"
         }
 
-        public init(authorAvatarURL: String?, authorID: String?, authorName: String?, body: [String: JSONAny]?, category: String?, createdAt: String, id: String, number: Int?, projectID: String?, publishedAt: String?, replyCount: Count?, schedule: String?, subscribed: Bool?, title: String, updatedAt: String?) {
+        public init(audience: String?, authorAgent: Bool?, authorAvatarURL: String?, authorID: String?, authorName: String?, body: [String: JSONAny]?, category: String?, createdAt: String, id: String, mayDelete: Bool?, mayEdit: Bool?, number: Int?, projectID: String?, publishedAt: String?, replyCount: Count?, schedule: String?, subscribed: Bool?, title: String, updatedAt: String?) {
+            self.audience = audience
+            self.authorAgent = authorAgent
             self.authorAvatarURL = authorAvatarURL
             self.authorID = authorID
             self.authorName = authorName
@@ -4661,6 +4760,8 @@ public enum API {
             self.category = category
             self.createdAt = createdAt
             self.id = id
+            self.mayDelete = mayDelete
+            self.mayEdit = mayEdit
             self.number = number
             self.projectID = projectID
             self.publishedAt = publishedAt
@@ -4922,20 +5023,26 @@ public enum API {
     // MARK: - Providers
     public struct Providers: Codable, Sendable {
         public let apple, github, google, mail: Bool
-        public let noMail, signUp: Bool
+        public let noMail, oidc: Bool
+        public let oidcName: String?
+        public let signUp: Bool
 
         public enum CodingKeys: String, CodingKey {
             case apple, github, google, mail
             case noMail = "no_mail"
+            case oidc
+            case oidcName = "oidc_name"
             case signUp = "sign_up"
         }
 
-        public init(apple: Bool, github: Bool, google: Bool, mail: Bool, noMail: Bool, signUp: Bool) {
+        public init(apple: Bool, github: Bool, google: Bool, mail: Bool, noMail: Bool, oidc: Bool, oidcName: String?, signUp: Bool) {
             self.apple = apple
             self.github = github
             self.google = google
             self.mail = mail
             self.noMail = noMail
+            self.oidc = oidc
+            self.oidcName = oidcName
             self.signUp = signUp
         }
     }
@@ -5160,6 +5267,7 @@ public enum API {
         public let id: String
         public let lastUsedAt: String?
         public let name: String
+        public let stoppedAt: String?
         public let turnedAt: String?
 
         public enum CodingKeys: String, CodingKey {
@@ -5169,16 +5277,18 @@ public enum API {
             case id
             case lastUsedAt = "last_used_at"
             case name
+            case stoppedAt = "stopped_at"
             case turnedAt = "turned_at"
         }
 
-        public init(createdAt: String, createdBy: String, createdByName: String, id: String, lastUsedAt: String?, name: String, turnedAt: String?) {
+        public init(createdAt: String, createdBy: String, createdByName: String, id: String, lastUsedAt: String?, name: String, stoppedAt: String?, turnedAt: String?) {
             self.createdAt = createdAt
             self.createdBy = createdBy
             self.createdByName = createdByName
             self.id = id
             self.lastUsedAt = lastUsedAt
             self.name = name
+            self.stoppedAt = stoppedAt
             self.turnedAt = turnedAt
         }
     }
@@ -6591,6 +6701,64 @@ public enum API {
         }
     }
 
+    // MARK: - UnconfirmedAnswered
+    public struct UnconfirmedAnswered: Codable, Sendable {
+        public let accessToken: String?
+        public let actorID: String?
+        public let answer: Answer
+        public let expiresIn: Int?
+        public let ok: Bool
+        public let refreshToken: String?
+        public let workspaceID: String?
+
+        public enum CodingKeys: String, CodingKey {
+            case accessToken = "access_token"
+            case actorID = "actor_id"
+            case answer
+            case expiresIn = "expires_in"
+            case ok
+            case refreshToken = "refresh_token"
+            case workspaceID = "workspace_id"
+        }
+
+        public init(accessToken: String?, actorID: String?, answer: Answer, expiresIn: Int?, ok: Bool, refreshToken: String?, workspaceID: String?) {
+            self.accessToken = accessToken
+            self.actorID = actorID
+            self.answer = answer
+            self.expiresIn = expiresIn
+            self.ok = ok
+            self.refreshToken = refreshToken
+            self.workspaceID = workspaceID
+        }
+    }
+
+    public enum Answer: String, Codable, Sendable {
+        case answerLeft = "left"
+        case joined = "joined"
+    }
+
+    // MARK: - UnconfirmedWorkspaces
+    public struct UnconfirmedWorkspaces: Codable, Sendable {
+        public let waiting: [Waiting]
+
+        public init(waiting: [Waiting]) {
+            self.waiting = waiting
+        }
+    }
+
+    // MARK: - Waiting
+    public struct Waiting: Codable, Sendable {
+        public let id: String
+        public let name: String
+        public let role: Role
+
+        public init(id: String, name: String, role: Role) {
+            self.id = id
+            self.name = name
+            self.role = role
+        }
+    }
+
     // MARK: - User
     public struct User: Codable, Sendable {
         public let actorID: String
@@ -6705,6 +6873,7 @@ public enum API {
         case apple = "apple"
         case github = "github"
         case google = "google"
+        case oidc = "oidc"
     }
 
     // MARK: - WayInAdded
@@ -6731,12 +6900,20 @@ public enum API {
     public struct WaysIn: Codable, Sendable {
         public let asks: AsksEnum
         public let offered: [Provider]
+        public let oidcName: String?
         public let password: Bool
         public let ways: [WayIn]
 
-        public init(asks: AsksEnum, offered: [Provider], password: Bool, ways: [WayIn]) {
+        public enum CodingKeys: String, CodingKey {
+            case asks, offered
+            case oidcName = "oidc_name"
+            case password, ways
+        }
+
+        public init(asks: AsksEnum, offered: [Provider], oidcName: String?, password: Bool, ways: [WayIn]) {
             self.asks = asks
             self.offered = offered
+            self.oidcName = oidcName
             self.password = password
             self.ways = ways
         }
@@ -6746,6 +6923,17 @@ public enum API {
         case email = "email"
         case password = "password"
         case passwordAndCode = "password_and_code"
+    }
+
+    // MARK: - WebhookChanged
+    public struct WebhookChanged: Codable, Sendable {
+        public let ok: Bool
+        public let secret: String?
+
+        public init(ok: Bool, secret: String?) {
+            self.ok = ok
+            self.secret = secret
+        }
     }
 
     // MARK: - WebhookMade
@@ -6768,6 +6956,7 @@ public enum API {
         public let id: String
         public let lastAt: String?
         public let lastStatus: Int?
+        public let stoppedAt: String?
         public let url: String
 
         public enum CodingKeys: String, CodingKey {
@@ -6776,10 +6965,11 @@ public enum API {
             case enabled, events, id
             case lastAt = "last_at"
             case lastStatus = "last_status"
+            case stoppedAt = "stopped_at"
             case url
         }
 
-        public init(authorizationSet: Bool?, createdAt: String, enabled: Bool, events: [String], id: String, lastAt: String?, lastStatus: Int?, url: String) {
+        public init(authorizationSet: Bool?, createdAt: String, enabled: Bool, events: [String], id: String, lastAt: String?, lastStatus: Int?, stoppedAt: String?, url: String) {
             self.authorizationSet = authorizationSet
             self.createdAt = createdAt
             self.enabled = enabled
@@ -6787,6 +6977,7 @@ public enum API {
             self.id = id
             self.lastAt = lastAt
             self.lastStatus = lastStatus
+            self.stoppedAt = stoppedAt
             self.url = url
         }
     }

@@ -5,6 +5,7 @@ import { spendOn } from '../http/limits.js'
 import { randomInt } from 'node:crypto'
 import { generateToken, hashToken, verifyPassword } from './crypto.js'
 import { secondFactor } from './flows.js'
+import { oidcName } from './oidc.js'
 import { languageFor, say, type Language } from '../words.js'
 
 /**
@@ -13,8 +14,11 @@ import { languageFor, say, type Language } from '../words.js'
  * Three things have to be true before an account answers to another
  * address: it is the person asking, not whoever has their unlocked laptop;
  * the new address is theirs; and the old one is told when it is done. The
- * routes that ask are `http/address.ts`; the links come back through
- * `/auth/verify`, which is the one place a link confirms anything.
+ * routes that ask are `http/address.ts`. The links open `/verify/<token>`,
+ * which reads what a link is about and changes nothing; a press changes it
+ * — the old address's yes through `/auth/verify`, the new address's
+ * confirmation through `/api/me/email/confirm`, from the account's own
+ * session.
  *
  * Nothing here says whether an address already has an account. The window
  * says the same thing for every address, and an address that is taken is
@@ -64,15 +68,19 @@ export async function itIsThem(
   email: string,
   asks: Asks,
   given: { password?: string | undefined; code?: string | undefined },
-): Promise<boolean> {
+): Promise<false | { hash: string | null }> {
+  let hash: string | null = null
   if (asks.password) {
     const [r] = await asAuth((tx) => tx<{ hash: string | null }[]>`select auth_password_hash(${actorId}) as hash`)
     if (!r?.hash || !given.password || !(await verifyPassword(given.password, r.hash))) return false
+    hash = r.hash
   }
   if (asks.code) {
     if (!given.code || !(await secondFactor(actorId, email, given.code))) return false
   }
-  return true
+  /* The hash the password was checked against, for a change that must be
+     made over that one and no other (`auth_change_password`). */
+  return { hash }
 }
 
 /** What six digits from the inbox were sent for — each is no other's yes. */
@@ -189,7 +197,8 @@ export async function tellWayIn(
 ): Promise<void> {
   const email = (await emailOf(actorId)).email
   if (!email) return
-  const name = PROVIDER_NAMES[provider as keyof typeof PROVIDER_NAMES] ?? provider
+  /* A server's own provider by what its button calls it. */
+  const name = provider === 'oidc' ? oidcName() : (PROVIDER_NAMES[provider as keyof typeof PROVIDER_NAMES] ?? provider)
   const as = there ? ` (${there})` : ''
   const language = await languageFor(actorId)
   const w = say(
@@ -292,6 +301,9 @@ export async function sendToNew(base: string, actorId: string, to: string, scree
         'Confirm the change to sign in with this address from now on. The link expires in 24 hours. If this wasn’t you, ignore this email and nothing will change.',
         'Confirmez le changement pour vous connecter désormais avec cette adresse. Le lien expire dans 24 heures. Si ce n’était pas vous, ignorez cet e-mail et rien ne changera.',
       ],
+      /* A review: the account that asked can confirm it, so a
+         forwarded letter hands the address over. */
+      forward: ['Don’t forward this email to anyone.', 'Ne transférez cet e-mail à personne.'],
       confirm: ['Confirm the new email', 'Confirmer la nouvelle adresse'],
     },
     language,
@@ -299,7 +311,7 @@ export async function sendToNew(base: string, actorId: string, to: string, scree
   await send({
     to,
     subject: w.subject,
-    ...letter([w.what, w.then], { label: w.confirm, url: link(base, token) }, language),
+    ...letter([w.what, w.then, w.forward], { label: w.confirm, url: link(base, token) }, language),
   })
 }
 
@@ -331,31 +343,105 @@ export async function sendForApproval(base: string, actorId: string, current: st
 }
 
 /**
- * A link from either mail, followed. An approval sends the link to the new
- * address; a confirmation makes the change and tells the old address.
- * Null when the token is not one of these, or is spent or out of time.
+ * What a link from either mail is about, read and nothing more: which
+ * kind, the address it moves to, and the account it moves — its name and
+ * its address now — so the page can say what a press would do before
+ * anybody presses.
+ * Opening the link changes nothing. Null when the token is not one of
+ * these, or is spent or out of time.
+ *
+ * `needsSession`: whether confirming takes a session of the account. Not
+ * for an address nobody proved — such an account cannot sign in on another
+ * device, and confirming puts its previous holder out (`auth_email_confirm`,
+ * migration 316) — nor for an approval. An address proved only by hand
+ * signs in anywhere, so it is asked for its session like any other.
  */
-export async function follow(
-  base: string,
-  token: string,
-  screen: Language = 'en',
-): Promise<{ kind: 'approved' | 'changed' | 'taken'; email: string } | null> {
+export async function peekLink(token: string): Promise<{
+  kind: 'approve' | 'email'
+  actorId: string
+  email: string
+  name: string
+  current: string
+  needsSession: boolean
+} | null> {
+  const [t] = await asAuth(
+    (tx) => tx<{ kind: 'approve' | 'email'; actor_id: string; email: string }[]>`
+      select * from auth_email_ticket_peek(${hashToken(token)})`,
+  )
+  if (!t) return null
+  const [who] = await asAuth(
+    (tx) => tx<{ name: string; email: string; unproved: boolean }[]>`
+      select name, email, unproved from auth_nowhere(${t.actor_id})`,
+  )
+  if (!who) return null
+  return {
+    kind: t.kind,
+    actorId: t.actor_id,
+    email: t.email,
+    name: who.name,
+    current: who.email,
+    needsSession: t.kind === 'email' && !who.unproved,
+  }
+}
+
+/**
+ * The old address's yes, pressed: the link goes to the new one. The inbox
+ * it was mailed to is the account — it is how an account with nothing to
+ * type proves it is the person — so no session is asked; and it changes
+ * nothing yet, since the new address is still confirmed from the account.
+ * Null when the token is not an approval still good.
+ */
+export async function approveLink(base: string, token: string, screen: Language = 'en'): Promise<{ email: string } | null> {
   const hash = hashToken(token)
   const [t] = await asAuth(
     (tx) => tx<{ kind: 'approve' | 'email'; actor_id: string; email: string }[]>`
       select * from auth_email_ticket_peek(${hash})`,
   )
-  if (!t) return null
-  const [spent] = await asAuth((tx) => tx<{ ok: boolean }[]>`select auth_ticket_spend(${hash}, ${t.kind}) as ok`)
+  if (t?.kind !== 'approve') return null
+  const [spent] = await asAuth((tx) => tx<{ ok: boolean }[]>`select auth_ticket_spend(${hash}, 'approve') as ok`)
   if (!spent?.ok) return null
-  if (t.kind === 'approve') {
-    await sendToNew(base, t.actor_id, t.email, screen)
-    return { kind: 'approved', email: t.email }
-  }
-  const { email: old } = await emailOf(t.actor_id)
-  const [r] = await asAuth((tx) => tx<{ said: string }[]>`select auth_email_change(${t.actor_id}, ${t.email}) as said`)
-  if (r?.said === 'taken') return { kind: 'taken', email: t.email }
-  if (r?.said !== 'changed') return null
+  await sendToNew(base, t.actor_id, t.email, screen)
+  return { email: t.email }
+}
+
+/**
+ * The new address confirmed, pressed in a browser signed in to the account
+ * the change belongs to. `session` is the id of the session that
+ * pressed; the database makes the change only when it is that account's
+ * and has not ended (`auth_email_confirm`, migration 316), and otherwise
+ * answers `not_this_account` and leaves the link unspent, so the person
+ * can sign in to the right account and press again.
+ *
+ * Opening the link proved the inbox and nothing about who asked: Mallory
+ * asked to move her own account to Bob's address, Bob's page confirmed it
+ * as it loaded, and his Google sign-in later landed in the account she
+ * still held.
+ *
+ * A confirmation makes the change and tells the old address.
+ */
+export async function confirmLink(
+  base: string,
+  token: string,
+  session: string | null,
+  screen: Language = 'en',
+): Promise<
+  { kind: 'changed'; email: string; actorId: string; putOut: boolean } | { kind: 'taken' | 'gone' | 'not_this_account'; email: string }
+> {
+  const [r] = await asAuth(
+    (tx) => tx<{ said: string; actor_id: string | null; email: string | null; old: string | null; put_out: boolean }[]>`
+      select * from auth_email_confirm(${hashToken(token)}, ${session}::uuid)`,
+  )
+  if (r?.said === 'not_this_account') return { kind: 'not_this_account', email: '' }
+  if (r?.said === 'taken') return { kind: 'taken', email: r.email ?? '' }
+  if (r?.said !== 'changed' || !r.actor_id || !r.email) return { kind: 'gone', email: '' }
+  const t = { actor_id: r.actor_id, email: r.email }
+  const old = r.old ?? ''
+  /* Whoever held the account kept it: the new address is told whose it now
+     signs in to, so a letter forwarded to somebody who asked for it — "send
+     me that email" — is seen by the address's owner. Not when the holder
+     was put out: then the new address is sent the letter that chooses a
+     password, which says it already. */
+  if (!r.put_out) await tellNewAddress(base, t.actor_id, t.email, screen)
   /* A Google sign-in made under the old address goes with it: the company
      that owns that inbox owns that Google account too, and hands both to
      whoever comes next — migration 151. */
@@ -395,5 +481,38 @@ export async function follow(
       ...letter([w.what, w.then], { label: w.signIn, url: `${base}/signin` }, language),
     })
   }
-  return { kind: 'changed', email: t.email }
+  return { kind: 'changed', email: t.email, actorId: t.actor_id, putOut: r.put_out }
+}
+
+/**
+ * Told to the new address once it signs in to an account — a review: the confirmation letter forwarded to the person who asked for
+ * the change ("send me that email") would otherwise attach the address
+ * with its owner none the wiser. Names the account, and what to do.
+ */
+async function tellNewAddress(base: string, actorId: string, to: string, screen: Language): Promise<void> {
+  const [who] = await asAuth((tx) => tx<{ name: string }[]>`select name from auth_nowhere(${actorId})`)
+  const name = (who?.name ?? '').slice(0, 80)
+  const language = await languageFor(actorId, screen)
+  const support = edition.vendor?.support ?? null
+  const w = say(
+    {
+      subject: ['This email now signs in to a Tuff account', 'Cette adresse e-mail permet maintenant de se connecter à un compte Tuff'],
+      what: [
+        `This address now signs in to the Tuff account ${name}.`,
+        `Cette adresse permet maintenant de se connecter au compte Tuff ${name}.`,
+      ],
+      then: support
+        ? [
+            `If this wasn’t you, don’t use that account, and email ${support} from this address.`,
+            `Si ce n’était pas vous, n’utilisez pas ce compte, et écrivez à ${support} depuis cette adresse.`,
+          ]
+        : [
+            'If this wasn’t you, don’t use that account, and tell the owner of this server.',
+            'Si ce n’était pas vous, n’utilisez pas ce compte, et prévenez le propriétaire de ce serveur.',
+          ],
+      signIn: ['Sign in', 'Se connecter'],
+    },
+    language,
+  )
+  await send({ to, subject: w.subject, ...letter([w.what, w.then], { label: w.signIn, url: `${base}/signin` }, language) })
 }

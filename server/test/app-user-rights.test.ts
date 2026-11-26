@@ -38,6 +38,8 @@ const PROTECTED: Record<string, unknown> = {
   updated_at: new Date(0),
   last_digest_at: null,
   announced_at: null,
+  /* When the account's previous holder was put out — migration 317. */
+  sessions_after: null,
 }
 
 /** What a person changes about themselves, and the server writes as them. */

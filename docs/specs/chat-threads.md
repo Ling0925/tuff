@@ -106,6 +106,28 @@ the pane's right edge, the edge the line to write in ends on, sharing one
 middle with the words. The head is part of the pane, so the pane's height
 does not change for it.
 
+### As wide as it is dragged
+
+360 pixels to start with, and as wide as the reader drags it,
+by a handle on its left edge — it grows into the room, so a drag left and
+← widen it, and a double-click puts it back. From 320 to 560, and never so
+wide that the room beside it loses its line: past what the room keeps (a
+short line of some four hundred and sixty pixels with the gap) the thread
+would drop over the room under the hand, so the drag stops there. The
+width is kept on the machine (`threadWidth.ts`, `thread-width`), one for
+the window: it is written to `--thread-w` on the root, and the pane, its
+frame, the room's column and the project's bar over it all read that
+variable, so the bar still widens with the thread as one piece. While the
+handle is held they follow the pointer rather than their ease.
+
+### Over the room
+
+Where there is no room for both, the thread opens over the room, and its
+head is the way back: the arrow, "Thread" and the room's name are one
+button, with one ground under the pointer. The arrow alone was a sixteen-
+pixel target beside words that looked as if they did something and did
+not.
+
 ## Escape shuts it
 
 Escape closes a thread, as its × does, by the rule a task keeps: anything

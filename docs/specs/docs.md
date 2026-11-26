@@ -68,9 +68,12 @@ things kept elsewhere, and folders. What changed, and why:
   `file.pinned_at`). Folders are gone from the screen: nobody can make one,
   and what was put in one shows in the one list.
 
-Not done: a document named in a task's own description (the editor there
-has no # yet), and previews of a link's page (title and image fetched from
-it) — the name comes from the address alone.
+A document named in a task's own description, in another document or in
+an announcement is `#` in the editor, or the block menu's **Link to a doc
+or task**.
+
+Not done: previews of a link's page (title and image fetched from it) —
+the name comes from the address alone.
 
 ## A link's address
 

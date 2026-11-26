@@ -1,7 +1,7 @@
 import { workingAgent, underWay } from '../../data/agentWorking.js'
 import { HEADS } from '../../data/words.js'
 import { TASKS as W } from '../../words/tasks.js'
-import { WhoPick, whoOf, PriorityPick, LabelChip, RepeatMark, AgentDoing } from '../kit.jsx'
+import { WhoPick, whoOf, PriorityPick, LabelChip, RepeatMark, AgentDoing, Avatar, Status } from '../kit.jsx'
 import { useWorkingOn } from '../../data/working.js'
 import type { PersonInWorkspace } from '@tracker/shared-schema'
 import { Icon } from '../glyphs.jsx'
@@ -63,7 +63,36 @@ export function cardRenderer({
    * in the layer that follows the pointer. Two copies that can disagree is
    * how a dragged card ends up a different size from the one let go of.
    */
-  function card(t: Task, col: string) {
+  /**
+   * The board of members' head: whoever else the task is given to, as
+   * faces, where the board draws the face — the column already says whose
+   * it is. Nothing when it is nobody else's. Not under the Assignee switch,
+   * which this board does not offer: the column already says the one face
+   * the switch would hide.
+   */
+  function cardOthers(t: Task, whose: string) {
+    const shown = whoOf(t)
+      .filter((id) => id !== whose)
+      .map((id) => people.find((p) => p.actor_id === id))
+      .filter((p) => p !== undefined)
+    if (shown.length === 0) return null
+    return (
+      <span data-card-others className="ml-auto flex shrink-0 items-center" title={shown.map((p) => p.name).join(', ')}>
+        {shown.slice(0, 2).map((p, i) => (
+          <span key={p.actor_id} className="flex rounded-full" style={{ marginLeft: i ? -4 : 0, boxShadow: '0 0 0 2px var(--card)' }}>
+            <Avatar id={p.actor_id} name={p.name} url={p.avatar_url} size={20} />
+          </span>
+        ))}
+        {shown.length > 2 && <span className="pl-1 text-sm tabular-nums text-ink-3">+{shown.length - 2}</span>}
+      </span>
+    )
+  }
+  /**
+   * `whose` is the people view's column — an actor's id, or `~` / `?` —
+   * and turns the head's face into the task's status: the column already
+   * says whose it is.
+   */
+  function card(t: Task, col: string, whose?: string) {
     return (
       <>
         {/*
@@ -96,7 +125,8 @@ export function cardRenderer({
               anybody has given it. Fading it in on hover left a hole where
               the ring would be and made the card's head change width under
               the pointer. */}
-          {shows.who && (
+          {whose !== undefined && cardOthers(t, whose)}
+          {whose === undefined && shows.who && (
             <span data-no-drag className="ml-auto flex shrink-0 items-center">
               <WhoPick
                 people={people}
@@ -112,26 +142,59 @@ export function cardRenderer({
           )}
         </div>
 
-        <button
-          data-open-task
-          /* A modifier means the card is being taken, not opened — and the
-             title fills the top of the card, so that is where most of those
-             presses land. The card beneath does the taking. */
-          onClick={(e) => {
-            if (e.metaKey || e.ctrlKey || e.shiftKey) return
-            setOpen(t.id)
-          }}
-          /* No list mark here. A card on a board is already inside the
-             column that names its list, so the mark was the same glyph
-             repeated down every card saying what the heading said once. */
-          /* Broken anywhere rather than carried out of the card: a URL or
-             a long word pasted as a title has nowhere to break, and the
-             card is as wide as its column and no wider. */
-          className="mt-1 block w-full text-left text-base font-medium [overflow-wrap:anywhere] text-ink"
-          style={{ letterSpacing: 'var(--track-body)' }}
-        >
-          {t.title}
-        </button>
+        {whose === undefined ? (
+          <button
+            data-open-task
+            /* A modifier means the card is being taken, not opened — and the
+               title fills the top of the card, so that is where most of those
+               presses land. The card beneath does the taking. */
+            onClick={(e) => {
+              if (e.metaKey || e.ctrlKey || e.shiftKey) return
+              setOpen(t.id)
+            }}
+            /* No list mark here. A card on a board is already inside the
+               column that names its list, so the mark was the same glyph
+               repeated down every card saying what the heading said once. */
+            /* Broken anywhere rather than carried out of the card: a URL or
+               a long word pasted as a title has nowhere to break, and the
+               card is as wide as its column and no wider. */
+            className="mt-1 block w-full text-left text-base font-medium [overflow-wrap:anywhere] text-ink"
+            style={{ letterSpacing: 'var(--track-body)' }}
+          >
+            {t.title}
+          </button>
+        ) : (
+          /*
+           * On the board of members the status leads the title: the list's
+           * ring, on the title's first line, and the Status picker — pressed,
+           * it moves the task to another list. The column says whose it is,
+           * so the list is the one fact a card has to add; a ring is how
+           * every row of the product already says it, and the list's name
+           * is the ring's label.
+           */
+          <div className="mt-1 flex items-start gap-2">
+            <span data-no-drag data-card-status className="flex shrink-0 items-center text-base" style={{ height: '1lh' }}>
+              <Status
+                lists={lists}
+                value={t.list_id}
+                said={W.statusIs(lists.find((l) => l.id === t.list_id)?.name ?? '')}
+                disabled={!canWrite}
+                onPick={(into) => move(t, into)}
+              />
+            </span>
+            <button
+              data-open-task
+              onClick={(e) => {
+                if (e.metaKey || e.ctrlKey || e.shiftKey) return
+                setOpen(t.id)
+              }}
+              className="block min-w-0 flex-1 text-left text-base font-medium [overflow-wrap:anywhere] text-ink"
+              style={{ letterSpacing: 'var(--track-body)' }}
+            >
+              {t.title}
+            </button>
+          </div>
+        )}
 
         {/*
           What is true about it, as chips.

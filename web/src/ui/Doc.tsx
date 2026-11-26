@@ -3,7 +3,7 @@ import { isPersonId, PersonDoorsContext, personOf } from './PersonCard.jsx'
 import { onReach, Unreachable, isGone } from '../data/api.js'
 import { Icon } from './glyphs.jsx'
 import { BAR, MORE } from '../data/words.js'
-import { tokens } from '../data/highlight.js'
+import { ReadCode } from './code.jsx'
 import { fileLine } from '../data/bytes.js'
 import { fileLinks, knownLinks, sizeOf, type Links } from '../data/files.js'
 import { previewOf } from '../data/sending.js'
@@ -1033,29 +1033,16 @@ function render(node: Node, key: string): React.ReactNode {
     )
   }
   if (node.type === 'codeBlock') {
-    /* Coloured by the pass the editor uses, so a block reads the same once
-       it is sent as it did while it was written. */
-    const code = (node.content ?? []).map((c) => c.text ?? '').join('')
-    const parts: React.ReactNode[] = []
-    let at = 0
-    for (const t of tokens(code)) {
-      if (t.from > at) parts.push(code.slice(at, t.from))
-      parts.push(
-        <span key={t.from} className={`tok-${t.tone}`}>
-          {code.slice(t.from, t.to)}
-        </span>,
-      )
-      at = t.to
-    }
-    if (at < code.length) parts.push(code.slice(at))
+    /* Coloured by the highlighter the editor uses, so a block reads the
+       same once it is sent as it did while it was written, with its bar. */
     return (
-      <pre
+      <ReadCode
         key={key}
-        className="overflow-x-auto rounded-[var(--r-row)] px-4 py-3 text-sm bg-sunken"
-        style={{ fontFamily: 'var(--font-mono)' }}
-      >
-        {parts}
-      </pre>
+        code={(node.content ?? []).map((c) => c.text ?? '').join('')}
+        language={node.attrs?.language}
+        wrap={node.attrs?.wrap === true}
+        numbered={node.attrs?.lineNumbers === true}
+      />
     )
   }
   if (node.type === 'blockquote') {

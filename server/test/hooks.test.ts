@@ -565,8 +565,16 @@ test('a hook whose maker’s address is no longer proved posts nothing, the owne
   assert.equal((await deliver(hook.url, '{"text":"proved"}')).status, 200)
   await owner`update app_user set email_verified_at = null where actor_id = ${ctx.actorId}`
   assert.equal(await (await deliver(hook.url, '{"text":"unproved"}')).text(), 'no_service')
+  /* Proved again by a confirmation with no password chosen: whoever held
+     the account was put out, and the hooks it made are stopped until a new
+     URL — migration 317. */
   await owner`update app_user set email_verified_at = now() where actor_id = ${ctx.actorId}`
-  assert.equal((await deliver(hook.url, '{"text":"proved again"}')).status, 200)
+  assert.equal(await (await deliver(hook.url, '{"text":"proved again"}')).text(), 'no_service')
+  /* Its sessions went with the put-out: signed in again. */
+  const turned = await call(await bearerFor(ctx.actorId, ctx.workspaceId), 'POST', `/api/hooks/${hook.id}/turn`)
+  assert.equal(turned.status, 200)
+  const again = (await turned.json()) as { url: string }
+  assert.equal((await deliver(again.url, '{"text":"a new URL"}')).status, 200)
 })
 
 test('twenty a room, even asked for all at once', async () => {

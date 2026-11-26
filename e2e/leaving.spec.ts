@@ -127,7 +127,7 @@ test('a channel is left from its menu, and goes from the list', async ({ page })
   await expect(room).toHaveCount(0)
 })
 
-test('an announcement and a document are unfollowed from their heads, and stay so', async ({ page }) => {
+test('an announcement is unfollowed from its head and a document from its menu, and both stay so', async ({ page }) => {
   await login(page)
   await openProject(page, 'Onboarding')
   const h = await asked(page)
@@ -164,15 +164,20 @@ test('an announcement and a document are unfollowed from their heads, and stay s
   /* The document, the same. */
   await page.getByTestId('tool-files').click()
   await page.locator('[data-file]').filter({ hasText: made.doc }).first().click()
+  /* On a document it is a switch in ⋯, not a pill on the head. */
+  await expect(page.getByTestId('file-menu')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByRole('button', { name: /^Subscribed?$/ })).toHaveCount(0)
+  await page.getByTestId('file-menu').click()
   const doc = page.getByTestId('follow-file')
-  await expect(doc).toHaveText('Subscribed', { timeout: 15_000 })
+  await expect(doc).toHaveAttribute('aria-checked', 'true', { timeout: 15_000 })
   const off2 = page.waitForResponse((r) => r.url().includes('/subscription') && r.request().method() === 'DELETE')
   await doc.click()
-  await expect(doc).toHaveText('Subscribe')
+  await expect(doc).toHaveAttribute('aria-checked', 'false')
   expect((await off2).status()).toBe(200)
   await shoot(page, 'doc-unsubscribed')
   await page.reload()
-  await expect(page.getByTestId('follow-file')).toHaveText('Subscribe', { timeout: 15_000 })
+  await page.getByTestId('file-menu').click()
+  await expect(page.getByTestId('follow-file')).toHaveAttribute('aria-checked', 'false', { timeout: 15_000 })
 })
 
 test('leaving the last workspace lands on No workspaces, where an invitation is joined', async ({ page, browser }) => {
@@ -206,6 +211,9 @@ test('leaving the last workspace lands on No workspaces, where an invitation is 
   await them.getByPlaceholder('Email').fill(email)
   await them.getByPlaceholder('Password').fill('drifters-own-password')
   await them.getByRole('button', { name: 'Sign in' }).click()
+  /* Joined before the address was confirmed: asked about first, and joined. */
+  await expect(them.getByTestId('unconfirmed')).toBeVisible({ timeout: 20_000 })
+  await them.getByTestId('unconfirmed-join').click()
   await expect(them.getByTestId('nav-my')).toBeVisible({ timeout: 20_000 })
 
   /* Their only workspace, left: the screen for no workspace. */

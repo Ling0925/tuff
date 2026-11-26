@@ -63,8 +63,11 @@ roomHooks.get('/conversations/:id/hooks', async (c) => {
     ctx.actorId,
     ctx.workspaceId,
     (tx) => tx`
-      /* Who answers for it: whoever made it, or last gave it a new URL. */
-      select h.id, h.name, h.created_by, a.name as created_by_name, h.created_at, h.turned_at, h.last_used_at
+      /* Who answers for it: whoever made it, or last gave it a new URL. And
+         whether it is stopped — its maker's account changed hands, and a new
+         URL starts it again. */
+      select h.id, h.name, h.created_by, a.name as created_by_name, h.created_at, h.turned_at, h.last_used_at,
+             h.stopped_at
       from room_hook h join actor a on a.id = h.created_by
       where h.conversation_id = ${found.room.id} and h.deleted_at is null
       order by h.created_at`,

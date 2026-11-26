@@ -588,7 +588,9 @@ inbox.get('/links/:type/:id', async (c) => {
          and l.from_id = ${c.req.param('id')} and l.deleted_at is null
          -- Only from a thing the reader may open: what a draft points at is
          -- its author's business.
-         and (l.from_type <> 'file' or exists (select 1 from file fx where fx.id = l.from_id and fx.deleted_at is null))`,
+         and (l.from_type <> 'file' or exists (select 1 from file fx where fx.id = l.from_id and fx.deleted_at is null))
+         -- And an announcement's draft.
+         and (l.from_type <> 'post' or exists (select 1 from post px where px.id = l.from_id and px.deleted_at is null))`,
   )
   // A link to something this person cannot read comes back with no title, and
   // that is the answer: it is not shown rather than shown as an id.

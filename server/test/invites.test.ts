@@ -206,7 +206,7 @@ test('a refresh comes back to the workspace the session was in', async () => {
  */
 test('a refresh token is spent once, and a replay of it is refused', async () => {
   const s = stamp()
-  const { registerUser, refresh } = await import('../src/auth/flows.js')
+  const { registerUser, refresh, refreshGrace } = await import('../src/auth/flows.js')
   const session = await registerUser({
     email: `spin${s}@example.com`,
     password: 'correct-horse-battery-staple',
@@ -215,14 +215,22 @@ test('a refresh token is spent once, and a replay of it is refused', async () =>
     workspace_slug: `ws-${s}`,
   })
 
-  const next = (await refresh(session.refresh_token)) as Session | null
-  assert.notEqual(next, null, 'the first use hands back a session')
-  assert.notEqual(next!.refresh_token, session.refresh_token, 'and a different token')
+  /* Past the few seconds a spent token is answered again for
+     (`refresh-grace.test.ts`). */
+  const grace = refreshGrace.seconds
+  refreshGrace.seconds = 0
+  try {
+    const next = (await refresh(session.refresh_token)) as Session | null
+    assert.notEqual(next, null, 'the first use hands back a session')
+    assert.notEqual(next!.refresh_token, session.refresh_token, 'and a different token')
 
-  assert.equal(await refresh(session.refresh_token), null, 'the spent one kept working for its whole life')
-  // The new one is the live one, and is itself spent when it is used.
-  assert.notEqual(await refresh(next!.refresh_token), null)
-  assert.equal(await refresh(next!.refresh_token), null)
+    assert.equal(await refresh(session.refresh_token), null, 'the spent one kept working for its whole life')
+    // The new one is the live one, and is itself spent when it is used.
+    assert.notEqual(await refresh(next!.refresh_token), null)
+    assert.equal(await refresh(next!.refresh_token), null)
+  } finally {
+    refreshGrace.seconds = grace
+  }
 })
 
 /*
@@ -389,11 +397,13 @@ test('a link with no address, followed with somebody else’s, leaves the owner 
     body: JSON.stringify({ token, password: 'the-real-owners-password' }),
   })
   assert.equal(chose.status, 200)
+  /* In no workspace: the stranger's workspace waits for the owner's Join
+     (`password-after-proof.md`, "Workspaces joined before the proof"). */
   const login = (password: string) =>
     app.request('/auth/login', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: victim, password }),
+      body: JSON.stringify({ email: victim, password, nowhere: true }),
     })
   assert.equal((await login('the-strangers-password')).status, 401)
   assert.equal((await login('the-real-owners-password')).status, 200)

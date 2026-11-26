@@ -27,6 +27,15 @@ data class Contract (
     @SerialName("Actor")
     val actor: Actor? = null,
 
+    @SerialName("AddressLink")
+    val addressLink: AddressLink? = null,
+
+    @SerialName("AddressLinkAccount")
+    val addressLinkAccount: AddressLinkAccount? = null,
+
+    @SerialName("AddressLinkKind")
+    val addressLinkKind: AddressLinkKind? = null,
+
     @SerialName("AgentFacePick")
     val agentFacePick: AgentFacePick? = null,
 
@@ -384,6 +393,9 @@ data class Contract (
     @SerialName("PostPage")
     val postPage: PostPage? = null,
 
+    @SerialName("PostPublished")
+    val postPublished: PostPublished? = null,
+
     @SerialName("PostRead")
     val postRead: PostRead? = null,
 
@@ -621,6 +633,12 @@ data class Contract (
     @SerialName("TwoFactorBegun")
     val twoFactorBegun: TwoFactorBegun? = null,
 
+    @SerialName("UnconfirmedAnswered")
+    val unconfirmedAnswered: UnconfirmedAnswered? = null,
+
+    @SerialName("UnconfirmedWorkspaces")
+    val unconfirmedWorkspaces: UnconfirmedWorkspaces? = null,
+
     @SerialName("User")
     val user: User? = null,
 
@@ -644,6 +662,9 @@ data class Contract (
 
     @SerialName("WaysIn")
     val waysIn: WaysIn? = null,
+
+    @SerialName("WebhookChanged")
+    val webhookChanged: WebhookChanged? = null,
 
     @SerialName("WebhookMade")
     val webhookMade: WebhookMade? = null,
@@ -792,6 +813,29 @@ data class Actor (
 )
 
 @Serializable
+data class AddressLink (
+    val account: AddressLinkAccount,
+    val email: String,
+    val kind: AddressLinkKind,
+
+    @SerialName("needs_session")
+    val needsSession: Boolean
+)
+
+@Serializable
+data class AddressLinkAccount (
+    val email: String,
+    val id: String,
+    val name: String
+)
+
+@Serializable
+enum class AddressLinkKind(val value: String) {
+    @SerialName("approve") Approve("approve"),
+    @SerialName("email") Email("email");
+}
+
+@Serializable
 data class AgentFacePick (
     val preset: Preset
 )
@@ -887,9 +931,13 @@ data class AgentRow (
 
     val reach: String,
     val status: AgentStatus? = null,
+    val stopped: Boolean? = null,
 
     @SerialName("webhook_shape")
     val webhookShape: String? = null,
+
+    @SerialName("webhook_stopped")
+    val webhookStopped: Boolean? = null,
 
     @SerialName("webhook_url")
     val webhookURL: String? = null
@@ -3299,6 +3347,8 @@ data class PostInList (
 
 @Serializable
 data class PostInProject (
+    val audience: String? = null,
+
     @SerialName("author_avatar_url")
     val authorAvatarURL: String? = null,
 
@@ -3335,10 +3385,21 @@ data class PostInProject (
 
 @Serializable
 data class PostPage (
+    val drafts: List<PostInProject>? = null,
+
     @SerialName("next_cursor")
     val nextCursor: String? = null,
 
     val posts: List<PostInProject>
+)
+
+@Serializable
+data class PostPublished (
+    val audience: String,
+    val ok: Boolean,
+
+    @SerialName("published_at")
+    val publishedAt: String? = null
 )
 
 @Serializable
@@ -3353,6 +3414,11 @@ data class PostRead (
 
 @Serializable
 data class PostClass (
+    val audience: String? = null,
+
+    @SerialName("author_agent")
+    val authorAgent: Boolean? = null,
+
     @SerialName("author_avatar_url")
     val authorAvatarURL: String? = null,
 
@@ -3369,6 +3435,13 @@ data class PostClass (
     val createdAt: String,
 
     val id: String,
+
+    @SerialName("may_delete")
+    val mayDelete: Boolean? = null,
+
+    @SerialName("may_edit")
+    val mayEdit: Boolean? = null,
+
     val number: Long? = null,
 
     @SerialName("project_id")
@@ -3563,6 +3636,11 @@ data class Providers (
     @SerialName("no_mail")
     val noMail: Boolean,
 
+    val oidc: Boolean,
+
+    @SerialName("oidc_name")
+    val oidcName: String? = null,
+
     @SerialName("sign_up")
     val signUp: Boolean
 )
@@ -3717,6 +3795,9 @@ data class RoomHook (
     val lastUsedAt: String? = null,
 
     val name: String,
+
+    @SerialName("stopped_at")
+    val stoppedAt: String? = null,
 
     @SerialName("turned_at")
     val turnedAt: String? = null
@@ -4703,6 +4784,46 @@ data class TwoFactorBegun (
 )
 
 @Serializable
+data class UnconfirmedAnswered (
+    @SerialName("access_token")
+    val accessToken: String? = null,
+
+    @SerialName("actor_id")
+    val actorID: String? = null,
+
+    val answer: Answer,
+
+    @SerialName("expires_in")
+    val expiresIn: Long? = null,
+
+    val ok: Boolean,
+
+    @SerialName("refresh_token")
+    val refreshToken: String? = null,
+
+    @SerialName("workspace_id")
+    val workspaceID: String? = null
+)
+
+@Serializable
+enum class Answer(val value: String) {
+    @SerialName("joined") Joined("joined"),
+    @SerialName("left") Left("left");
+}
+
+@Serializable
+data class UnconfirmedWorkspaces (
+    val waiting: List<Waiting>
+)
+
+@Serializable
+data class Waiting (
+    val id: String,
+    val name: String,
+    val role: Role
+)
+
+@Serializable
 data class User (
     @SerialName("actor_id")
     val actorID: String,
@@ -4776,7 +4897,8 @@ data class WayIn (
 enum class Provider(val value: String) {
     @SerialName("apple") Apple("apple"),
     @SerialName("github") Github("github"),
-    @SerialName("google") Google("google");
+    @SerialName("google") Google("google"),
+    @SerialName("oidc") Oidc("oidc");
 }
 
 @Serializable
@@ -4794,6 +4916,10 @@ data class WayInStart (
 data class WaysIn (
     val asks: AsksEnum,
     val offered: List<Provider>,
+
+    @SerialName("oidc_name")
+    val oidcName: String? = null,
+
     val password: Boolean,
     val ways: List<WayIn>
 )
@@ -4804,6 +4930,12 @@ enum class AsksEnum(val value: String) {
     @SerialName("password") Password("password"),
     @SerialName("password_and_code") PasswordAndCode("password_and_code");
 }
+
+@Serializable
+data class WebhookChanged (
+    val ok: Boolean,
+    val secret: String? = null
+)
 
 @Serializable
 data class WebhookMade (
@@ -4828,6 +4960,9 @@ data class WebhookRow (
 
     @SerialName("last_status")
     val lastStatus: Long? = null,
+
+    @SerialName("stopped_at")
+    val stoppedAt: String? = null,
 
     val url: String
 )

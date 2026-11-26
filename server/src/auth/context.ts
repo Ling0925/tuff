@@ -72,6 +72,9 @@ export type AuthContext = {
   /** Whether this person's address is unproved — `can` gives them a
       member's rights and no more. */
   unproved?: boolean
+  /** Whether that proof is only a link handed over — `can` hands no
+      workspace over from it. */
+  byHand?: boolean
   /** The plan the workspace is on — `can` reads it for `agent.use`. */
   plan: string
   /** Empty means every project the person is on. Otherwise the database
@@ -102,6 +105,13 @@ export type AuthContext = {
   feedbackPage?: boolean
   /** That page's project, the one place its actor may file into. */
   feedbackProjectId?: string
+  /**
+   * When the database checked who is asking — its own clock, in the
+   * statement that checked. A session or a token this request makes is
+   * dated no later than it, so an account put out between the check and
+   * the write leaves it ended.
+   */
+  checkedAt?: Date
 }
 
 type Row = {
@@ -120,6 +130,8 @@ type Row = {
   plan: string
   live: boolean
   unproved: boolean
+  by_hand: boolean | null
+  checked_at: Date
 }
 
 async function load(
@@ -141,6 +153,8 @@ async function load(
   const [row] = await db<Row[]>`
     select c.*, (${sessionId}::uuid is null or auth_session_alive(${sessionId}::uuid)) as live,
            auth_email_confirmed(${actorId}) is false as unproved,
+           auth_email_by_hand(${actorId}) as by_hand,
+           statement_timestamp() as checked_at,
            /* Only where there are instance owners: the service never asks. */
            ${edition.instance ? db`instance_sign_up_open() is false` : db`false`} as sign_up_closed
     from auth_context(${actorId}, ${workspaceId}) c`
@@ -167,9 +181,11 @@ async function load(
     /* An agent has no address and is never unproved: `auth_email_confirmed`
        answers null for it. */
     unproved: row.unproved === true,
+    byHand: row.by_hand === true,
     plan: row.plan,
     viaMcp,
     tokenProjectIds,
+    checkedAt: row.checked_at,
   }
 }
 
@@ -369,8 +385,12 @@ export function allow(ctx: AuthContext, action: z.infer<typeof Action>, about: P
        board's link back into a member. */
     board: ctx.board === true,
     feedbackPage: ctx.feedbackPage === true,
+    /* Nor a tool a person: a token, GitHub, an import — whatever the
+       handler passed. */
+    viaTool: ctx.viaMcp || ctx.viaGithub === true || Boolean(ctx.viaImport),
     /* And nothing a handler says makes an unproved address a proved one. */
     unproved: ctx.unproved === true,
+    byHand: ctx.byHand === true,
   })
 }
 

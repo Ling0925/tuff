@@ -294,10 +294,56 @@ on the sign-in screen.
 | `GITHUB_SIGNIN_CLIENT_ID`, `GITHUB_SIGNIN_CLIENT_SECRET` | A GitHub OAuth App. Callback URL: `APP_URL/auth/oauth/github/callback`. |
 
 On your own server a provider never makes the first account: until
-somebody owns the server, a new account through Google, Apple or GitHub is
-refused, and the owner signs up with email (see "The owner from the command
-line"). After that, somebody new can sign in with a provider only when they
-have an invitation, or when an owner has turned sign-up on.
+somebody owns the server, a new account through Google, Apple, GitHub or
+your own provider is refused, and the owner signs up with email (see "The
+owner from the command line"). After that, somebody new can sign in with a
+provider only when they have an invitation, or when an owner has turned
+sign-up on.
+
+### Signing in with your own provider
+
+Tuff can sign people in through the identity provider your company runs —
+Keycloak, Pocket-ID, Authentik, Zitadel, Okta, Entra ID or any other that
+speaks OpenID Connect. One provider for the whole server. It is on when the
+first three values are set.
+
+| Variable | Meaning |
+| -------- | ------- |
+| `OIDC_ISSUER` | The provider's issuer, like `https://auth.example.com/realms/acme`. |
+| `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | A confidential client made in the provider. Redirect URI: `APP_URL/auth/oauth/oidc/callback`. |
+| `OIDC_NAME` | What the button says: `Keycloak` makes it *Continue with Keycloak*. Plain text on one line, at most 40 characters. Without it, *Continue with SSO*. |
+
+Tuff reads `OIDC_ISSUER/.well-known/openid-configuration` and keeps it for
+an hour. The `issuer` in it must be `OIDC_ISSUER` exactly (a trailing slash
+aside), and the issuer and every address in it must be https. Plain http
+works only when `APP_URL` is `http://localhost`, for trying Tuff next to a
+local provider. The client has to allow the scopes `openid email profile`
+and PKCE.
+
+If the provider can't be reached when somebody presses the button, the
+button says so; the server still starts and every other way in works.
+
+Somebody who signed in through the provider before is recognised by the
+provider's id for them. Otherwise, an account here with the same email is
+theirs only when the provider says the email is verified
+(`email_verified`). Without that, the provider can make a new account but
+never sign in to an existing one, and the new account's email only half
+counts: it works, but the account can't become the server's owner or give
+or be given a workspace, and if the email's real owner
+later proves it (by Google, a password reset, or your provider marking it
+verified), the account becomes theirs. Have your provider verify emails if
+you can. When the provider signs somebody in to an existing account by its
+email, that email is told, as when a way in is added from Account.
+
+Your provider must never say `email_verified: true` for an email its users
+can type in themselves: anyone could then put in somebody else's email and
+sign in to their account here. In Keycloak, either don't let users edit
+their email, or turn on "Verify email" so a changed email is unverified
+until its owner confirms it.
+
+A provider account with no email can't sign in. Changing your
+email in Tuff unlinks the provider. Signing out of Tuff doesn't sign out of
+the provider, and Tuff doesn't read groups or roles from it.
 
 ### GitHub and Slack in projects
 
@@ -319,7 +365,7 @@ make yourself. Without them, Settings says they are not set up here.
 | -------- | ------- | ------- |
 | `PURGE_AFTER_DAYS` | `30` | How long a deleted thing can be restored before the worker removes it for good. At least 1; empty or not a number is the default. |
 | `PG_POOL_MAX` | `20` | Database connections each process keeps. |
-| `KLIPY_API_KEY` | none | A [KLIPY](https://klipy.com) key, for the GIF button in chat. |
+| `KLIPY_API_KEY` | none | A [KLIPY](https://klipy.com) key, for the GIF button in chat. The browser then asks KLIPY itself: see [What leaves your server](#what-leaves-your-server). |
 | `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | none | Cloudflare Turnstile keys. A project's public feedback page refuses every message without them. |
 | `ORIGIN_SECRET` | none | Only if Cloudflare is in front: see the proxy notes below. |
 | `TUFF_IMAGE` | `ghcr.io/usetuff/tuff` | Where the image is pulled from, for a registry of your own that mirrors it. |
@@ -332,6 +378,47 @@ The compose file sets `DATABASE_URL`, `DATABASE_URL_APP`,
 `DATABASE_URL_WORKER`, `NODE_ENV`, `STORAGE_DIR`, `WEB_DIR`,
 `MIGRATE_ON_START`, `BACKUP_DIR` and `PORT` itself, and a line in `.env`
 with one of those names is ignored.
+
+## What leaves your server
+
+Your server sends us nothing. Nothing is counted, and the page has no
+analytics script.
+
+With nothing set up, the server makes one request of its own: once a day it
+asks `api.github.com` whether a new release is out. `UPDATE_CHECK=off` stops
+it ([Hearing of a new version](#hearing-of-a-new-version)).
+
+Everything else goes out only once you set it up:
+
+| Where | When | What goes there |
+| ----- | ---- | --------------- |
+| `api.resend.com` | `RESEND_API_KEY` is set | The emails Tuff sends. With `SMTP_URL`, they go to your SMTP server instead. |
+| `accounts.google.com`, `oauth2.googleapis.com`, `www.googleapis.com` | Google sign-in is set up | Signing in, and fetching Google's keys to check it. |
+| `appleid.apple.com` | Apple sign-in is set up | Signing in, and fetching Apple's keys to check it. |
+| `github.com`, `api.github.com` | GitHub sign-in or the GitHub App is set up | Signing in, and a linked repository's issues and pull requests. |
+| `slack.com` | The Slack app is set up | What a project posts to Slack. |
+| `api.push.apple.com`, `api.sandbox.push.apple.com` | `APNS_KEY` is set | Pushes to iPhones. |
+| `fcm.googleapis.com`, `oauth2.googleapis.com` | `FCM_SERVICE_ACCOUNT` is set | Pushes to Android phones. |
+| `challenges.cloudflare.com` | The Turnstile keys are set | A project's public feedback page loads Turnstile there, and the server checks each message with it. |
+| `api.klipy.com` | `KLIPY_API_KEY` is set | Sent by the browser, not the server, when somebody uses the GIF button: what they type, a random id kept in that browser (not the account), and which GIF they sent. The GIFs load from `static.klipy.com`. |
+| `api.linear.app`, `app.asana.com`, `api.github.com`, your Jira site | Somebody imports from there | Requests made with the token that person pastes, during the import only. |
+
+And to addresses that people on your server give it:
+
+- links posted in chat, read for a preview, as `TuffBot/1.0 (+APP_URL)`;
+- a project's webhooks, and a Claude Code routine's URL on
+  `api.anthropic.com` when an agent is one;
+- the push service a browser names when somebody turns on notifications;
+- your bucket (`STORAGE_S3_ENDPOINT`) and your SMTP server;
+- your own sign-in provider (`OIDC_ISSUER`): its discovery document, its
+  keys and its token endpoint, and the browser goes to its sign-in page.
+
+The page's security policy holds the browser to the same list. It connects
+to your server, and to KLIPY when GIFs are on. Pictures load from any https
+address, because people post links to them.
+
+`server/test/what-leaves.test.ts` keeps this list true. It fails when an
+outside address appears in the code and is not named here.
 
 ## Behind a proxy of your own
 

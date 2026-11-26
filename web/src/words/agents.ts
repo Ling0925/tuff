@@ -165,6 +165,14 @@ export const AGENTS = say({
     (name: string) => `Nouveau jeton pour ${name}`,
     (name: string) => `为 ${name} 创建新令牌`,
   ],
+  /** Its tokens ended and its webhook off: a new token starts it again. */
+  stopped: ['Stopped', 'Arrêté', '已停止'],
+  /** Its webhook, turned off when its account changed hands. */
+  reachStopped: [
+    'Nothing is sent to this agent. Its address was set before your account changed hands. Enter the address again to start sending, with a new secret.',
+    'Rien n’est envoyé à cet agent. Son adresse a été définie avant que votre compte change de main. Saisissez de nouveau l’adresse pour reprendre les envois, avec un nouveau secret.',
+    '不会向此代理发送任何内容。它的地址是在你的账户易主之前设置的。重新输入地址即可恢复发送，并使用新密钥。',
+  ],
   newTokenSays: [
     'The old token stops working now. The agent keeps its projects and tasks, and works again once you give it the new token.',
     'L’ancien jeton cesse de fonctionner tout de suite. L’agent garde ses projets et ses tâches, et fonctionne à nouveau dès que vous lui donnez le nouveau jeton.',

@@ -204,12 +204,11 @@ thing, and a link inside a button is two doors in one place.
 
 Comments, strings, numbers, keywords and the names of things called or
 declared, in the colours GitHub's light and dark themes give them —
-`--code-*` in the tokens. One expression over the text in
-`data/highlight.ts`, not a grammar per language: a highlighter package is a
-dependency the design does not name, and a snippet of a few lines in a task
-needs the five things every editor colours alike. The editor draws them as
-decorations, so the colour is never stored; `Doc` draws the same tokens as
-spans, so a block reads the same once sent.
+`--code-*` in the tokens. It was one expression over the text in
+`data/highlight.ts`, not a grammar per language, while a highlighter
+package was a dependency nobody had agreed to. It is lowlight now, by decision, with a language per block and a bar to choose it.
+Chat keeps the one expression. Either way the
+colour is drawn, never stored.
 
 ## A link is followed with ⌘
 
@@ -224,7 +223,7 @@ No bar of text marks over a selection inside code: bold, headings and lists
 mean nothing there. And it can be taken out whole — it could not, since a
 press puts the caret in its text and Backspace deletes characters: Escape
 inside it selects the block, with the ring a picture wears, and Backspace
-then takes it out; a bin in its corner does the same under the pointer.
+then takes it out; a bin on its bar does the same under the pointer.
 
 ## Pictures: smaller, larger, saved
 
@@ -297,6 +296,9 @@ slash — a date, a path, "and/or" — and a menu that opens on those interrupts
 writing rather than helping it. Typing on narrows the list; the arrows walk
 it; Enter takes the one that is chosen and takes the `/quote` out with it,
 because the command is not part of what was written.
+
+**Link to a doc or task** in it writes a `#` and opens the list `#` opens
+— a doc or a task of the project, picked into a chip.
 
 Two heading levels and not six. A description is prose: the third level of
 heading in a paragraph of four sentences is a distinction nobody reading it

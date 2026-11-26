@@ -220,6 +220,8 @@ const BARS = {
     openTheNavigation: 'Open the navigation',
     sidebarWidth: 'Sidebar Width',
     toolsWidth: 'Tools Width',
+    besideWidth: 'Conversation Width',
+    threadWidth: 'Thread Width',
   },
   es: {
     search: 'Buscar',
@@ -229,6 +231,8 @@ const BARS = {
     openTheNavigation: 'Abrir la navegación',
     sidebarWidth: 'Ancho de la barra lateral',
     toolsWidth: 'Ancho de las herramientas',
+    besideWidth: 'Ancho de la conversación',
+    threadWidth: 'Ancho del hilo',
   },
   fr: {
     search: 'Rechercher',
@@ -238,6 +242,8 @@ const BARS = {
     openTheNavigation: 'Ouvrir la navigation',
     sidebarWidth: 'Largeur de la barre latérale',
     toolsWidth: 'Largeur des outils',
+    besideWidth: 'Largeur de la conversation',
+    threadWidth: 'Largeur du fil',
   },
   zh: {
     search: '搜索',
@@ -247,6 +253,8 @@ const BARS = {
     openTheNavigation: '打开导航',
     sidebarWidth: '侧边栏宽度',
     toolsWidth: '工具宽度',
+    besideWidth: '对话宽度',
+    threadWidth: '话题宽度',
   },
 } as const
 

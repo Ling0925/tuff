@@ -7,6 +7,7 @@ import { format } from '../../data/route.js'
 import { Icon } from '../glyphs.jsx'
 import { usePhone, Popover, SHOWING, Avatar, useShown } from '../kit.jsx'
 import { Doc, LinkHostsContext } from '../Doc.jsx'
+import { CodeTools } from '../code.jsx'
 import { EmojiPicker } from '../LazyEmojiPicker.jsx'
 import { PersonFace } from '../PersonCard.jsx'
 import { Origin } from '../Origin.jsx'
@@ -472,7 +473,10 @@ export function MessageRow({
               {/* A webhook's words are a stranger's: each link says where it
                   really goes. */}
               <LinkHostsContext.Provider value={Boolean(m.hook_id)}>
-                <Doc body={m.body} className="whitespace-pre-wrap [color:var(--ink-2)]" />
+                {/* Code as chat has always drawn it: no bar over a message. */}
+                <CodeTools.Provider value={false}>
+                  <Doc body={m.body} className="whitespace-pre-wrap [color:var(--ink-2)]" />
+                </CodeTools.Provider>
               </LinkHostsContext.Provider>
             </div>
             {/* Each task it names, as the board draws it — `chat-tasks.md`. */}

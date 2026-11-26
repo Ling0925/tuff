@@ -87,6 +87,12 @@ export const CHANNELS = say({
     (who: string, turned: boolean, last: string | null) =>
       `${turned ? '新 URL 由' : '添加者：'} ${who} · ${last ? `上次发布 ${last}` : '从未发布'}`,
   ],
+  /** Its maker's account changed hands. */
+  hookStopped: [
+    'Stopped. Get a new URL to start it again.',
+    'Arrêté. Créez une nouvelle URL pour le relancer.',
+    '已停止。获取新 URL 以重新启动。',
+  ],
   newUrl: ['New URL', 'Nouvelle URL', '新 URL'],
   newUrlSure: ['The old URL stops working. New URL?', 'L’ancienne URL ne fonctionnera plus. Nouvelle URL ?', '旧 URL 将失效。生成新 URL？'],
   remove: ['Remove', 'Supprimer', '移除'],

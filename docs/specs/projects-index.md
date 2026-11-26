@@ -55,6 +55,40 @@ bin that long. It could not before: a project's tasks were not deleted
 with it, so the project row could never be removed — and the clear-out,
 meeting a row it could not remove, gave up on everything else as well.
 
+**A project that ever had a repository goes too** (). The GitHub
+tables came after the list of what a project holds was written, and
+nobody added them to it: a linked repository's pull requests, the issues
+paired with its tasks, the comments mirrored either way, what was still
+owed to GitHub, and the link itself all name the project, and all of them
+held its row. Unlinking does not remove the link — it stamps it — so a
+project that had a repository once could never go: **Delete for good**
+answered `400 invalid`, and the clear-out skipped it every hour, saying
+so to nobody. It takes all of them now, the rows pointing at what goes
+before what they point at: links to pull requests and tasks, comments,
+issues, pull requests, what was owed, and the links, the stamped ones
+included. Nothing changes on GitHub — the repository, its issues and
+its comments are GitHub's and stay; only this side's memory of them goes.
+
+So it cannot happen a third time without somebody noticing, a test reads
+every foreign key in the database that points at the project or at
+anything that goes with it, and fails on one that neither goes with its
+row by itself (`on delete cascade` or `set null`) nor is on the list of
+what `purge_project_rows` deletes. A new table that names a project has
+to say which it is.
+
+The same function is behind **Delete sample**, which takes a live sample
+at once for anybody on it. A sample is
+never given a repository, so that press never takes a link somebody set
+up.
+
+A project that cannot go is still passed over rather than stopping the
+run — the clear-out takes the next one — and the worker now prints the
+database's warning about it, which it used to throw away. What the
+clear-out says every hour whatever happens — rows past their days that
+something live still names, an unlinked repository of a live project
+among them — is a notice, and stays out of the log, so the warning is
+not buried under it.
+
 ## A project has a name and no description
 
 The web neither asks for a description nor shows one. A project is named

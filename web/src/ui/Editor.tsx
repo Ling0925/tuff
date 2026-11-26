@@ -13,6 +13,8 @@ import { dropPoint } from '@tiptap/pm/transform'
 import StarterKit from '@tiptap/starter-kit'
 import { TableKit } from '@tiptap/extension-table'
 import { upload, kindOf, measure, UploadInto } from '../data/upload.js'
+import { api } from '../data/api.js'
+import { recall, remember } from '../data/memory.js'
 import { Icon, type IconName } from './glyphs.jsx'
 import { Avatar, usePhone } from './kit.jsx'
 import { DocRef, Mention } from './refs.js'
@@ -22,18 +24,24 @@ import { PersonDoorsContext } from './PersonCard.jsx'
 import { Autolink } from './autolink.js'
 import * as sending from '../data/sending.js'
 import { EDITOR as W } from '../words/editor.js'
-import { type Block, BLOCKS, PhoneDock, TextBar, Mark } from './editor/bars.jsx'
-import { Attachment, CodeColours } from './editor/attachment.jsx'
+import { type Block, offered, PhoneDock, TextBar, Mark } from './editor/bars.jsx'
+import { Attachment } from './editor/attachment.jsx'
+import { CodeBlock } from './editor/codeBlock.jsx'
 import { Callout } from './editor/callout.jsx'
 import { Toggle, ToggleKeys } from './editor/toggle.js'
 import { Wraps } from './editor/wraps.js'
 import type { Collab } from './editor/collab.js'
 import { CommentMark } from './editor/comment.js'
+import type { EditorView } from '@tiptap/pm/view'
 
 /** What the screen around a body may ask of it. */
 export type EditorHandle = {
   enter: () => void
   end?: () => void
+  /** Where its caret is, for the editor that takes over from it. */
+  caret?: () => Caret | null
+  /** The caret given back, focused: the one the editor before had. */
+  keep?: (at: Caret) => void
   files?: (list: File[]) => void
   /** The editor itself, for the screen around it to read the words and draw
       over them — a thread's card beside its words. */
@@ -175,6 +183,34 @@ export function Editor({
   peopleRef.current = people
 
   /*
+   * `#` being typed: a doc or a task of the project to link, as the chat's
+   * line names one. `from` is where the `#`
+   * stands and `q` what follows it; `menu` says the block menu wrote the
+   * `#`, so closing the list takes it back out — nobody typed it.
+   */
+  const [seeking, setSeeking] = useState<{
+    at: { x: number; y: number; top: number }
+    from: number
+    q: string
+    menu: boolean
+  } | null>(null)
+  /* What the project answered for it; null until it has, so the list is
+     drawn with its rows or not at all. */
+  const [found, setFound] = useState<Linkable[] | null>(null)
+  const [sought, setSought] = useState(0)
+  const seekShown = seeking !== null && found !== null && (found.length > 0 || seeking.menu)
+  const seeks = useRef({ open: false, found: [] as Linkable[], chose: 0, pick: (_t: Linkable) => {}, close: () => {} })
+  seeks.current.open = seekShown
+  seeks.current.found = found ?? []
+  seeks.current.chose = sought
+  /* Where the `#` the block menu wrote stands, and a `#` Escape closed —
+     not opened again until another is typed. */
+  const menuHash = useRef(-1)
+  const shut = useRef(-1)
+  const projectNow = useRef(projectId)
+  projectNow.current = projectId
+
+  /*
    * The `+` in the margin of an empty line, and where that line is.
    *
    * It was a row under the body — "Add, or press /" — standing under every
@@ -214,6 +250,10 @@ export function Editor({
   words.current = onWords
   const shelf = useRef<HTMLDivElement | null>(null)
   const [, redraw] = useState(0)
+  /* The bodies this editor handed up in the last moment, as JSON — see
+     the effect that writes `value` in. Forgotten after a second, so a body
+     put back from outside later is still written in. */
+  const handedUp = useRef<string[]>([])
 
   const editor = useEditor({
     editable,
@@ -226,7 +266,11 @@ export function Editor({
         /* Written together, undo is the shared state's: ProseMirror's own
            would take back somebody else's words. */
         ...(collab ? { undoRedo: false as const } : {}),
+        /* Its own, below: the kit's code block with a language, wrapped
+           or numbered lines and a bar. */
+        codeBlock: false,
       }),
+      CodeBlock,
       Attachment,
       /* What a body names inline, kept through an edit even where nobody
          can type a new one. */
@@ -234,7 +278,6 @@ export function Editor({
       /* Alive in a body: where the task stands now. */
       TaskChip,
       DocRef,
-      CodeColours,
       /* An address stored as words, drawn as the link it is. */
       Autolink,
       /* Not resizable: a column is as wide as the table divides it, and a
@@ -299,6 +342,13 @@ export function Editor({
         window.open(a.href, '_blank', 'noopener,noreferrer')
         return true
       },
+      /* And as the press is let go, before ProseMirror puts its own back. */
+      handleDOMEvents: {
+        mouseup: (view) => {
+          caughtUp(view)
+          return false
+        },
+      },
       handlePaste: (_view, event) => take(event.clipboardData),
       /* Where it was let go, between two blocks: a picture dropped in
          the middle of a sentence would cut it in two. The same point the
@@ -318,6 +368,8 @@ export function Editor({
        * changes and Enter pick whatever was first when the editor was made.
        */
       handleKeyDown: (view, event) => {
+        /* Where the caret is, before any key acts on it. */
+        if (!event.isComposing) caughtUp(view)
         const now = live.current
         /* Who `@` is offering, before anything else reads the arrows. */
         const call = calls.current
@@ -337,6 +389,29 @@ export function Editor({
           }
           if (event.key === 'Escape') {
             setCalling(null)
+            return true
+          }
+        }
+        /* And what `#` is offering. */
+        const seek = seeks.current
+        if (seek.open) {
+          const n = seek.found.length
+          if (event.key === 'ArrowDown' && n > 0) {
+            setSought((i) => (i + 1) % n)
+            return true
+          }
+          if (event.key === 'ArrowUp' && n > 0) {
+            setSought((i) => (i - 1 + n) % n)
+            return true
+          }
+          if (event.key === 'Enter' || event.key === 'Tab') {
+            const t = seek.found[seek.chose] ?? seek.found[0]
+            if (t) seek.pick(t)
+            else seek.close()
+            return true
+          }
+          if (event.key === 'Escape') {
+            seek.close()
             return true
           }
         }
@@ -398,9 +473,7 @@ export function Editor({
           }
         }
         if (!now.open) return false
-        const list = BLOCKS.filter((b) => now.files || b.id !== 'file').filter((b) =>
-          now.typed === '' ? true : b.said.toLowerCase().includes(now.typed.toLowerCase()),
-        )
+        const list = offered(now.files, now.typed)
         if (event.key === 'Escape') {
           setMenu(null)
           return true
@@ -423,7 +496,14 @@ export function Editor({
       },
     },
     onUpdate: ({ editor: e, transaction }) => {
-      onChange(settled(e.getJSON()))
+      const out = settled(e.getJSON())
+      const json = JSON.stringify(out)
+      handedUp.current.push(json)
+      if (handedUp.current.length > 8) handedUp.current.shift()
+      setTimeout(() => {
+        handedUp.current = handedUp.current.filter((j) => j !== json)
+      }, 1000)
+      onChange(out)
       /* A change made by a control rather than a key — a picture resized,
          taken out, or arrived — is saved as it is made. */
       if (transaction.getMeta('settle')) onSettle?.(settled(e.getJSON()))
@@ -434,6 +514,7 @@ export function Editor({
     onBlur: ({ editor: e }) => {
       setGutter(null)
       setCalling(null)
+      setSeeking(null)
       /* Into the bar's own field is not away from the editor. */
       setTimeout(() => {
         if (!document.activeElement?.closest('[data-text-bar]')) setBar(null)
@@ -565,6 +646,7 @@ export function Editor({
     hold(e)
     frame(e)
     ask(e)
+    seek(e)
     if (!empty) return setMenu(null)
     /* Nothing from the list inside a table: a table in a cell, or a
        heading, is something nobody meant. */
@@ -619,6 +701,104 @@ export function Editor({
       .run()
     setCalling(null)
   }
+
+  /**
+   * Whether the words before the caret are `#` and the start of a doc's or
+   * a task's name — as `@` is read: after a space or at the start of a
+   * line, so `issue#4` links nothing, and not in code, where `#` is a
+   * comment or a colour. Spaces may follow, since titles have them.
+   */
+  function seek(e: Tip) {
+    const { $from, empty } = e.state.selection
+    if (!projectNow.current || !empty || !e.isEditable || $from.parent.type.name === 'codeBlock') {
+      return setSeeking(null)
+    }
+    const before = $from.parent.textBetween(0, $from.parentOffset, undefined, '\ufffc')
+    const said = /(?:^|\s)#([^#\n\ufffc]{0,40})$/u.exec(before)
+    if (!said) {
+      shut.current = -1
+      menuHash.current = -1
+      return setSeeking(null)
+    }
+    const from = $from.pos - said[1]!.length - 1
+    if (from === shut.current) return setSeeking(null)
+    const box = e.view.coordsAtPos(from)
+    setSeeking((was) => {
+      if (was?.from !== from || was.q !== said[1]) setSought(0)
+      return { at: { x: box.left, y: box.bottom, top: box.top }, from, q: said[1] ?? '', menu: from === menuHash.current }
+    })
+  }
+
+  /** The `#` and what follows it become the chip of what was picked, and a space after it. */
+  function pickRef(t: Linkable) {
+    if (!editor || !seeking) return
+    const node =
+      t.kind === 'doc'
+        ? { type: 'docref', attrs: { id: t.id, projectId: t.project_id, number: t.number, title: t.title } }
+        : {
+            type: 'taskref',
+            attrs: { id: t.id, projectId: t.project_id, number: t.number, key: t.project_key ?? null, title: t.title },
+          }
+    editor
+      .chain()
+      .focus()
+      .deleteRange({ from: seeking.from, to: editor.state.selection.$from.pos })
+      .insertContent([node, { type: 'text', text: ' ' }])
+      .run()
+    menuHash.current = -1
+    setSeeking(null)
+  }
+
+  /** Closed without a pick: a `#` typed stays a `#`; one the menu wrote goes with what followed it. */
+  function closeSeek() {
+    if (!editor || !seeking) return
+    if (seeking.menu) {
+      menuHash.current = -1
+      editor.chain().focus().deleteRange({ from: seeking.from, to: editor.state.selection.$from.pos }).run()
+    } else shut.current = seeking.from
+    setSeeking(null)
+  }
+
+  /*
+   * What the project can link, asked as the words after `#` change — at
+   * once for a bare `#`, which is answered from the last time first, and
+   * after a pause while a name is typed. The rows already shown stay until
+   * the next answer replaces them. `&shared=1`: a draft is never offered
+   * here, since nothing takes its title back out of a body.
+   */
+  const q = seeking?.q ?? null
+  useEffect(() => {
+    if (q === null || !projectId) return setFound(null)
+    const blank = q.trim() === ''
+    if (blank) {
+      const had = recall<Linkable[]>(linkableKey(projectId))
+      if (had) setFound(had)
+    }
+    let alive = true
+    const wait = setTimeout(
+      () => {
+        void askLinkable(projectId, q.trim())
+          .then((rows) => {
+            if (!alive) return
+            setFound(rows)
+            setSought(0)
+          })
+          .catch(() => alive && setFound([]))
+      },
+      blank ? 0 : 120,
+    )
+    return () => {
+      alive = false
+      clearTimeout(wait)
+    }
+  }, [q, projectId])
+
+  /* The chosen row kept in view as the arrows walk. */
+  const refList = useRef<HTMLDivElement | null>(null)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scrolled when the choice moves
+  useEffect(() => {
+    refList.current?.querySelector('[data-chosen]')?.scrollIntoView({ block: 'nearest' })
+  }, [sought])
 
   /** Where the table the caret is in begins, or null when it is in none. */
   function tableAt(e: Tip): number | null {
@@ -734,16 +914,21 @@ export function Editor({
       }
       if (block.id === 'file') pick.current?.click()
       else if (block.id === 'link') openLink()
-      else block.run(editor)
+      else if (block.id === 'ref') {
+        /* The `#` list, opened by writing its `#` — the same list, the
+           same keys, and the pick replaces it as it would a typed one. */
+        menuHash.current = editor.state.selection.from
+        editor.chain().focus().insertContent('#').run()
+      } else block.run(editor)
     },
     [editor, menu],
   )
   chosen.current = apply
   calls.current.pick = pickPerson
+  seeks.current.pick = pickRef
+  seeks.current.close = closeSeek
 
-  const shown = BLOCKS.filter((b) => projectId || b.id !== 'file').filter((b) =>
-    typed === '' ? true : b.said.toLowerCase().includes(typed.toLowerCase()),
-  )
+  const shown = offered(Boolean(projectId), typed)
 
   /*
    * Under the caret when it fits, over it when it does not.
@@ -878,7 +1063,20 @@ export function Editor({
        never had — or a send in flight would read as the server's copy
        being different, and be written over. */
     const here = JSON.stringify(settled(editor.getJSON()))
-    if (here === JSON.stringify(value)) return
+    const there = JSON.stringify(value)
+    if (here === there) return
+    /*
+     * Nor a body this editor handed up itself, coming back late.
+     *
+     * Two edits in one moment — the `/code` taken out, then the code block
+     * made — and a node view drawn by React for the second flushes React
+     * at once, while ProseMirror is still drawing it: the screen around
+     * renders with the body as it was after the first, and this effect
+     * wrote that over the second. The block went, and its first letter
+     * landed in a paragraph. What the editor said a moment ago is never
+     * news to it.
+     */
+    if (handedUp.current.includes(there)) return
     editor.commands.setContent(value as never, { emitUpdate: false })
   }, [editor, value, collab])
 
@@ -896,13 +1094,24 @@ export function Editor({
          body somebody is writing in a window. */
       end: () => {
         if (!editor || editor.isDestroyed) return
-        /* Focused now, as `enter` is below: this is also the caret handed
-           to the editor bound to the shared state when it takes over, and
-           the keys pressed in the frame TipTap's `focus` waits for went
-           into neither editor — a new document typed into at once lost
-           every word one time in three. */
+        /* Focused now, as `enter` is below: this was once also the caret
+           handed to the editor bound to the shared state when it takes
+           over (`keep` is now), and the keys pressed in the frame TipTap's
+           `focus` waits for went into neither editor — a new document typed
+           into at once lost every word one time in three. */
         editor.view.focus()
         editor.view.dispatch(editor.state.tr.setSelection(Selection.atEnd(editor.state.doc)).scrollIntoView())
+      },
+      caret: () => (editor && !editor.isDestroyed ? caretOf(editor.view) : null),
+      /* Focused now, as `end` is, and not scrolled: the caret is where the
+         person put it, on the screen they are reading. The words are the
+         same ones, so the numbers are; kept inside them if they are not. */
+      keep: (at: Caret) => {
+        if (!editor || editor.isDestroyed) return
+        const { doc, tr } = editor.state
+        const inside = (n: number) => doc.resolve(Math.min(Math.max(n, 0), doc.content.size))
+        editor.view.focus()
+        editor.view.dispatch(tr.setSelection(TextSelection.between(inside(at.anchor), inside(at.head))))
       },
       /* Files let go of anywhere around the body rather than on its words —
          a window's empty room under them — go in at its end, as a picked
@@ -937,6 +1146,11 @@ export function Editor({
       handle.current = null
     }
   }, [editor, handle, insert])
+
+  /* The bare `#`'s answer asked as the body takes the caret, so the list opens whole. */
+  useEffect(() => {
+    if (writing && projectId && editable) warmLinkable(projectId)
+  }, [writing, projectId, editable])
 
   /* Whether the body has the caret, for the dock on a phone. */
   useEffect(() => {
@@ -1219,12 +1433,142 @@ export function Editor({
             </div>
           )
         })()}
+      {/* What `#` can link, under it as the others are under theirs. */}
+      {seekShown &&
+        seeking &&
+        found &&
+        (() => {
+          const tallRefs = Math.min(Math.max(found.length, 1) * 32 + 8, 328)
+          const room = window.innerHeight - seeking.at.y - 14
+          const above = room < tallRefs && seeking.at.top - 14 > room
+          return (
+            <div
+              ref={refList}
+              data-ref-list
+              data-menu
+              className="fixed z-40 w-[320px] overflow-y-auto py-1"
+              style={{
+                left: Math.max(8, Math.min(seeking.at.x, window.innerWidth - 328)),
+                ...(above
+                  ? { bottom: window.innerHeight - seeking.at.top + 6, maxHeight: Math.min(328, seeking.at.top - 14) }
+                  : { top: seeking.at.y + 6, maxHeight: Math.min(328, room) }),
+                background: 'var(--float)',
+                borderRadius: 'var(--r-panel)',
+                boxShadow: 'var(--float-shadow)',
+                ['--r-item' as string]: 'calc(var(--r-panel) - 4px)',
+              }}
+            >
+              {found.length === 0 ? (
+                <div className="flex items-center px-3 text-base text-ink-3" style={{ height: 'var(--row-h)' }}>
+                  {W.noLinkable}
+                </div>
+              ) : (
+                found.map((t, i) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    data-ref-row={t.id}
+                    data-ref-kind={t.kind ?? 'task'}
+                    data-chosen={i === sought || undefined}
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      pickRef(t)
+                    }}
+                    onMouseEnter={() => setSought(i)}
+                    className="flex w-full items-center gap-3 px-3 text-left text-base text-ink"
+                    style={{ height: 'var(--row-h)', background: i === sought ? 'var(--hover)' : undefined }}
+                  >
+                    {t.kind === 'doc' ? (
+                      <span className="flex w-4 shrink-0 justify-center text-ink-3">
+                        <Icon name="doc" size={16} />
+                      </span>
+                    ) : (
+                      <span className="shrink-0 font-mono text-xs tabular-nums text-ink-3">
+                        {t.project_key ? `${t.project_key}-${t.number}` : `#${t.number}`}
+                      </span>
+                    )}
+                    <span className="min-w-px flex-1 truncate">{t.title}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          )
+        })()}
     </div>
   )
 }
 
+/** A doc or a task `#` can link — what `GET /projects/:id/nameable` answers. */
+type Linkable = {
+  kind?: 'doc'
+  id: string
+  number: number | null
+  title: string
+  project_id: string
+  project_key?: string | null
+}
+
+const linkableKey = (project: string) => `linkable:${project}`
+
+/**
+ * The project's docs and tasks matching what follows `#`, the docs first:
+ * a body links a spec or a brief more often than the chat does, and the
+ * server lists the tasks first for the chat. A bare `#` is remembered.
+ */
+async function askLinkable(project: string, q: string): Promise<Linkable[]> {
+  const r = await api<{ tasks: Linkable[] }>(`/projects/${project}/nameable?shared=1&q=${encodeURIComponent(q)}`)
+  const rows = [...r.tasks.filter((t) => t.kind === 'doc'), ...r.tasks.filter((t) => t.kind !== 'doc')]
+  return q === '' ? remember(linkableKey(project), rows) : rows
+}
+
+/* Asked once a project for a session, as a body first takes the caret. */
+const warmed = new Set<string>()
+function warmLinkable(project: string) {
+  if (warmed.has(project)) return
+  warmed.add(project)
+  askLinkable(project, '').catch(() => warmed.delete(project))
+}
+
 /** Somebody `@` can name: who they are and the face to show. */
 export type Callable = { actor_id: string; name: string; avatar_url?: string | null | undefined }
+
+/**
+ * The caret where the browser has already put it.
+ *
+ * A press puts the caret in the page at once, and ProseMirror hears of it
+ * from the `selectionchange` that follows, a task later. Until then it goes
+ * by its own caret: a key pressed in between acted there, and twenty
+ * milliseconds after the body takes the focus ProseMirror writes its own
+ * back over the press if it has heard nothing. In a body just bound to the
+ * shared state its own is the document's first letter — where words typed
+ * straight after a click landed, one run in three on a busy machine. This
+ * is what that event would do, done now: the observer's own check, which
+ * reads the page only when it holds a caret ProseMirror has not seen.
+ */
+function caughtUp(view: EditorView): void {
+  const observer = (view as unknown as { domObserver?: { onSelectionChange?: () => void } }).domObserver
+  observer?.onSelectionChange?.()
+}
+
+/** Where the caret is, as numbers another editor of the same words can take. */
+export type Caret = { anchor: number; head: number }
+
+/**
+ * Read from the page where the person put it rather than from the state,
+ * which may not have heard of the press yet (`caughtUp`). A read only: this
+ * is asked while the screen is being drawn.
+ */
+function caretOf(view: EditorView): Caret {
+  const { anchor, head } = view.state.selection
+  const dom = view.dom.ownerDocument.getSelection()
+  if (!(view.state.selection instanceof TextSelection) || !dom?.anchorNode || !dom.focusNode) return { anchor, head }
+  if (!view.dom.contains(dom.anchorNode) || !view.dom.contains(dom.focusNode)) return { anchor, head }
+  try {
+    return { anchor: view.posAtDOM(dom.anchorNode, dom.anchorOffset), head: view.posAtDOM(dom.focusNode, dom.focusOffset) }
+  } catch {
+    return { anchor, head }
+  }
+}
 
 /**
  * The document as it may leave the editor: without the files still on

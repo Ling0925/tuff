@@ -11,6 +11,7 @@ import { Avatar, Badge, COLUMN_MS, Fluid, GroupLabel, Over, Resizer, Row } from 
 import { foldSlot } from './project/fold.js'
 import { ThemeButton, WorkspaceMenu } from './TopBar.jsx'
 import { useReorder } from './useReorder.js'
+import { cappedRows, landing } from './capped.js'
 import { Icon, ProjectMark, markOf, markRadius } from './icons.jsx'
 
 export type View =
@@ -543,6 +544,9 @@ export function Sidebar({
         <Capped
           items={projects}
           cap={caps.projects}
+          /* The open project is always in the column, with its tools under
+             it. */
+          pinned={view === 'projects' ? project : null}
           more={W.moreProjects}
           onPlace={onPlaceProject}
           render={(p, drag) => (
@@ -562,8 +566,9 @@ export function Sidebar({
                 away — under its own row, as Linear keeps a team's views
                 under the team. The project screen draws into it, so the
                 tools, their counts and the one that is lit are said in one
-                place. Not drawn behind "n more": a project nobody can see
-                has nowhere to fold into, and its column stays.
+                place. The open project's row is always drawn, behind
+                "n more" or not (`Capped`'s `pinned`), so its tools always
+                have somewhere to fold into.
               */}
               {wide && view === 'projects' && project === p.id && (
                 <div ref={foldSlot} data-fold-slot className="relative -mt-1 flex shrink-0 flex-col" />
@@ -622,6 +627,10 @@ export function Sidebar({
         <Capped
           items={rooms.filter((r) => !r.hidden)}
           cap={caps.rooms}
+          /* The open room too, among the ones shown. One somebody put away
+             stays under Hidden while it is read: putting it away was the
+             choice, and reading it again does not take that back. */
+          pinned={room}
           tail={rooms.filter((r) => r.hidden)}
           more={W.moreChats}
           onPlace={onPlaceRoom}
@@ -788,6 +797,7 @@ function share(room: number, projects: number, rooms: number) {
 function Capped<T extends { id: string }>({
   items,
   cap = SHOWN,
+  pinned = null,
   tail = [],
   render,
   more,
@@ -797,6 +807,8 @@ function Capped<T extends { id: string }>({
   items: T[]
   /** How many to show before "more" — as many as the column has room for. */
   cap?: number
+  /** The row that is open, drawn even when its place is behind "more". */
+  pinned?: string | null | undefined
   /** Rows that are always behind "more", whatever room there is above —
       the ones somebody put away. */
   tail?: T[]
@@ -822,14 +834,38 @@ function Capped<T extends { id: string }>({
    * neither, and drags exactly as it did.
    */
   const marked = all && tail.length > 0 && !!onMove
-  const shown = all ? [...items, ...tail] : items.slice(0, cap)
+  /*
+   * The open row, when its place is behind "more", takes the last place
+   * before it.
+   *
+   * Opened from the palette, from a link or from the open list, a project
+   * past the cap had no row in the column — and so nowhere for its tools to
+   * fold into, which kept its own column open on a window that had folded
+   * it. Now the list draws one fewer of the order and then the open row:
+   * the column is as tall as it was, everything above keeps its place, and
+   * the one row that gives way is the last. "n more" counts the same,
+   * because what is behind it is the same number of rows.
+   *
+   * Drawn out of place, it is still at its place in the order — so a gap
+   * beside it is not a place in the order either. The gap above it is the
+   * gap between the two rows drawn there; the gap below it would put a row
+   * behind the far-off one it stands for, out of sight, so it is the same
+   * gap as the one above.
+   */
+  const head = cappedRows(items, cap, all ? null : pinned)
+  const lifted = !all && head.lifted
+  const shown = all ? [...items, ...tail] : head.shown
   const order = marked ? [...items.map((i) => i.id), MARK, ...tail.map((i) => i.id)] : shown.map((i) => i.id)
   const target = !all && rest > 0 && !!onMove
   const reorder = useReorder({
     ids: order,
     enabled: !!onPlace,
     onDrop: (id, after, at) => {
-      if (!marked) return onPlace?.(id, after)
+      if (!marked) {
+        const behind = landing(order, lifted, pinned, id, after)
+        if (behind !== undefined) onPlace?.(id, behind)
+        return
+      }
       /* Which part the gap is in, and its neighbours there — not across the
          label, which is the line between the two parts. */
       const v = items.length
@@ -843,6 +879,9 @@ function Capped<T extends { id: string }>({
     onDropOn: (id) => onMove?.(id, { hidden: true, after: null, before: null }),
   })
   const lit = reorder.on === MORE
+  /* The gap below a lifted row is drawn as the one above it, which is where
+     a row let go there lands. */
+  const gap = lifted && reorder.at === order.length && reorder.id !== pinned ? order.length - 1 : reorder.at
   return (
     <div data-order-list {...(onPlace ? reorder.handlers : {})} className="contents">
       {shown.map((item, i) => {
@@ -850,14 +889,14 @@ function Capped<T extends { id: string }>({
         const k = marked && i >= items.length ? i + 1 : i
         return (
           <Fragment key={item.id}>
-            {marked && i === items.length && <HiddenMark line={reorder.at === items.length} />}
+            {marked && i === items.length && <HiddenMark line={gap === items.length} />}
             {render(item, {
               held: reorder.id === item.id,
               /* The line goes above the row the gap is above, and below the
                  last row when the gap is past the end. Drawn by the row
                  because the rows are the only boxes here — the list itself
                  has none. The gap just above the label is the label's. */
-              drop: reorder.at === k ? 'above' : reorder.at === order.length && k === order.length - 1 ? 'below' : null,
+              drop: gap === k ? 'above' : gap === order.length && k === order.length - 1 ? 'below' : null,
             })}
           </Fragment>
         )

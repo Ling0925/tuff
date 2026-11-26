@@ -88,9 +88,70 @@ export const ACCESS = say({
   openTuff: ['Open Tuff', 'Ouvrir Tuff', '打开 Tuff'],
   signIn: ['Sign in', 'Se connecter', '登录'],
 
+  /* A change of address's link, before and after the press, */
+  askConfirm: ['Confirm your new email.', 'Confirmez votre nouvelle adresse e-mail.', '确认你的新邮箱。'],
+  saidAskConfirm: [
+    (email: string, name: string, now: string) =>
+      `${email} will be the email for your Tuff account, ${name} (${now}). You’ll sign in with it from now on.`,
+    (email: string, name: string, now: string) =>
+      `${email} deviendra l’adresse e-mail de votre compte Tuff, ${name} (${now}). Vous vous connecterez désormais avec elle.`,
+    (email: string, name: string, now: string) => `${email} 将成为你的 Tuff 账户 ${name}（${now}）的登录邮箱。今后请使用它登录。`,
+  ],
+  /* An account whose address nobody proved: confirmed from anywhere, and
+     whoever was signed in to it is signed out. */
+  saidAskConfirmNew: [
+    (email: string, name: string, now: string) =>
+      `${email} will be the email for the Tuff account ${name} (${now}). After you confirm, everyone signed in to it is signed out, and we’ll send you a link to choose a password.`,
+    (email: string, name: string, now: string) =>
+      `${email} deviendra l’adresse e-mail du compte Tuff ${name} (${now}). Après votre confirmation, tout le monde sera déconnecté de ce compte, et nous vous enverrons un lien pour choisir un mot de passe.`,
+    (email: string, name: string, now: string) =>
+      `${email} 将成为 Tuff 账户 ${name}（${now}）的登录邮箱。确认后，所有已登录该账户的人都会退出，我们会向你发送设置密码的链接。`,
+  ],
+  saidChangedChoose: [
+    (email: string) => `We sent a link to ${email}. Open it to choose a password, then sign in with ${email}.`,
+    (email: string) => `Nous avons envoyé un lien à ${email}. Ouvrez-le pour choisir un mot de passe, puis connectez-vous avec ${email}.`,
+    (email: string) => `我们已向 ${email} 发送链接。打开它设置密码，然后使用 ${email} 登录。`,
+  ],
+  confirm: ['Confirm', 'Confirmer', '确认'],
+  askApprove: ['Approve the new email.', 'Approuvez la nouvelle adresse e-mail.', '批准新邮箱。'],
+  saidAskApprove: [
+    (email: string, name: string, now: string) =>
+      `Someone signed in to the Tuff account ${name} (${now}) asked to change its email to ${email}. If you approve, we’ll send a link to that address to finish.`,
+    (email: string, name: string, now: string) =>
+      `Une personne connectée au compte Tuff ${name} (${now}) a demandé à remplacer son adresse e-mail par ${email}. Si vous approuvez, nous enverrons un lien à cette adresse pour terminer.`,
+    (email: string, name: string, now: string) =>
+      `一位已登录 Tuff 账户 ${name}（${now}）的用户请求将邮箱更改为 ${email}。如果你批准，我们将向该地址发送完成更改的链接。`,
+  ],
+  approve: ['Approve', 'Approuver', '批准'],
+  approving: ['Approving…', 'Approbation…', '正在批准…'],
+  signInToConfirm: ['Sign in to confirm.', 'Connectez-vous pour confirmer.', '登录以确认。'],
+  saidSignInToConfirm: [
+    (email: string, name: string, now: string) =>
+      `This link changes the email of the Tuff account ${name} (${now}) to ${email}. To confirm, sign in to that account.`,
+    (email: string, name: string, now: string) =>
+      `Ce lien remplace l’adresse e-mail du compte Tuff ${name} (${now}) par ${email}. Pour confirmer, connectez-vous à ce compte.`,
+    (email: string, name: string, now: string) => `此链接会将 Tuff 账户 ${name}（${now}）的邮箱更改为 ${email}。请登录该账户以确认。`,
+  ],
+  saidOtherAccount: [
+    (email: string, name: string, now: string) =>
+      `You’re signed in to a different account. This link changes the email of the Tuff account ${name} (${now}) to ${email}. To confirm, sign in to that account.`,
+    (email: string, name: string, now: string) =>
+      `Vous êtes connecté à un autre compte. Ce lien remplace l’adresse e-mail du compte Tuff ${name} (${now}) par ${email}. Pour confirmer, connectez-vous à ce compte.`,
+    (email: string, name: string, now: string) =>
+      `你当前登录的是另一个账户。此链接会将 Tuff 账户 ${name}（${now}）的邮箱更改为 ${email}。请登录该账户以确认。`,
+  ],
+  signInToAnother: ['Sign in to another account', 'Se connecter à un autre compte', '登录另一个账户'],
+  ignoreIfNotYou: [
+    'If you didn’t ask for this change, ignore the email. Nothing will change.',
+    'Si vous n’avez pas demandé ce changement, ignorez l’e-mail. Rien ne changera.',
+    '如果你未请求此更改，请忽略此邮件。不会有任何变化。',
+  ],
+
   withGoogle: ['Continue with Google', 'Continuer avec Google', '使用 Google 继续'],
   withApple: ['Continue with Apple', 'Continuer avec Apple', '使用 Apple 继续'],
   withGithub: ['Continue with GitHub', 'Continuer avec GitHub', '使用 GitHub 继续'],
+  /* A server's own provider, by its `OIDC_NAME` or "SSO". */
+  withOwn: [(name: string) => `Continue with ${name}`, (name: string) => `Continuer avec ${name}`, (name: string) => `使用 ${name} 继续`],
   orWithEmail: ['or with email', 'ou par e-mail', '或使用邮箱'],
   troubleConflict: [
     'An account with that email already exists, and the provider didn’t confirm it’s yours. Sign in with your password instead.',
@@ -106,6 +167,16 @@ export const ACCESS = say({
     'Your GitHub account has no verified email. Add one on GitHub, or sign up with your email.',
     'Votre compte GitHub n’a aucune adresse e-mail vérifiée. Ajoutez-en une sur GitHub, ou inscrivez-vous avec votre adresse e-mail.',
     '你的 GitHub 账户没有已验证的邮箱。请在 GitHub 上添加，或使用邮箱注册。',
+  ],
+  troubleUnreachable: [
+    (name: string) => `Couldn’t reach ${name}. Try again in a few minutes.`,
+    (name: string) => `Impossible de joindre ${name}. Réessayez dans quelques minutes.`,
+    (name: string) => `无法连接 ${name}。请几分钟后重试。`,
+  ],
+  troubleNoAddress: [
+    (name: string) => `Your ${name} account has no email address. Ask whoever manages it to add one.`,
+    (name: string) => `Votre compte ${name} n’a pas d’adresse e-mail. Demandez à la personne qui le gère d’en ajouter une.`,
+    (name: string) => `你的 ${name} 账户没有邮箱地址。请让管理该账户的人添加一个。`,
   ],
   troubleExpired: ['That took too long. Try again.', 'Le délai est dépassé. Réessayez.', '操作超时，请重试。'],
   troubleOff: ['This sign-in method isn’t set up.', 'Ce mode de connexion n’est pas configuré.', '此登录方式尚未配置。'],

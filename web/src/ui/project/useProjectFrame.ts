@@ -155,7 +155,7 @@ export function useProjectFrame({
      window's edge rather than in the middle of the screen; what scrolls in
      it is held to the measure by `.reads`, padding rather than a width. A
      room centres itself. */
-  const held = shown === 'messages' ? 'max-w-[calc(1184px+2*var(--gutter))]' : ''
+  const held = shown === 'messages' ? 'max-w-[calc(824px+var(--thread-w,360px)+2*var(--gutter))]' : ''
   /* A thread open beside the room widens the room's column, and the bar
      over it with it, over the same fast ease — `docs/specs/chat-threads.md`. */
   const [threadWide, setThreadWide] = useState(false)
@@ -167,7 +167,7 @@ export function useProjectFrame({
     shown === 'tasks' || objectHead
       ? ''
       : shown === 'messages'
-        ? `thread-ease ${threadWide ? 'max-w-[calc(1184px+2*var(--gutter))]' : measure}`
+        ? `thread-ease ${threadWide ? 'max-w-[calc(824px+var(--thread-w,360px)+2*var(--gutter))]' : measure}`
         : measure
 
   /*

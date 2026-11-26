@@ -198,7 +198,9 @@ export function NewDialog({
         ...(project !== was.project ? OF_THE_PROJECT : {}),
         project,
         list: what.list ?? '',
-        assignees: what.who ? [what.who] : project === was.project ? was.assignees : [],
+        /* Empty is said too: the people view's No assignee column asks for
+           nobody, not for whoever the last task was given to. */
+        assignees: what.who !== undefined ? (what.who ? [what.who] : []) : project === was.project ? was.assignees : [],
       }
     })
   }, [open])
@@ -326,7 +328,9 @@ function useMake({ what, setD, onClose, onMade, onMore }: MakerProps, more = fal
      title can take the caret back. */
   const [again, setAgain] = useState(0)
   const submit = useCallback(
-    async (draft: Draft) => {
+    /* `kept`: an announcement saved as its author's draft rather than
+       posted. */
+    async (draft: Draft, kept = false) => {
       /*
        * The same test the Create button is disabled by.
        *
@@ -339,7 +343,7 @@ function useMake({ what, setD, onClose, onMade, onMore }: MakerProps, more = fal
       if (!ready(what, draft) || busy) return
       setBusy(true)
       try {
-        const made = await make(what, draft, title)
+        const made = await make(what, draft, title, kept)
         /*
          * "Create more": the window stays, the words go, and where it goes
          * and who has it stay for the next one.
@@ -603,7 +607,7 @@ function Writing({
   head: React.ReactNode
   d: Draft
   set: (part: Partial<Draft>) => void
-  submit: (draft: Draft) => Promise<void>
+  submit: (draft: Draft, kept?: boolean) => Promise<void>
   busy: boolean
   onClose: () => void
   /** Where a file put into the words becomes a row; none yet, none taken. */
@@ -663,7 +667,9 @@ function Writing({
       head={head}
       footer={
         <>
-          <span className="text-sm max-sm:hidden text-ink-3">{d.sending || sending(d.doc) ? W.waitingForUpload : W.toCreate}</span>
+          <span className="text-sm max-sm:hidden text-ink-3">
+            {d.sending || sending(d.doc) ? W.waitingForUpload : what.kind === 'post' ? W.toPost : W.toCreate}
+          </span>
           <div className="flex-1" />
           {/* A switch, said as one, off until turned on: on, Create makes
               the task and clears the window for the next. */}
@@ -675,8 +681,18 @@ function Writing({
               </span>
             </label>
           )}
+          {/* An announcement can wait: kept its author's until they press
+              Publish on it. Quiet, beside the
+              one action, which says what it does now that there are two. */}
+          {what.kind === 'post' && (
+            <span className="mr-2 inline-flex">
+              <Button data-testid="save-draft" disabled={!ready(what, d) || busy} onClick={() => void submit(d, true)}>
+                {W.saveDraft}
+              </Button>
+            </span>
+          )}
           <Button tone="primary" data-testid="make" disabled={!ready(what, d) || busy} onClick={() => void submit(d)}>
-            {MORE.create}
+            {what.kind === 'post' ? W.post : MORE.create}
           </Button>
         </>
       }
@@ -976,7 +992,7 @@ function PostMaker({ what, d, setD, onClose, onMade }: MakerProps<Extract<What, 
 }
 
 /** The one request, so the dialog above holds no knowledge of the contract. */
-async function make(what: What, d: Draft, title: string): Promise<Made> {
+async function make(what: What, d: Draft, title: string, kept = false): Promise<Made> {
   if (what.kind === 'project') {
     const r = await api<{ id: string; slug?: string }>('/projects', {
       method: 'POST',
@@ -999,9 +1015,11 @@ async function make(what: What, d: Draft, title: string): Promise<Made> {
     return { id: r.id, projectId: r.id }
   }
   if (what.kind === 'post') {
+    /* The client that draws Publish asks for the draft; left out, it is
+       posted, as every other client's is. */
     const r = await api<{ id: string }>(`/projects/${what.projectId}/posts`, {
       method: 'POST',
-      body: JSON.stringify({ title, body: d.doc ?? {} }),
+      body: JSON.stringify({ title, body: d.doc ?? {}, ...(kept ? { audience: 'author' } : {}) }),
     })
     return { id: r.id, projectId: what.projectId }
   }

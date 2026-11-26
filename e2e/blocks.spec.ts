@@ -98,7 +98,8 @@ test('a callout and a toggle are put in from the slash list, and kept', async ({
 })
 
 test('a long document has its headings beside it, which follow the reading and do not move it', async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 900 })
+  /* Wide enough for the outline beside a column as wide as a task's. */
+  await page.setViewportSize({ width: 1920, height: 1000 })
   await login(page)
   await openProject(page, 'Website')
   const filler = Array.from({ length: 30 }, (_, i) => para(`Line ${i + 1} of a long document.`))
@@ -148,9 +149,70 @@ test('a long document has its headings beside it, which follow the reading and d
   const heights = await drawnWhole(page, '[data-outline]', () => row.click())
   expect(heights.length).toBe(1)
 
-  /* A narrow window has no room for it, and the document does not move. */
-  await page.setViewportSize({ width: 1100, height: 900 })
+  /* A narrower window has no room for it, and the document does not move. */
+  await page.setViewportSize({ width: 1440, height: 900 })
   await expect(page.locator('[data-outline]')).toHaveCount(0)
+})
+
+/* ── A click into a document just opened. ── */
+
+test('a click into a document just opened keeps its caret, whatever arrives after it', async ({ page }) => {
+  await login(page)
+  await openProject(page, 'Website')
+  /* The shared state held back until the click is in, as a slow line brings it. */
+  const held: (string | Buffer)[] = []
+  let letGo = () => {}
+  await page.routeWebSocket(/\/ws\/docs\//, (ws) => {
+    const server = ws.connectToServer()
+    let open = false
+    server.onMessage((m) => {
+      if (open) ws.send(m)
+      else held.push(m)
+    })
+    letGo = () => {
+      open = true
+      for (const m of held.splice(0)) ws.send(m)
+    }
+  })
+  const lines = Array.from({ length: 8 }, (_, i) => para(`Line ${i + 1} of the words.`))
+  await writeDoc(page, `Caret ${Date.now()}`, { type: 'doc', content: [heading(1, 'Start here'), ...lines] })
+  const body = page.getByTestId('file-body')
+  await expect(body).toContainText('Line 8')
+  await expect.poll(() => held.length).toBeGreaterThan(0)
+
+  /* Clicked into before the shared state is there: the editor bound to it
+     takes over with the caret where the click put it, not at the end. */
+  const fifth = body.locator('p').filter({ hasText: 'Line 5' })
+  await fifth.click({ position: { x: 1, y: 8 } })
+  letGo()
+  await expect(page.locator('[data-together]')).toBeVisible({ timeout: 15_000 })
+  await page.keyboard.type('Here: ')
+  await expect(fifth).toHaveText('Here: Line 5 of the words.')
+
+  /* Clicked again on a machine too busy to say where the caret went —
+     `selectionchange` held back: the keys still go where the click put it. */
+  await page.getByTestId('file-name').focus()
+  await page.evaluate(() => {
+    const w = window as unknown as { held?: (e: Event) => void }
+    w.held = (e) => e.stopImmediatePropagation()
+    window.addEventListener('selectionchange', w.held, true)
+  })
+  const last = body.locator('p').filter({ hasText: 'Line 8' })
+  await last.click({ position: { x: 1, y: 8 } })
+  /* Past the moment ProseMirror puts its own caret back after a focus. */
+  await page.waitForTimeout(100)
+  await page.keyboard.press('End')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('## The end')
+  await page.evaluate(() => {
+    const w = window as unknown as { held?: (e: Event) => void }
+    if (w.held) window.removeEventListener('selectionchange', w.held, true)
+  })
+  await expect(body.locator('h1')).toHaveText('Start here')
+  await expect(body.locator('h2')).toHaveText('The end')
+  /* Under the last line, as typed — the empty line after it is the editor's own. */
+  await expect(last.locator('xpath=following-sibling::*[1]')).toHaveText('The end')
+  await expect(fifth).toHaveText('Here: Line 5 of the words.')
 })
 
 /* ── A toggle's ins and outs. ── */

@@ -415,6 +415,29 @@ export const NowhereMe = z.object({
 export const WaitingInvitations = z.object({ invitations: z.array(z.object({ id: Uuid, workspace_name: z.string() })) })
 
 /**
+ * `GET /api/me/unconfirmed` — the workspaces the account was in before its
+ * address was proved, waiting for the person's Join or Leave.
+ */
+export const UnconfirmedWorkspaces = z.object({
+  waiting: z.array(
+    z.object({
+      id: Uuid,
+      name: z.string(),
+      /** `owner` is offered Join alone: a workspace keeps its owner. */
+      role: Role,
+    }),
+  ),
+})
+/**
+ * `POST /api/me/unconfirmed/:workspaceId` — the answer taken, and, to a
+ * session in no workspace that joined, a session for the workspace joined
+ * beside it, as `PasswordSet` carries one.
+ */
+export const UnconfirmedAnswered = z
+  .object({ ok: z.literal(true), answer: z.enum(['joined', 'left']) })
+  .extend(Session.partial().shape)
+
+/**
  * Which ways in this deployment has keys for — `GET /auth/providers`. A
  * screen draws a button only for these: one that answers "not set up" is
  * worse than none.
@@ -423,6 +446,11 @@ export const Providers = z.object({
   google: z.boolean(),
   apple: z.boolean(),
   github: z.boolean(),
+  /** A server's own OpenID Connect provider, and what its button calls it
+      (`OIDC_NAME`, else "SSO"); null when `oidc` is false. Never on the
+      service. */
+  oidc: z.boolean(),
+  oidc_name: z.string().nullable(),
   mail: z.boolean(),
   /** True only on a server of one's own with no mail set up: the screens
       say so instead of promising a letter. Always false on the service. */
@@ -543,12 +571,16 @@ export const InstanceLetter = z.object({ sent: z.boolean(), mail: z.boolean() })
     asks. */
 export const WayIn = z.object({
   id: z.uuid(),
-  provider: z.enum(['google', 'apple', 'github']),
+  /** `oidc` is a server's own provider. */
+  provider: z.enum(['google', 'apple', 'github', 'oidc']),
   email: z.string().nullable(),
   created_at: z.string(),
 })
 export const WaysIn = z.object({
-  offered: z.array(z.enum(['google', 'apple', 'github'])),
+  offered: z.array(z.enum(['google', 'apple', 'github', 'oidc'])),
+  /** What a server's own provider is called (`OIDC_NAME`, else "SSO") when
+      `offered` has it; null otherwise, and always on the service. */
+  oidc_name: z.string().nullable(),
   ways: z.array(WayIn),
   password: z.boolean(),
   asks: z.enum(['password', 'password_and_code', 'email']),
@@ -563,7 +595,7 @@ export type WayInStart = z.infer<typeof WayInStart>
 
 /** `POST /api/me/ways-in/:provider/finish`: the app's link, made, and
     the address of the account there, when the provider gave one. */
-export const WayInAdded = z.object({ provider: z.enum(['google', 'apple', 'github']), email: z.string().nullable() })
+export const WayInAdded = z.object({ provider: z.enum(['google', 'apple', 'github', 'oidc']), email: z.string().nullable() })
 export type WayInAdded = z.infer<typeof WayInAdded>
 
 /** Every refusal: `{ error: { code, message? } }` — `totp_required`,
@@ -1359,15 +1391,42 @@ export const PostInProject = z.object({
   updated_at: z.string().nullable().optional(),
   project_id: Uuid.nullable().optional(),
   reply_count: Count.optional(),
+  /** Who it is said to: `author` while it is its author's draft, `project`
+      once published. A string, so a client
+      reads an answer it does not know rather than failing on it. */
+  audience: z.string().optional(),
 })
 export const PostPage = z.object({
+  /** Published announcements only, the asker's own included. */
   posts: z.array(PostInProject),
   next_cursor: z.string().nullable().optional(),
+  /** The asker's own drafts in the project, newest first, at most fifty —
+      only on a first page asked with `drafts=1`, never otherwise. */
+  drafts: z.array(PostInProject).optional(),
+})
+/** An announcement published, after `PUT /api/posts/:id/audience`. */
+export const PostPublished = z.object({
+  ok: z.boolean(),
+  audience: z.string(),
+  /** The moment it was published, which is its `created_at` now too. */
+  published_at: z.string().nullable(),
 })
 /** `GET /api/posts/:id`: the announcement and its replies. */
 export const PostRead = z.object({
   /** And whether the reader follows it. */
-  post: PostInProject.extend({ subscribed: z.boolean().optional() }),
+  post: PostInProject.extend({
+    subscribed: z.boolean().optional(),
+    /** Whether an agent wrote it — the screen offers Edit on an agent's to
+        whoever may change it, on a person's to its author alone. */
+    author_agent: z.boolean().optional(),
+    /** Whether the reader may change it, as `PATCH` asks: its author, the
+        owner, whoever runs the project, and an agent's connector while on
+        the project — somebody else's never through a token. */
+    may_edit: z.boolean().optional(),
+    /** Whether the reader may take it away, as `DELETE` asks: the same
+        people, and never through a token at all. */
+    may_delete: z.boolean().optional(),
+  }),
   comments: z.array(CommentOnObject).optional(),
   /** Where the comments this answer did not carry start: the newest 200, and no more than 4 MB of them, are here; `GET …/comments?before=` with this answers the ones before. Null when all are here. */
   comments_earlier: z.string().nullable().optional(),
@@ -1555,9 +1614,15 @@ export const WebhookRow = z.object({
   last_status: z.number().int().nullable().optional(),
   last_at: z.string().nullable().optional(),
   created_at: z.string(),
+  /** Turned off because the account that made it changed hands — its maker
+      was the account's previous holder. Turning it on gives it a new secret. */
+  stopped_at: z.string().nullable().optional(),
 })
 export const Webhooks = z.object({ webhooks: z.array(WebhookRow) })
 export const WebhookMade = z.object({ id: Uuid, secret: z.string() })
+/** A webhook changed — `PATCH /api/webhooks/:id`; `secret`, said once, when
+    turning on one its maker's previous holder made gave it a new one. */
+export const WebhookChanged = z.object({ ok: z.literal(true), secret: z.string().optional() })
 
 /**
  * GitHub, as the server holds it for this workspace — `GET /api/github`,
@@ -1680,6 +1745,10 @@ export const AgentRow = z.object({
   /** To whoever manages it: where its webhook is sent, so its page can
       change it, migration 268. */
   webhook_url: z.string().optional(),
+  /** To whoever manages it: its webhook was turned off when whoever
+      connected it was put out of the account. Its address is not said, and
+      nothing is sent until its reach is set again, with a new secret. */
+  webhook_stopped: z.boolean().optional(),
   /** To whoever manages it: the connections Tuff's remote MCP connector
       signed in as it, still alive — which client, when, by whom. */
   connections: z
@@ -1687,6 +1756,10 @@ export const AgentRow = z.object({
     .optional(),
   /** What it says it is doing now. */
   status: AgentStatus.nullable().optional(),
+  /** Stopped because whoever connected it was put out of the account: its
+      tokens revoked, its webhook off, until its connector gives it a new
+      token. */
+  stopped: z.boolean().optional(),
 })
 export const AgentList = z.object({ agents: z.array(AgentRow) })
 /** A new token for an agent, the old one ended — `POST /api/agents/:id/token`. Said once. */
@@ -1993,6 +2066,27 @@ export const Verified = Session.partial().extend({
 })
 
 /**
+ * What a change of address's link is about, read before anything is
+ * pressed — `POST /auth/verify/peek`. `approve` is the old address's yes; `email` the new
+ * address's link, confirmed only from a session of `account`
+ * (`POST /api/me/email/confirm`). The account's address is masked.
+ */
+export const AddressLinkKind = z.enum(['approve', 'email'])
+/** The account a change of address moves: its name, and its address masked. */
+export const AddressLinkAccount = z.object({ id: Uuid, name: z.string(), email: z.string() })
+export const AddressLink = z.object({
+  kind: AddressLinkKind,
+  email: z.string(),
+  account: AddressLinkAccount,
+  /** Whether confirming takes a session of `account`. False for an account
+      whose address was never proved: it has no way to sign in on another
+      device, and confirming puts out
+      whoever held it, so the press alone confirms. False for
+      `approve` too, whose press asks for no session. */
+  needs_session: z.boolean(),
+})
+
+/**
  * An account asked for, waiting on its email — `POST /auth/register`.
  *
  * `email` and `approve` are there for the iPhone and Android builds from
@@ -2178,6 +2272,9 @@ export const RoomHook = z.object({
   created_at: z.string(),
   turned_at: z.string().nullable(),
   last_used_at: z.string().nullable(),
+  /** Stopped because its maker's account changed hands: it takes nothing
+      until somebody gives it a new URL. */
+  stopped_at: z.string().nullable().optional(),
 })
 export type RoomHook = z.infer<typeof RoomHook>
 export const RoomHooks = z.object({ hooks: z.array(RoomHook) })

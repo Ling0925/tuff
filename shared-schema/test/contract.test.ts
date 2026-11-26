@@ -138,6 +138,20 @@ test('choosing who reads a document is its author’s and its editors’', () =>
   assert.equal(can('file.share', base('member', { isAuthor: true, agent: true })), false)
 })
 
+/* An announcement's draft: its author publishes it, in person — never a
+   tool, an agent, or anybody else. */
+test('publishing an announcement’s draft is its author’s alone, in person', () => {
+  assert.equal(can('post.publish', base('member', { isAuthor: true })), true)
+  assert.equal(can('post.publish', base('owner', { isAuthor: true })), true)
+  assert.equal(can('post.publish', base('member', { isAuthor: false, rights: ['manage', 'edit.any'] })), false)
+  assert.equal(can('post.publish', base('owner', { isAuthor: false })), false, 'not the owner, who cannot see it')
+  assert.equal(can('post.publish', base('member', { isAuthor: true, inProject: false })), false)
+  assert.equal(can('post.publish', base('member', { isAuthor: true, viaMcp: true })), false)
+  assert.equal(can('post.publish', base('owner', { isAuthor: true, viaMcp: true })), false)
+  assert.equal(can('post.publish', base('member', { isAuthor: true, agent: true })), false)
+  assert.equal(can('post.publish', base('member', { isAuthor: true, board: true })), false)
+})
+
 /* The project's instructions for agents: whoever may change the document
    and runs the project — never a tool or an agent. */
 test('marking a project’s instructions for agents is for whoever runs it and may change the document', () => {
@@ -286,6 +300,29 @@ test('the switch does not reach what somebody said', () => {
   assert.equal(can('content.edit.said', base('member', { rights: ['edit.any'] })), true)
 })
 
+test('an agent’s words are its connector’s to change — on the project, in person', () => {
+  /*
+   * "Changing one": said only by an
+   * announcement's endpoints, when its author is a live agent the asker
+   * connected. The same standing as changing one's own, and never through
+   * a token or by an agent.
+   */
+  const theirs = { isAuthor: false, connectedIt: true }
+  assert.equal(can('content.edit.said', base('member', theirs)), true)
+  assert.equal(can('content.edit.said', base('member', { isAuthor: false })), false)
+  assert.equal(can('content.edit.said', base('member', { ...theirs, inProject: false })), false)
+  assert.equal(can('content.edit.said', base('member', { ...theirs, viaMcp: true, plan: 'team' })), false)
+  assert.equal(can('content.edit.said', base('member', { ...theirs, agent: true })), false)
+  // GitHub or an import writing as the connector is a tool, not their press.
+  assert.equal(can('content.edit.said', base('member', { ...theirs, viaTool: true })), false)
+  assert.equal(can('content.edit.said', base('member', { ...theirs, tokenLimited: true, outsideToken: true })), false)
+  // An unproved address is a member's, and a member's this is.
+  assert.equal(can('content.edit.said', base('owner', { ...theirs, unproved: true })), true)
+  // The switch is still not what decides it.
+  const settings = { ...DEFAULT_SETTINGS, edit_others_content: 'own_only' as const }
+  assert.equal(can('content.edit.said', base('member', { ...theirs, settings })), true)
+})
+
 test('a member outside a project has no rights inside it', () => {
   for (const action of ['content.create', 'project.member.add', 'time.own'] as Action[]) {
     assert.equal(can(action, base('member', { inProject: false })), false, action)
@@ -327,6 +364,7 @@ test('every action is reachable by somebody', () => {
       (role) =>
         can(action, base(role)) ||
         can(action, base(role, { connectedIt: true })) ||
+        can(action, base(role, { isAuthor: true })) ||
         can(action, base(role, { operator: true })) ||
         can(action, base(role, { instanceOwner: true })) ||
         can(action, base(role, { agent: true, viaMcp: true, plan: 'team' })),
@@ -426,6 +464,31 @@ test('leaving the workspace is a member’s, in person, and leaving a channel is
   assert.equal(NEVER_VIA_MCP.includes('channel.leave'), true)
   assert.equal(can('channel.leave', base('member', { viaMcp: true })), false)
   assert.equal(can('channel.leave', base('member', { agent: true, viaMcp: true, plan: 'team' })), false)
+})
+
+/*
+ * Join or Leave a workspace joined before the proof.
+ * The person's own, in person: never
+ * a token, an agent, a board's link or a feedback page, never an address
+ * still unproved.
+ */
+test('answering for a workspace joined before the proof is the person’s, in person', () => {
+  for (const who of WHO) assert.equal(can('workspace.confirm', base(who)), true, `${who} may answer`)
+  assert.equal(NEVER_VIA_MCP.includes('workspace.confirm'), true)
+  assert.equal(can('workspace.confirm', base('member', { viaMcp: true, plan: 'team' })), false)
+  assert.equal(can('workspace.confirm', base('member', { agent: true, plan: 'team' })), false)
+  assert.equal(can('workspace.confirm', base('member', { tokenLimited: true })), false)
+  assert.equal(can('workspace.confirm', base('member', { unproved: true })), false)
+  assert.equal(can('workspace.confirm', base('owner', { board: true })), false)
+  assert.equal(can('workspace.confirm', base('member', { feedbackPage: true, onItsPage: true })), false)
+})
+
+/* An address proved only by a link handed over hands no workspace over, and is an owner for the rest. */
+test('a by-hand owner may not hand the workspace over', () => {
+  assert.equal(can('workspace.transfer', base('owner')), true)
+  assert.equal(can('workspace.transfer', base('owner', { byHand: true })), false)
+  assert.equal(can('workspace.delete', base('owner', { byHand: true })), true)
+  assert.equal(can('workspace.billing', base('owner', { byHand: true })), true)
 })
 
 /*

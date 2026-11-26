@@ -36,7 +36,19 @@ export function useTaskData({
      from the last answer, so coming back to this tab is not a cold start —
      see `data/memory.ts`. */
   const [tasks, setTasks] = useState<Task[] | null>(() => recall(`tasks:${projectId}`))
-  const view = mode === 'board' ? 'board' : 'list'
+  /*
+   * Which drawing: the list, the board, or the board with a column per
+   * member. The board's columns are its
+   * grouping, so the one answer to "grouped by what" decides them: grouped
+   * by assignee (`?group=who`), the board's columns are the members. On a
+   * desk only: a narrower window draws the lists for it and leaves the
+   * address as it is — widen the window and the members come back.
+   */
+  const wide = useWide()
+  const view: 'list' | 'board' | 'people' = mode === 'board' ? (group === 'who' && wide ? 'people' : 'board') : 'list'
+  /* What a row or a card shows is kept for the list and the board; the
+     people view draws the board's cards, so it shares the board's answers. */
+  const drawing = view === 'list' ? 'list' : 'board'
   /* What a row carries beside its title. On this machine — see `View`. */
   /*
    * Whether the answers stand beside the work or wait behind the button.
@@ -45,7 +57,6 @@ export function useTaskData({
    * screen is not a thing a team has an answer to, and a link should not
    * open somebody else's panel. The same rule the row's columns follow.
    */
-  const wide = useWide()
   const [panel, setPanelState] = useState<boolean>(readPanel)
   const setPanel = useCallback((next: boolean) => {
     setPanelState(next)
@@ -55,22 +66,22 @@ export function useTaskData({
       // Nothing to do and nothing to say: the panel still moved.
     }
   }, [])
-  const [shows, setShowsState] = useState<Shows>(() => readShows(view))
+  const [shows, setShowsState] = useState<Shows>(() => readShows(drawing))
   /* Re-read when the switcher moves: the two views keep their own answers,
      so arriving at one is arriving at what was left there. */
   useEffect(() => {
-    setShowsState(readShows(view))
-  }, [view])
+    setShowsState(readShows(drawing))
+  }, [drawing])
   const setShows = useCallback(
     (next: Shows) => {
       setShowsState(next)
       try {
-        localStorage.setItem(showsKey(view), JSON.stringify(next))
+        localStorage.setItem(showsKey(drawing), JSON.stringify(next))
       } catch {
         // Nothing to do and nothing to say: the row still changed.
       }
     },
-    [view],
+    [drawing],
   )
 
   /*
@@ -318,7 +329,15 @@ export function useTaskData({
    */
   /* Not on a scratch board, whose own read answers the whole board and
      knows no `by=list`. */
-  const byList = !onABoard() && (view === 'board' || group === 'list') && sort === 'manual' && dir !== 'desc' && who === 'all' && !labels
+  /* Not the people view, which puts every open task under its assignees
+     and needs them all — the same as the list grouped by assignee. */
+  const byList =
+    !onABoard() &&
+    (view === 'board' || (view === 'list' && group === 'list')) &&
+    sort === 'manual' &&
+    dir !== 'desc' &&
+    who === 'all' &&
+    !labels
   /** Where each list's read stands: how many it holds (parts left out),
       how many of those have been read, and where the rest is read from. */
   const [stands, setStands] = useState<Record<string, Stand>>(() => recall(`stands:${projectId}`) ?? {})

@@ -14,7 +14,6 @@ export const EDITOR = say({
   remove: ['Remove', 'Retirer', '移除'],
   openName: [(name: string) => `Open ${name}`, (name: string) => `Ouvrir ${name}`, (name: string) => `打开 ${name}`],
   open: ['Open', 'Ouvrir', '打开'],
-  removeCodeBlock: ['Remove code block', 'Retirer le bloc de code', '移除代码块'],
 
   /* Files held over the screen a body is on — `docs/specs/drop-files.md`. */
   dropIntoPost: ['Drop to add to the announcement', 'Déposez pour ajouter à l’annonce', '拖放以添加到公告'],
@@ -33,6 +32,14 @@ export const EDITOR = say({
   table: ['Table', 'Tableau', '表格'],
   link: ['Link', 'Lien', '链接'],
   pictureOrFile: ['Picture or file', 'Image ou fichier', '图片或文件'],
+  /* A chip for a doc or a task of the project.
+     Notion's "Link to page", with the chat's "doc"; the French a button's
+     infinitive, as "Mentionner un document" is. `linkToFind` is what else
+     typed after the slash finds it. */
+  linkTo: ['Link to a doc or task', 'Lier un document ou une tâche', '链接到文档或任务'],
+  linkToFind: ['page document mention', 'page lien mentionner', '页面 文档 任务 提及 链接'],
+  /* Under # when nothing in the project matches what was typed. */
+  noLinkable: ['No matching docs or tasks', 'Aucun document ni aucune tâche correspondant', '没有匹配的文档或任务'],
   /* Two blocks that stand out and fold away. The
      words Notion uses for them in each language. */
   callout: ['Callout', 'Encadré', '提示框'],

@@ -20,7 +20,18 @@ import { env } from '../env.js'
  * keys at rest, a card picture's — keep the names they have; changing
  * those means sealing everything again.
  */
-export type Purpose = 'access' | 'oauth-state' | 'files' | 'files-reader' | 'file-cookie' | 'digest-off' | 'github-state' | 'slack-state'
+export type Purpose =
+  | 'access'
+  | 'oauth-state'
+  | 'files'
+  | 'files-reader'
+  | 'file-cookie'
+  | 'digest-off'
+  | 'github-state'
+  | 'slack-state'
+  /* Not a signature: what a refresh's successor token is made from, so it
+     can be made again for the same request asked twice. */
+  | 'refresh-successor'
 
 const made = new Map<Purpose, Buffer>()
 

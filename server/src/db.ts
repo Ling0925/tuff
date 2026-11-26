@@ -64,19 +64,93 @@ export const sql: Sql = postgres(env.databaseUrlApp, { ...OPTIONS, max: env.pool
  * anybody else — a mention's reader, a linked GitHub account — is not
  * bound by this token, and the worker, outside any request, never is.
  */
-type Bound = { actorId: string; projectIds: readonly string[] }
+type Bound = { actorId: string; projectIds: readonly string[]; sessionId: string | null; tokenId: string | null; viaTool: boolean }
 const scope = new AsyncLocalStorage<Bound>()
 
-/** Runs `fn` with the token's limit on, when it has one. */
-export function bounded<T>(who: { actorId: string; tokenProjectIds: readonly string[] }, fn: () => T): T {
-  return who.tokenProjectIds.length > 0 ? scope.run({ actorId: who.actorId, projectIds: who.tokenProjectIds }, fn) : fn()
+/**
+ * Runs `fn` with the token's limit on, when it has one — and with the
+ * session or token the request came with, which every transaction made for
+ * its person asks about first (`stillIn`).
+ */
+export function bounded<T>(
+  who: {
+    actorId: string
+    tokenProjectIds: readonly string[]
+    sessionId?: string | undefined
+    tokenId?: string | undefined
+    viaMcp?: boolean | undefined
+    viaGithub?: boolean | undefined
+    viaImport?: string | undefined
+    agent?: boolean | undefined
+  },
+  fn: () => T,
+): T {
+  return scope.run(
+    {
+      actorId: who.actorId,
+      projectIds: who.tokenProjectIds,
+      sessionId: who.sessionId ?? null,
+      tokenId: who.tokenId ?? null,
+      /* A token of any kind, an agent, GitHub or an import acting as
+         somebody — the database's floor under what `can()` keeps from a
+         tool (`via_tool()`, migration 320). */
+      viaTool: who.viaMcp === true || who.viaGithub === true || Boolean(who.viaImport) || who.agent === true,
+    },
+    fn,
+  )
+}
+
+/** `on` when the request is a tool's and the transaction its person's —
+    set every time, as the limit is. */
+function toolFor(actorId: string): string {
+  const b = scope.getStore()
+  return b && b.actorId === actorId && b.viaTool ? 'on' : ''
 }
 
 /** The settings for the limit, or empty strings for none — set every time,
     so a pooled connection never carries one request's list into another's. */
 function limitFor(actorId: string): [string, string] {
   const b = scope.getStore()
-  return b && b.actorId === actorId ? [actorId, `{${b.projectIds.join(',')}}`] : ['', '']
+  return b && b.actorId === actorId && b.projectIds.length > 0 ? [actorId, `{${b.projectIds.join(',')}}`] : ['', '']
+}
+
+/**
+ * Who the request is, with the session or the token it came with — asked
+ * of every transaction made inside it, as whomever: `auth_still_in`
+ * (migration 317) holds the account for the transaction and refuses
+ * (`28000`, answered 401) when the account's previous holder was put out
+ * after that session or token was begun. So a request let in before a
+ * put-out writes nothing after it, however slowly its body came and through
+ * whichever connection — the application's, the sign-in role's, as its own
+ * person or as nobody — and one writing first is seen by the put-out.
+ * Nulls outside a request, and for a request with neither (a board's link,
+ * a server-signed token): those ask nothing.
+ */
+function stillIn(): [string | null, string | null, string | null] {
+  const b = scope.getStore()
+  return b && (b.sessionId || b.tokenId) ? [b.actorId, b.sessionId, b.tokenId] : [null, null, null]
+}
+
+/**
+ * Runs `fn` as outside any request: its transactions ask nothing. For the
+ * one request that may put its own account's previous holder out — a new
+ * address confirmed from an unproved account's own session — whose next
+ * statements, the letter that chooses a password among them, are the
+ * put-out's own and not a write let in before it.
+ */
+export function outsideRequest<T>(fn: () => T): T {
+  return scope.exit(fn)
+}
+
+/** The same question, sent first in a transaction that sets nothing else. */
+function asking<T>(pool: Sql, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  const [who, sid, tid] = stillIn()
+  if (!who) return pool.begin(fn) as Promise<T>
+  return pool.begin(async (tx) => {
+    const asked = tx`select auth_still_in(${who}, ${sid}::uuid, ${tid}::uuid)`.execute()
+    const [, out] = await Promise.all([asked, fn(tx)])
+    return out
+  }) as Promise<T>
 }
 
 /**
@@ -94,6 +168,7 @@ function actorOn<T>(pool: Sql, actorId: string, workspaceId: string, fn: (tx: Tx
   /* Read here, not inside: the driver may start the transaction from a
      socket's callback, where the request's store is not. */
   const [tokenActor, tokenProjects] = limitFor(actorId)
+  const [who, sid, tid] = stillIn()
   return pool.begin(async (tx) => {
     /*
      * One statement for both, and not waited for.
@@ -117,7 +192,9 @@ function actorOn<T>(pool: Sql, actorId: string, workspaceId: string, fn: (tx: Tx
                           set_config('app.actor_id', ${actorId}, true),
                           set_config('app.workspace_id', ${workspaceId}, true),
                           set_config('app.token_actor', ${tokenActor}, true),
-                          set_config('app.token_projects', ${tokenProjects}, true)`.execute()
+                          set_config('app.token_projects', ${tokenProjects}, true),
+                          set_config('app.via_tool', ${toolFor(actorId)}, true),
+                          auth_still_in(${who}::uuid, ${sid}::uuid, ${tid}::uuid)`.execute()
     const [, out] = await Promise.all([set, fn(tx)])
     return out
   }) as Promise<T>
@@ -143,11 +220,14 @@ export async function withActorEverywhere<T>(actorId: string, fn: (tx: Tx) => Pr
 
 function everywhereOn<T>(pool: Sql, actorId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
   const [tokenActor, tokenProjects] = limitFor(actorId)
+  const [who, sid, tid] = stillIn()
   return pool.begin(async (tx) => {
-    // Sent ahead of the handler's queries, as `withActor` does.
+    // Sent ahead of the handler's queries, as `withActor` does, and asking the same.
     const set = tx`select set_config('app.actor_id', ${actorId}, true),
                           set_config('app.token_actor', ${tokenActor}, true),
-                          set_config('app.token_projects', ${tokenProjects}, true)`.execute()
+                          set_config('app.token_projects', ${tokenProjects}, true),
+                          set_config('app.via_tool', ${toolFor(actorId)}, true),
+                          auth_still_in(${who}::uuid, ${sid}::uuid, ${tid}::uuid)`.execute()
     const [, out] = await Promise.all([set, fn(tx)])
     return out
   }) as Promise<T>
@@ -163,13 +243,22 @@ function everywhereOn<T>(pool: Sql, actorId: string, fn: (tx: Tx) => Promise<T>)
  * Without `DATABASE_URL_WORKER` it is the application's connection, and
  * those calls are refused — said once, loudly, rather than found out from
  * a sync that quietly stopped.
+ *
+ * A warning from the database is printed, a notice is not. The clear-out
+ * says with a warning that a project could not go, and goes on to the
+ * next; thrown away with the notices, a project nobody could delete was
+ * skipped every hour and nobody heard. What it says every hour
+ * whatever happens — rows something live still names — is a notice (318).
  */
 let worker: Sql | null = null
+const workerNotice = (n: { severity?: string; message?: string }): void => {
+  if (n.severity === 'WARNING') console.warn(`worker: ${n.message}`)
+}
 export async function asWorker<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
   if (!worker) {
     if (!env.databaseUrlWorker) console.error('DATABASE_URL_WORKER is not set: the worker’s queues and clear-out will be refused')
     worker = env.databaseUrlWorker
-      ? postgres(env.databaseUrlWorker, { max: 4, prepare: true, onnotice: () => {}, connection: { jit: 'off' } })
+      ? postgres(env.databaseUrlWorker, { max: 4, prepare: true, onnotice: workerNotice, connection: { jit: 'off' } })
       : sql
   }
   return worker.begin(fn) as Promise<T>
@@ -211,7 +300,7 @@ export const authSql = (): Sql => authPool()
 
 /** A sign-in transaction with no actor — `withoutActor`, as `tracker_auth`. */
 export async function asAuth<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
-  return authPool().begin(fn) as Promise<T>
+  return asking(authPool(), fn)
 }
 
 /** A sign-in transaction for an actor in a workspace — `withActor`, as `tracker_auth`. */
@@ -222,6 +311,27 @@ export async function asAuthActor<T>(actorId: string, workspaceId: string, fn: (
 /** A sign-in transaction for an actor in no one workspace — `withActorEverywhere`, as `tracker_auth`. */
 export async function asAuthEverywhere<T>(actorId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
   return everywhereOn(authPool(), actorId, fn)
+}
+
+/**
+ * A sign-in transaction that learns whose it is from its first statement:
+ * a refresh, which finds the person by spending their token, and must write
+ * the session that replaces it in the same transaction — so a second
+ * request with the same token waits on the first and then finds what it
+ * wrote. It starts as nobody, as `asAuth`;
+ * `actAs(actorId)` makes the rest of it that person's in no one workspace,
+ * as `asAuthEverywhere` would have from the start. No token's limit: a
+ * refresh is never asked with a token.
+ */
+export async function asAuthThenActor<T>(fn: (tx: Tx, actAs: (actorId: string) => Promise<void>) => Promise<T>): Promise<T> {
+  return asking(authPool(), async (tx) => {
+    const actAs = async (actorId: string): Promise<void> => {
+      await tx`select set_config('app.actor_id', ${actorId}, true),
+                      set_config('app.token_actor', '', true),
+                      set_config('app.token_projects', '', true)`
+    }
+    return fn(tx, actAs)
+  })
 }
 
 /*
@@ -278,7 +388,7 @@ export async function withBoardOnly<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
 
 /** A transaction with no actor: authentication and housekeeping only. */
 export async function withoutActor<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
-  return sql.begin(fn) as Promise<T>
+  return asking(sql, fn)
 }
 
 export async function closeDb(): Promise<void> {

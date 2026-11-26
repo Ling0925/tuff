@@ -66,10 +66,16 @@ agents.get('/agents', async (c) => {
           authorization_set: boolean | null
           webhook_shape: string | null
           webhook_url: string | null
+          webhook_stopped: boolean | null
           connections: { id: string; client: string; created_at: string; linked_by_name: string }[]
+          stopped: boolean
         }[]
       >`
       select g.actor_id, a.name, a.avatar_key, g.reach, g.created_by, b.name as created_by_name, g.created_at,
+             /* Stopped when whoever connected it was put out of the account:
+                its tokens revoked, its webhook off; a new token starts it
+                again. */
+             g.stopped_at is not null as stopped,
              coalesce((select array_agg(pm.project_id order by pm.project_id) from project_member pm
                        where pm.actor_id = g.actor_id and pm.deleted_at is null), '{}') as project_ids,
              /* Where the reader could put it: a live project they are on,
@@ -91,6 +97,10 @@ agents.get('/agents', async (c) => {
              /* Whether its webhook holds the receiver's key, and how it is
                 sent — to whoever manages it; null to anybody else. */
              k.authorization_set, k.shape as webhook_shape, k.url as webhook_url,
+             /* Turned off when whoever connected it was put out of the account:
+                its address then is not said, and only its reach set again
+                sends anything (agent_reach, migration 317). */
+             k.stopped as webhook_stopped,
              /* Tuff's connector signed in as it — to whoever manages it;
                 none to anybody else (agent_oauth_connections). */
              (select coalesce(json_agg(json_build_object('id', o.id, 'client', o.client, 'created_at', o.created_at,
@@ -113,13 +123,14 @@ agents.get('/agents', async (c) => {
          (`agent.manage`); taking it away is the owner's too (`agent.remove`). */
       const manage = allow(ctx, 'agent.manage', { connectedIt: r.created_by === ctx.actorId })
       const remove = allow(ctx, 'agent.remove', { connectedIt: r.created_by === ctx.actorId })
-      const { authorization_set, webhook_shape, webhook_url, connections, ...rest } = r
+      const { authorization_set, webhook_shape, webhook_url, webhook_stopped, connections, ...rest } = r
       return {
         ...faced(rest),
         ...(manage && authorization_set !== null ? { authorization_set } : {}),
         ...(manage && webhook_shape !== null ? { webhook_shape } : {}),
         /* Where it is sent, so its page can change it — migration 268. */
         ...(manage && webhook_url !== null ? { webhook_url } : {}),
+        ...(manage && webhook_stopped ? { webhook_stopped: true } : {}),
         /* What was signed in as it, to whoever may end it. */
         ...(remove
           ? {
@@ -216,7 +227,7 @@ agents.post('/agents', async (c) => {
   /* No list on its token: what an agent reaches is its places, which its
      page changes after this. A list here
      would now bound it to the projects it was born with — migration 191. */
-  const token = await issueApiToken(id, ctx.workspaceId, body.data.name, [], TOKEN_DAYS)
+  const token = await issueApiToken(id, ctx.workspaceId, body.data.name, [], TOKEN_DAYS, ctx.checkedAt ?? null)
   return c.json({ agent_id: id, token, ...(secret ? { secret } : {}) }, 201)
 })
 
@@ -425,7 +436,7 @@ agents.post('/agents/:id/token', async (c) => {
     return a?.name ?? 'Agent'
   })
   if (name === null) return c.json({ error: { code: 'not_found' } }, 404)
-  const token = await issueApiToken(id, ctx.workspaceId, name, [], TOKEN_DAYS)
+  const token = await issueApiToken(id, ctx.workspaceId, name, [], TOKEN_DAYS, ctx.checkedAt ?? null)
   return c.json({ token }, 201)
 })
 

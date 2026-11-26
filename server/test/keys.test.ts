@@ -22,7 +22,17 @@ const oldStillTaken = Date.now() < LEGACY_UNTIL
 
 test('every purpose has its own key, none of them the secret', () => {
   const keys = (
-    ['access', 'oauth-state', 'files', 'files-reader', 'file-cookie', 'digest-off', 'github-state', 'slack-state'] as const
+    [
+      'access',
+      'oauth-state',
+      'files',
+      'files-reader',
+      'file-cookie',
+      'digest-off',
+      'github-state',
+      'slack-state',
+      'refresh-successor',
+    ] as const
   ).map((p) => keyFor(p).toString('hex'))
   assert.equal(new Set(keys).size, keys.length)
   assert.ok(!keys.includes(Buffer.from(raw).toString('hex')))

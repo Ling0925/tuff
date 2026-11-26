@@ -163,6 +163,18 @@ export function Avatar({
       width={size}
       height={size}
       draggable={false}
+      /*
+       * Decoded before it is painted, not after.
+       *
+       * A card landing on a board is new in its column and held hidden
+       * while its copy flies home (`BoardCard`, `landing`); it is shown on
+       * the frame the copy goes, and its face has to be there on that
+       * frame. Chrome may decode an image it has not painted yet off the
+       * main thread, during an animation especially, and draw the frame
+       * without it. A face is a few hundred bytes of picture; decoding it
+       * at once costs nothing, and the first frame is a whole one.
+       */
+      decoding="sync"
       onError={() => setLost(true)}
       className="inline-block shrink-0 object-cover"
       style={{ width: size, height: size, borderRadius: '50%' }}

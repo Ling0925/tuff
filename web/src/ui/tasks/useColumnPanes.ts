@@ -25,10 +25,14 @@ export function useColumnPanes({
   walkable,
   indexOf,
   setAt,
+  peopleWalk,
 }: Pick<TasksProps, 'projectId' | 'mode' | 'list'> &
   Pick<TaskData, 'view' | 'isShut' | 'open' | 'setOpen' | 'lists' | 'byColumn'> &
   Pick<TaskActions, 'setTriageStart'> &
-  Pick<ListShape, 'walkable' | 'indexOf' | 'setAt'>) {
+  Pick<ListShape, 'walkable' | 'indexOf' | 'setAt'> & {
+    /** The people view's tasks, card by card. */
+    peopleWalk: Task[]
+  }) {
   /*
    * Where the list was left, so coming back out of a task is coming back.
    *
@@ -244,13 +248,16 @@ export function useColumnPanes({
    * still says how it is being looked at, so the same grouping, ordering
    * and narrowing that drew the list draw this. On the list that is the walk
    * the cursor takes, parts under their task and nothing from a shut band;
-   * on the board, each open column top to bottom, left to right.
+   * on the board, each open column top to bottom, left to right; in the
+   * people view, card by card, each task once.
    */
   const pagesThrough: Task[] = !open
     ? []
     : view === 'board'
       ? lists.filter((l) => !isShut(l.id)).flatMap((l) => byColumn.get(l.id) ?? [])
-      : walkable
+      : view === 'people'
+        ? peopleWalk
+        : walkable
   const here = open ? pagesThrough.findIndex((t) => t.id === open) : -1
   const before = here > 0 ? pagesThrough[here - 1] : undefined
   const after = here >= 0 ? pagesThrough[here + 1] : undefined

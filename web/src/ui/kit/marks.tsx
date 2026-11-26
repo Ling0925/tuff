@@ -230,7 +230,7 @@ export function MarkRails({
         role="radiogroup"
         aria-label={iconSaid}
         className="flex max-w-full min-w-0 flex-wrap items-center gap-1 p-1 bg-track"
-        style={{ borderRadius: 'var(--r-pill)' }}
+        style={{ borderRadius: 'var(--r-panel)' }}
       >
         {[null, ...PROJECT_MARKS].map((name) => {
           const on = (icon ?? null) === name
@@ -265,7 +265,7 @@ export function MarkRails({
         role="radiogroup"
         aria-label={tintSaid}
         className="flex max-w-full min-w-0 flex-wrap items-center gap-1 p-1 bg-track"
-        style={{ borderRadius: 'var(--r-pill)' }}
+        style={{ borderRadius: 'var(--r-panel)' }}
       >
         {[null, ...LIST_TINTS.map((_, i) => i)].map((i) => {
           const on = (tint ?? null) === i

@@ -17,6 +17,10 @@ import { type ProjectFrame } from './useProjectFrame.js'
 
 /** A page of a project's Files. */
 type FilesPage = { files: FileRow[]; next_cursor?: string | null; kinds?: string[] }
+/* Our own drafts first, then what was published — one list, each
+   saying which it is. */
+type PostsPage = { posts: Post[]; drafts?: Post[] }
+const withDrafts = (r: PostsPage): Post[] => [...(r.drafts ?? []).map((p) => ({ ...p, audience: 'author' })), ...r.posts]
 /** One of Files' lists, a kind and whose: the rows read so far, and the cursor for the rest. */
 type FilesView = { rows: FileRow[]; next: string | null }
 /** Every list a project's Files has read, by `kind:whose`, and which kinds hold anything at all. */
@@ -148,7 +152,7 @@ export function useProjectContent({
   const load = useCallback(async () => {
     const turn = ++asked.current
     if (shown === 'posts') {
-      const got = (await api<{ posts: Post[] }>(`/projects/${project.id}/posts`)).posts
+      const got = withDrafts(await api<PostsPage>(`/projects/${project.id}/posts?drafts=1`))
       if (turn !== asked.current) return
       setPosts(remember(`posts:${project.id}`, keep(got, project.id, 'post')))
     }
@@ -311,8 +315,8 @@ export function useProjectContent({
       }
       if (project.tools.includes('posts') && shown !== 'posts') {
         jobs.push(
-          api<{ posts: Post[] }>(`/projects/${project.id}/posts`)
-            .then((r) => alive && setPosts(remember(`posts:${project.id}`, keep(r.posts, project.id, 'post'))))
+          api<PostsPage>(`/projects/${project.id}/posts?drafts=1`)
+            .then((r) => alive && setPosts(remember(`posts:${project.id}`, keep(withDrafts(r), project.id, 'post'))))
             .catch(() => {}),
         )
       }

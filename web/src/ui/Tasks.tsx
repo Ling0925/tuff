@@ -1,19 +1,22 @@
+import { useMemo, useRef } from 'react'
 import { ACTS, HEADS, MAKE } from '../data/words.js'
 import { TASKS as W } from '../words/tasks.js'
 import { NewButton } from './New.jsx'
 import { PageTitle, Segments, Toolbar } from './kit.jsx'
 import { TaskDetail } from './TaskDetail.jsx'
 import { Over } from './kit.jsx'
-import { Glass } from './Glass.jsx'
+import { UndoBar } from './UndoToast.jsx'
 import { View } from './tasks/view.jsx'
 import { boardView } from './tasks/boardView.jsx'
 import { listView } from './tasks/listView.jsx'
+import { peopleView, personColumns, peopleWalk, usePeopleMoves } from './tasks/peopleView.jsx'
 import { takenBar } from './tasks/takenBar.jsx'
 import { taskMenu } from './tasks/taskMenu.jsx'
 import { useColumnPanes } from './tasks/useColumnPanes.js'
 import { useTaskKeys } from './tasks/useTaskKeys.js'
 import { rowRenderer } from './tasks/rowRenderer.jsx'
 import { cardRenderer } from './tasks/cardRenderer.jsx'
+import { type CardFns } from './tasks/board.jsx'
 import { useListShape } from './tasks/useListShape.js'
 import { useTaskActions } from './tasks/useTaskActions.js'
 import { useUndoOffer } from '../data/undo.js'
@@ -270,6 +273,20 @@ export function Tasks({
     take,
     card,
   })
+  /* Each assignee's open work as a column, from the board's own columns —
+     only while the people view is on the screen. */
+  const columns = useMemo(
+    () => (view === 'people' ? personColumns({ lists, byColumn, people, who, meId, sort, dir }) : []),
+    [view, lists, byColumn, people, who, meId, sort, dir],
+  )
+  const walk = useMemo(() => peopleWalk(columns), [columns])
+  /* The board's drag with a drop of its own: carried to a column, a card
+     is given to that person. */
+  const peopleMoves = usePeopleMoves({ canWrite, sort, tasks, patch, undone, people, lists, columns, EDGE })
+  /* The board card's handlers, drawing each card for the column it is in,
+     with its status where the board draws the face. */
+  const peopleFns = useRef<CardFns>(null as unknown as CardFns)
+  peopleFns.current = { ...cardFns.current, card: (t, col) => card(t, col, col) }
   const { columnPane, paneNode, paneReady, pane, before, after, pageTo } = useColumnPanes({
     projectId,
     mode,
@@ -284,6 +301,7 @@ export function Tasks({
     walkable,
     indexOf,
     setAt,
+    peopleWalk: walk,
   })
 
   if (open) {
@@ -341,27 +359,11 @@ export function Tasks({
         carries the title, because "Deleted" alone makes somebody check
         which one — and checking is the thing the toast exists to spare.
       */}
-      {undo && !elsewhere && (
-        <div
-          data-undo-toast
-          className="fixed left-1/2 z-50 -translate-x-1/2"
-          /* Above a phone's tabs, which are at the foot too. */
-          style={{ bottom: 'calc(24px + var(--foot))' }}
-          role="status"
-        >
-          <Glass radius={16} className="flex items-center gap-4 py-2 pr-2 pl-4">
-            <span className="max-w-[320px] truncate text-base text-ink">{undo.said}</span>
-            <button
-              data-testid="undo-delete"
-              onClick={() => void putBack()}
-              className="flex h-8 shrink-0 items-center px-3 text-base font-medium text-accent"
-              style={{ borderRadius: 'var(--r-pill)' }}
-            >
-              {ACTS.undo}
-            </button>
-          </Glass>
-        </div>
-      )}
+      <UndoBar
+        offer={undo && !elsewhere ? { key: undo.ids.join(), said: undo.said } : null}
+        onUndo={() => void putBack()}
+        onGone={() => setUndo(null)}
+      />
       {/*
         Both create buttons sit on the project's own bar, beside the tabs,
         rather than on a second bar of their own — two bars of chrome above a
@@ -404,13 +406,17 @@ export function Tasks({
           is two chips, and a second row of chrome above a board is a board
           that starts forty pixels further down for no answer it gives.
         */}
+        {/*
+          Two drawings and no third: a board of members is a way of drawing
+          the board, chosen in its View menu.
+        */}
         <Segments
           items={[
             { key: 'list', label: ACTS.list, icon: 'list' as const, testId: 'view-list-mode' },
             { key: 'board', label: W.board, icon: 'board' as const, testId: 'view-board' },
           ]}
-          value={view === 'board' ? 'board' : 'list'}
-          onPick={(k) => onNavigate({ mode: k === 'board' ? 'board' : 'list' })}
+          value={view === 'list' ? 'list' : 'board'}
+          onPick={(k) => onNavigate({ mode: k })}
         />
         <View
           on={view}
@@ -501,6 +507,36 @@ export function Tasks({
         paneNode,
         paneReady,
         pane,
+      })}
+
+      {peopleView({
+        projectId,
+        canMake,
+        view,
+        wide,
+        panel,
+        shows,
+        setShows,
+        people,
+        lists,
+        load,
+        group,
+        sort,
+        dir,
+        who,
+        list,
+        labels,
+        meId,
+        onNavigate,
+        allLabels,
+        columns,
+        columnPane,
+        taken,
+        look,
+        partsSaid,
+        card,
+        fns: peopleFns,
+        moves: peopleMoves,
       })}
 
       {boardView({

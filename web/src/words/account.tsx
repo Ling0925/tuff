@@ -436,6 +436,12 @@ export const ACCOUNT = say({
     '该账户已用于登录另一个 Tuff 账户。',
   ],
   wayFailed: ['Couldn’t connect. Try again.', 'Impossible de se connecter. Réessayez.', '连接失败，请重试。'],
+  /* A server's own provider that could not be read. */
+  wayUnreachable: [
+    (name: string) => `Couldn’t reach ${name}. Try again in a few minutes.`,
+    (name: string) => `Impossible de joindre ${name}. Réessayez dans quelques minutes.`,
+    (name: string) => `无法连接 ${name}。请几分钟后重试。`,
+  ],
   wayRemoved: ['Removed.', 'Retiré.', '已移除。'],
   wayLast: [
     'This is how you sign in. Set a password before removing it.',

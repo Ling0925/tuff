@@ -214,6 +214,9 @@ files.get('/projects/:projectId/files', async (c) => {
              f.origin_type,
              /* Never the id of a document the reader cannot open. */
              case when f.origin_type = 'file' and not exists (select 1 from file od where od.id = f.origin_id)
+                  then null
+                  /* Nor of an announcement still somebody's draft. */
+                  when f.origin_type = 'post' and not exists (select 1 from post opx where opx.id = f.origin_id)
                   then null else f.origin_id end as origin_id,
              /* Where it was first put, named and addressable: the room a
                 message was in, the task or the announcement it was on.
@@ -613,8 +616,10 @@ files.get('/files/:id', async (c) => {
                       '{}') as reader_ids,
              /* Whether the document it was put into is the reader's to
                 know of: its id is not, otherwise. */
-             (f.origin_type is distinct from 'file'
-              or exists (select 1 from file od where od.id = f.origin_id)) as origin_seen,
+             ((f.origin_type is distinct from 'file' and f.origin_type is distinct from 'post')
+              or (f.origin_type = 'file' and exists (select 1 from file od where od.id = f.origin_id))
+              /* Or the announcement, a draft being its author's alone. */
+              or (f.origin_type = 'post' and exists (select 1 from post op where op.id = f.origin_id))) as origin_seen,
              /* The pictures and files its body shows that it does not hold —
                 put in before it was private, they stay the project's.
                 Only for a written document. */

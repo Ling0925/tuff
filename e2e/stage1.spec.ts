@@ -1,5 +1,17 @@
 import { test, expect } from '@playwright/test'
-import { account, add, drawnWhole, letterTo, login, openAccount, openProject, openSettings, PASSWORD } from './helpers.js'
+import {
+  account,
+  add,
+  drawnWhole,
+  letterTo,
+  login,
+  NEEDS_MAIL,
+  openAccount,
+  openProject,
+  openSettings,
+  PASSWORD,
+  withoutMail,
+} from './helpers.js'
 
 test('signing in lands on a workspace with its projects', async ({ page }) => {
   await login(page)
@@ -94,6 +106,7 @@ test('an invitation link opens a way in, and joining signs in', async ({ page, b
 })
 
 test('somebody signed in joins a second workspace with one press, and the owner hands it to them', async ({ page, browser }) => {
+  test.skip(await withoutMail(), NEEDS_MAIL)
   test.setTimeout(90_000)
   await login(page)
   await page.goto('/')
@@ -145,6 +158,10 @@ test('somebody signed in joins a second workspace with one press, and the owner 
   await them.getByPlaceholder('Email').fill(`kit${stamp}@example.com`)
   await them.getByPlaceholder('Password').fill('kits-own-password-now')
   await them.getByRole('button', { name: 'Sign in' }).click()
+  /* The studio was joined before the address was confirmed, so it is asked
+     about first. Kit joins it. */
+  await expect(them.getByTestId('unconfirmed')).toBeVisible({ timeout: 20_000 })
+  await them.getByTestId('unconfirmed-join').click()
   await expect(them.locator('aside [data-project]').first()).toBeVisible({ timeout: 20_000 })
 
   // The second link, signed in: one press, no password.
@@ -348,6 +365,7 @@ test('two windows open on a session that has to be renewed, and both stay signed
  * says where it went.
  */
 test('signing up asks for a name and an email, and waits for the letter', async ({ page }) => {
+  test.skip(await withoutMail(), NEEDS_MAIL)
   await page.goto('/signup')
   const stamp = Date.now()
   const email = `new-${stamp}@example.com`
@@ -376,6 +394,7 @@ test('signing up asks for a name and an email, and waits for the letter', async 
  * moves nothing.
  */
 test('the letter asks for a password, and choosing it lands in the new workspace', async ({ page }) => {
+  test.skip(await withoutMail(), NEEDS_MAIL)
   await page.goto('/signup')
   const stamp = Date.now()
   const email = `chooser-${stamp}@example.com`
@@ -410,7 +429,82 @@ test('the letter asks for a password, and choosing it lands in the new workspace
   await expect(page.getByTestId('nav-my')).toBeVisible({ timeout: 20_000 })
 })
 
+/*
+ * A new email is confirmed by a press, from the account that asked for it. Opening
+ * the link changes nothing; a browser signed in to nobody is told whose
+ * account it is and to sign in to it, and comes back to the press.
+ */
+test('a new email is confirmed by a press from the account that asked, wherever the letter is opened', async ({ page, browser }) => {
+  test.skip(await withoutMail(), NEEDS_MAIL)
+  // An account of its own: the studio's people keep their addresses.
+  await page.goto('/signup')
+  const stamp = Date.now()
+  const email = `mover-${stamp}@example.com`
+  const password = 'a-password-of-his-own'
+  await page.getByTestId('signup-name').fill('Mo Mover')
+  await page.getByTestId('signup-email').fill(email)
+  await page.getByTestId('signup-go').click()
+  await expect(page.getByTestId('check-email')).toContainText(email, { timeout: 15_000 })
+  await page.goto(await letterTo(email, 'reset'))
+  await page.getByTestId('reset-password').fill(password)
+  await page.getByRole('button', { name: 'Set password' }).click()
+  await expect(page.getByTestId('nav-my')).toBeVisible({ timeout: 20_000 })
+
+  await openAccount(page)
+  await page.getByTestId('email-change').click()
+  const to = `moved-${stamp}@example.com`
+  await page.getByTestId('email-new').fill(to)
+  await page.getByTestId('email-password').fill(password)
+  await page.getByTestId('email-send').click()
+  await expect(page.getByTestId('email-pending')).toContainText(to)
+  const link = await letterTo(to, 'verify')
+  expect(link).toMatch(/^\/verify\/eml_/)
+  const address = () =>
+    page.evaluate(async () => {
+      const r = await fetch('/api/me/email', {
+        headers: { authorization: `Bearer ${JSON.parse(localStorage.getItem('session')!).access_token}` },
+      })
+      return ((await r.json()) as { email: string }).email
+    })
+
+  // Opened where the account is signed in: it says what the press would do, and opening it twice does nothing.
+  await page.goto(link)
+  const here = page.getByTestId('verify')
+  await expect(here).toHaveAttribute('data-state', 'ask', { timeout: 15_000 })
+  await expect(here).toContainText(to)
+  await expect(here).toContainText('Mo Mover')
+  await page.reload()
+  await expect(here).toHaveAttribute('data-state', 'ask', { timeout: 15_000 })
+  expect(await address()).toBe(email)
+
+  // On another device, signed in to nobody: whose account, no press — and signing in comes back to it.
+  const phone = await browser.newContext()
+  const away = await phone.newPage()
+  await away.goto(link)
+  const there = away.getByTestId('verify')
+  await expect(there).toHaveAttribute('data-state', 'sign-in', { timeout: 15_000 })
+  await expect(there).toContainText('Mo Mover')
+  await expect(away.getByTestId('verify-press')).toHaveCount(0)
+  expect(await address()).toBe(email)
+  await away.getByTestId('verify-sign-in').click()
+  await away.getByPlaceholder('Email').fill(email)
+  await away.getByPlaceholder('Password').fill(password)
+  await away.getByRole('button', { name: 'Sign in' }).click()
+  await expect(away).toHaveURL(new RegExp(`${link}$`), { timeout: 20_000 })
+  await expect(there).toHaveAttribute('data-state', 'ask', { timeout: 15_000 })
+  await away.getByTestId('verify-press').click()
+  await expect(there).toHaveAttribute('data-state', 'changed', { timeout: 15_000 })
+  await expect(away.getByRole('heading', { level: 1 })).toHaveText('Email changed.')
+  await phone.close()
+
+  expect(await address()).toBe(to)
+  // Spent: the first window's page now says so.
+  await page.reload()
+  await expect(here).toHaveAttribute('data-state', 'gone', { timeout: 15_000 })
+})
+
 test('a forgotten password has a way back, and a spent link says so', async ({ page }) => {
+  test.skip(await withoutMail(), NEEDS_MAIL)
   await page.goto('/signin')
   await page.getByTestId('to-forgot').click()
   await page.getByTestId('forgot-email').fill(`nobody-${Date.now()}@example.com`)

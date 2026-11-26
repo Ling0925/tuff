@@ -48,6 +48,8 @@ export type Post = {
   author_avatar_url?: string | null
   created_at: string
   schedule: string | null
+  /** `author` while it is its author's draft, drawn first and marked. */
+  audience?: string
 }
 export type FileRow = DocRow & {
   author_avatar_url?: string | null
@@ -167,7 +169,8 @@ export function Project({
     navigate,
   })
   /* Folded into the sidebar only where the sidebar has a place for it:
-     behind "n more", or below the breakpoint, the column stays. */
+     below the breakpoint, or before the sidebar has drawn the project's
+     row, the column stays. */
   const { folded: foldWanted, moving: foldMoving, slot: foldPlace } = useFold()
   const folded = wide && foldWanted && !!foldPlace
   const {
@@ -462,7 +465,7 @@ export function Project({
               />
             )}
 
-            {postsList({ project, canWrite, objectId, onNavigate, posts, shown, load })}
+            {postsList({ project, canWrite, objectId, onNavigate, posts, setPosts, shown, load })}
 
             {shown === 'files' && objectId && (
               <FileDetail

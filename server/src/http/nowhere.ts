@@ -1,6 +1,6 @@
 import { Hono, type Context, type Next } from 'hono'
 import { DEFAULT_SETTINGS } from '@tracker/shared-schema'
-import { authSql, sql, withoutActor } from '../db.js'
+import { authSql, bounded, sql, withoutActor } from '../db.js'
 import { edition } from '../edition.js'
 import { faced } from '../storage.js'
 import { allow, type AuthContext } from '../auth/context.js'
@@ -10,9 +10,10 @@ import { PER_PERSON, metaOf, spend } from './limits.js'
 import { fullRefusal } from '../ceilings.js'
 import { makeWorkspace, workspaceAddress } from './workspaces.js'
 import { deleteAccount } from './yourdata.js'
-import { inboxCode } from './address.js'
+import { confirmAddress, inboxCode } from './address.js'
 import { joinAsMe } from './invites.js'
 import { hashToken } from '../auth/crypto.js'
+import { sessionFor, unconfirmedAnswer, unconfirmedList } from './confirming.js'
 
 /**
  * A session in no workspace.
@@ -54,7 +55,9 @@ nowhere.use('*', async (c, next) => {
   const claims = await verifyNowhereToken(token)
   if (!claims) return next()
   const [[alive], [person]] = await Promise.all([
-    sql<{ ok: boolean }[]>`select auth_session_alive(${claims.sid}) as ok`,
+    /* With the moment it was asked, by the database's clock: a session
+       this request makes is dated from it (`Meta.since`). */
+    sql<{ ok: boolean; at: Date }[]>`select auth_session_alive(${claims.sid}) as ok, statement_timestamp() as at`,
     sql<Person[]>`select * from auth_nowhere(${claims.sub})`,
   ])
   /* Signed out, ended from elsewhere, or the account gone. */
@@ -71,10 +74,13 @@ nowhere.use('*', async (c, next) => {
   c.set('nowhere', {
     actorId: claims.sub,
     sessionId: claims.sid,
-    ctx: personOnly(claims.sub, claims.sid, person, closed?.closed === true),
+    ctx: { ...personOnly(claims.sub, claims.sid, person, closed?.closed === true), checkedAt: alive.at },
     person,
   })
-  return next()
+  /* Every transaction made for this person asks whether the account changed
+     hands since the session was begun, as every signed-in request's does
+     (`bounded`, `db.ts`). */
+  return bounded({ actorId: claims.sub, tokenProjectIds: [], sessionId: claims.sid }, next)
 })
 
 /*
@@ -166,13 +172,32 @@ nowhere.post(
     )
     const row = rows[0]
     if (!row) return c.json({ error: { code: 'not_found', message: 'This invitation is no longer valid.' } }, 404)
-    const took = await takeInvite(row.token_hash, who.actorId)
+    /* Join, pressed on No workspaces. */
+    const took = await takeInvite(row.token_hash, who.actorId, true)
     if (took === 'full') return c.json(fullRefusal('invited'), 413)
     if (typeof took === 'string') return c.json({ error: { code: 'not_found', message: 'This invitation is no longer valid.' } }, 404)
-    const session = await startSession(who.actorId, took.workspaceId, metaOf(c), 'invite')
+    const session = await startSession(who.actorId, took.workspaceId, { ...metaOf(c), since: who.ctx.checkedAt ?? null }, 'invite')
     await endNowhere(who)
     return c.json(session)
   }),
+)
+
+/* The workspaces joined before the proof, waiting for Join or Leave.
+   A Join answers a session for the
+   workspace joined, and this one ends, as an invitation taken does. */
+nowhere.get(
+  '/me/unconfirmed',
+  only((c, who) => unconfirmedList(c as unknown as Context<{ Variables: { ctx: AuthContext } }>, who.ctx)),
+)
+nowhere.post(
+  '/me/unconfirmed/:id',
+  only((c, who) =>
+    unconfirmedAnswer(c as unknown as Context<{ Variables: { ctx: AuthContext } }>, who.ctx, async (workspaceId) => {
+      const session = await sessionFor(c, who.actorId)(workspaceId)
+      await endNowhere(who)
+      return session
+    }),
+  ),
 )
 
 /* An invitation link followed while in no workspace: what it is to, and
@@ -223,6 +248,16 @@ nowhere.post(
   only((c, who) => {
     c.set('ctx', who.ctx)
     return inboxCode(c as unknown as Context<{ Variables: { ctx: AuthContext } }>, 'leave')
+  }),
+)
+
+/* A new address confirmed from the account's own session,
+   Somebody in no workspace is still the account. */
+nowhere.post(
+  '/me/email/confirm',
+  only((c, who) => {
+    c.set('ctx', who.ctx)
+    return confirmAddress(c as unknown as Context<{ Variables: { ctx: AuthContext } }>)
   }),
 )
 

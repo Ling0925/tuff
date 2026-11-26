@@ -22,6 +22,7 @@ import {
   swipeUp,
   backFromMade,
   readToEnd,
+  withoutMail,
 } from './helpers.js'
 
 test('the keyboard reaches every project without touching the sidebar', async ({ page }) => {
@@ -1523,8 +1524,14 @@ test('a task can be watched and let go of, and it is yours alone', async ({ page
      it remembered and then takes the fresh one, so under load the first
      paint can still say what the cache said. */
   await expect(watch).toHaveText('Subscribed', { timeout: 20_000 })
+  /* The press is drawn at once and written behind it; a reload before the
+     write has answered cancels it in the browser, and the server never
+     hears it. So the reload waits for the answer, as a person's would by
+     being slower than a test. */
+  const lettingGo = page.waitForResponse((r) => r.url().endsWith('/subscription') && r.request().method() === 'DELETE')
   await watch.click()
   await expect(watch).toHaveText('Subscribe')
+  await lettingGo
 
   /* And it holds, rather than being a word on a screen. */
   await page.reload()
@@ -1534,8 +1541,10 @@ test('a task can be watched and let go of, and it is yours alone', async ({ page
   /* Back again: the row was given up on rather than removed, and the unique
      index is partial on that, so coming back has to revive it rather than
      insert a second one the index would refuse. */
+  const coming = page.waitForResponse((r) => r.url().endsWith('/subscription') && r.request().method() === 'POST')
   await page.getByTestId('watch-task').click()
   await expect(page.getByTestId('watch-task')).toHaveText('Subscribed')
+  await coming
   await page.reload()
   // The panel stays open across the reload: this device remembers it.
   await expect(page.getByTestId('watch-task')).toHaveText('Subscribed', { timeout: 20_000 })
@@ -2654,7 +2663,13 @@ test('people are invited by email, onto projects, holding what they may do there
 
   await expect(page.getByTestId('invite-send')).toHaveText('Send 2 invitations')
   await page.getByTestId('invite-send').click()
-  await expect(window.locator('[data-invite-sent]')).toContainText('Sent to 2 people', { timeout: 15_000 })
+  /* Mailed, or — on a server with no mail — handed over by hand, a link
+     for each, which is `invite-by-hand.spec.ts`'s to follow. */
+  if (await withoutMail()) {
+    await expect(window.locator('[data-invite-by-hand]')).toHaveCount(2, { timeout: 15_000 })
+  } else {
+    await expect(window.locator('[data-invite-sent]')).toContainText('Sent to 2 people', { timeout: 15_000 })
+  }
   await window.getByRole('button', { name: 'Done' }).click()
 
   // Out, with who, onto what, and until when.
@@ -5199,16 +5214,16 @@ test('a code block offers no text marks, and is taken out whole', async ({ page 
   // Escape selects the whole block, and Backspace takes it out.
   await body.locator('pre').click()
   await page.keyboard.press('Escape')
-  await expect(body.locator('pre.ProseMirror-selectednode')).toHaveCount(1)
+  await expect(body.locator('.ProseMirror-selectednode pre')).toHaveCount(1)
   await page.keyboard.press('Backspace')
   await expect(body.locator('pre')).toHaveCount(0)
 
-  // And the bin in its corner does the same for the pointer.
+  // And the bin on its bar does the same for the pointer.
   await page.keyboard.type('/code')
   await page.keyboard.press('Enter')
   await page.keyboard.type('x = 1')
   await body.locator('pre').hover()
-  await body.locator('pre [data-code-remove]').click()
+  await body.locator('[data-code-block] [data-code-remove]').click()
   await expect(body.locator('pre')).toHaveCount(0)
 })
 
@@ -10405,8 +10420,8 @@ test('a right-click duplicates a task with its steps, or deletes it', async ({ p
    * alone, four times over, and beside its neighbours — but in a run of
    * a hundred and forty-six it fails, with a snapshot showing the row
    * gone and no toast on screen. Six explanations were tried and
-   * measured away: the ten-second window (now thirty, which is better
-   * anyway), waiting on the count before pressing, waiting on the toast
+   * measured away: the ten-second window (thirty for a while, and ten
+   * again since, held while the pointer is on it), waiting on the count before pressing, waiting on the toast
    * instead, the modifiers each spelling sends, whether the toast
    * survives the refetch, and where a restored row lands. None of them
    * is it.
@@ -11833,6 +11848,9 @@ test('a channel stands outside any project, and is renamed and given people from
 })
 
 test('a room is put away with a right press, and found under More chats', async ({ page }) => {
+  /* Tall, as the drag test below is: in a full run the other tests' rooms
+     in this studio push onboarding-main behind "n more". */
+  await page.setViewportSize({ width: 1280, height: 2400 })
   await login(page)
   // `docs/specs/sidebar-hide.md`.
   const row = page.locator('aside [data-room]').filter({ hasText: 'onboarding-main' }).first()
@@ -12324,6 +12342,12 @@ test('a workspace is made with a name, an address and a mark, and people are ask
   await field.fill(`one-${stamp}@example.com, `)
   await expect(page.locator('[data-invite-email]')).toHaveCount(1)
   await page.getByTestId('invite-send').click()
+  /* A server with no mail hands the link over instead, and the window
+     stays open with it until somebody goes on to the workspace. */
+  if (await withoutMail()) {
+    await expect(page.locator(`[data-invite-by-hand="one-${stamp}@example.com"]`)).toBeVisible({ timeout: 15_000 })
+    await page.getByTestId('invite-skip').click()
+  }
 
   await expect(page).toHaveURL(new RegExp(`/own-${stamp}`), { timeout: 15_000 })
   await expect(page.locator('[data-workspace-mark="rocket"]').first()).toBeVisible({ timeout: 15_000 })
@@ -12647,6 +12671,10 @@ test('changing the password asks for the one there is now, and a wrong one is on
 
 test('the projects index puts away, bins, and opens what was archived', async ({ page }) => {
   // `docs/specs/projects-index.md`.
+  /* At the window's own height: a project put back goes back to its place
+     in the order, which in a studio the other tests have filled can be
+     behind "n more" — and the open project is drawn in the column even
+     then. */
   await login(page)
   const stamp = Date.now()
   const shelved = `Shelved index ${stamp}`

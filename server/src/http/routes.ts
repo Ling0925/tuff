@@ -44,6 +44,7 @@ import { projects } from './projects.js'
 import { places } from './places.js'
 import { labels } from './labels.js'
 import { people } from './people.js'
+import { confirming } from './confirming.js'
 import { tokens } from './tokens.js'
 import { posts } from './posts.js'
 import { tasks } from './tasks.js'
@@ -71,6 +72,7 @@ import { oauth, oauthApi } from './oauth.js'
 import { apple } from './apple.js'
 import { android } from './android.js'
 import { remote } from '../mcp/remote.js'
+import { discovery } from './discovery.js'
 import { BadShape } from './badShape.js'
 import { Busy, busy, TooComplex, tooComplex } from '../mcp/markdownPool.js'
 import { edition } from '../edition.js'
@@ -118,6 +120,9 @@ export const answerError = (e: Error, c: Context) => {
   /* Too much waiting for the workers already: come back shortly. */
   if (e instanceof Busy) return c.json(busy, 503, { 'retry-after': '5' })
   const code = (e as { code?: string }).code
+  /* The account's previous holder was put out after this request was let
+     in: nothing it would write is written — `auth_still_in`, migration 317, */
+  if (code === '28000') return c.json({ error: { code: 'unauthorized' } }, 401)
   if (code === '23514') {
     return c.json({ error: { code: 'invalid', message: (e as Error).message } }, 400)
   }
@@ -524,7 +529,7 @@ app.post('/auth/login', async (c) => {
   /* Right password, right code, and in no workspace: a session for nowhere
      to a client that can show its screen, said to one that cannot. */
   if ('nowhere' in session) {
-    if (canShowNowhere) return c.json(await startNowhereSession(session.nowhere, metaOf(c)))
+    if (canShowNowhere) return c.json(await startNowhereSession(session.nowhere, { ...metaOf(c), since: session.since }))
     return c.json(NO_WORKSPACE_YET, 403)
   }
   return c.json(session)
@@ -1167,6 +1172,8 @@ app.patch('/api/workspace', async (c) => {
 })
 
 app.route('/api', invites)
+/* Workspaces joined before the proof. */
+app.route('/api', confirming)
 app.route('/api', workspaces)
 app.route('/api', projects)
 app.route('/api', people)
@@ -1217,6 +1224,8 @@ app.route('/', oauth)
 app.route('/', apple)
 app.route('/', android)
 app.route('/', remote)
+/* Where an agent finds the API and the MCP server. */
+app.route('/', discovery)
 /* And outside `/api` with nobody signed in behind it, if anything. */
 edition.outside(app)
 

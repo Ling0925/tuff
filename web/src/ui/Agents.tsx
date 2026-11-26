@@ -57,8 +57,14 @@ type Agent_ = {
   webhook_shape?: string
   /** To whoever manages it: where its webhook is sent — migration 268. */
   webhook_url?: string
+  /** To whoever manages it: its webhook was turned off when the account
+      that connected it changed hands; its reach set again starts it. */
+  webhook_stopped?: boolean
   /** To whoever manages it: what Tuff's connector signed in as it. */
   connections?: { id: string; client: string; created_at: string; linked_by_name: string }[]
+  /** Stopped because whoever connected it was put out of the account; a
+      new token starts it again. */
+  stopped?: boolean
 }
 export type Agent = Agent_
 type Listed = { agents: Agent[] }
@@ -494,9 +500,11 @@ export function AgentPage({
                   {face === 'busy'
                     ? W.uploading
                     : (face ??
-                      [W.connectedBy(agent.created_by_name), agent.active_at ? W.activeAgo(since(agent.active_at)) : W.neverActive].join(
-                        ' · ',
-                      ))}
+                      [
+                        ...(agent.stopped ? [W.stopped] : []),
+                        W.connectedBy(agent.created_by_name),
+                        agent.active_at ? W.activeAgo(since(agent.active_at)) : W.neverActive,
+                      ].join(' · '))}
                 </span>
               )
             }
@@ -552,6 +560,11 @@ export function AgentPage({
       <div className="mt-5">
         <GroupLabel>{W.reachedHead}</GroupLabel>
         <div className="mt-2 px-4 py-4 bg-panel" data-agent-reach-card style={{ borderRadius: 'var(--r-card)' }}>
+          {agent.can_manage && agent.webhook_stopped && (
+            <p data-agent-reach-stopped className="mb-4 text-sm leading-5 text-ink-2">
+              {W.reachStopped}
+            </p>
+          )}
           {agent.can_manage ? <ReachEditor agent={agent} onChanged={onChanged} /> : <ReachShown r={reachOfRow(agent)} />}
         </div>
       </div>

@@ -176,6 +176,8 @@ export function Segments<T extends string>({
   className?: string
   glyphsWhenNarrow?: boolean
 }) {
+  const even = fill && !items.some((it) => it.apart)
+  const chosen = items.findIndex((it) => it.key === value)
   return (
     <div
       data-fluid
@@ -190,7 +192,34 @@ export function Segments<T extends string>({
         eye expects one to move. Pinned to the answer and not to the pointer,
         because that is what a segmented control says: this one, of these.
       */}
-      <Fluid pinned="[data-on]" tone="chip" />
+      {/*
+        Shared evenly, the chip is drawn by the stylesheet alone: a share of
+        the track wide and moved by its place, so it sits four from the
+        track on every side whatever the track does after the press. It was
+        measured, and a window's body that grew a scrollbar after the press
+        narrowed the track under a chip that had been measured wider — New
+        conversation and Notifications lost the inset at one end. Sized by
+        what they say, the halves do not follow the track, and the measured
+        chip stays (and measures again when the track changes size).
+      */}
+      {even ? (
+        <span
+          data-glow
+          aria-hidden
+          className="pointer-events-none absolute top-1 bottom-1 left-1"
+          style={{
+            width: `calc((100% - ${8 + 4 * (items.length - 1)}px) / ${items.length})`,
+            transform: `translateX(calc(${Math.max(0, chosen)} * (100% + 4px)))`,
+            opacity: chosen < 0 ? 0 : 1,
+            background: 'var(--track-on)',
+            boxShadow: 'var(--segment-shadow)',
+            borderRadius: 'var(--r-pill)',
+            transition: 'transform 140ms var(--ease-out)',
+          }}
+        />
+      ) : (
+        <Fluid pinned="[data-on]" tone="chip" />
+      )}
       {items.map((it) => {
         const on = it.key === value
         return (

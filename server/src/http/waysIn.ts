@@ -7,6 +7,7 @@ import { asksOf, byInbox, codeFromInbox, emailOf, itIsThem, tellWayIn } from '..
 import { generateToken, hashToken } from '../auth/crypto.js'
 import { CHALLENGE, LINK, appLinkKey, finishAppLink, fromBrowser, offeredProviders, origin } from './access.js'
 import { reask } from './limits.js'
+import { oidcName, provider as ownProvider } from '../auth/oidc.js'
 
 type Vars = { ctx: AuthContext }
 
@@ -62,8 +63,11 @@ waysIn.get('/me/ways-in', async (c) => {
     ),
     asksOf(ctx.actorId),
   ])
+  const offered = offeredProviders()
   return c.json({
-    offered: offeredProviders(),
+    offered,
+    /* What a server's own provider is called here. */
+    oidc_name: offered.includes('oidc') ? oidcName() : null,
     ways: rows.map((r) => ({ id: r.id, provider: r.provider, email: r.email, created_at: r.created_at.toISOString() })),
     password: asks.password,
     asks: byInbox(asks) ? 'email' : asks.code ? 'password_and_code' : 'password',
@@ -98,6 +102,11 @@ waysIn.post('/me/ways-in/:provider', async (c) => {
      anyway (migration 212); refused, there is nothing to take. */
   if (!(await confirmed(ctx.actorId)))
     return c.json({ error: { code: 'email_unverified', message: 'Confirm your email first. Check your inbox for the link.' } }, 403)
+  /* A server's own provider that cannot be read is said here, before a
+     ticket is made for a trip that would end on the same sentence. */
+  if (p === 'oidc' && !(await ownProvider())) {
+    return c.json({ error: { code: 'unreachable', message: `Couldn’t reach ${oidcName()}. Try again later.` } }, 503)
+  }
   if (challenge) {
     const made = await asAuth(
       (tx) =>

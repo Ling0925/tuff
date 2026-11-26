@@ -179,7 +179,10 @@ chat.get('/conversations', async (c) => {
                                 and bool_and(exists (select 1 from membership mp
                                                      where mp.workspace_id = c.workspace_id
                                                        and mp.actor_id = cm5.actor_id
-                                                       and mp.deleted_at is null))
+                                                       and mp.deleted_at is null
+                                                       /* Nor waiting for their own Join:
+                                                          password-after-proof.md. */
+                                                       and mp.joined_at is not null))
                       then presence_of(max(a5.seen_at), max(a5.presence)) end
                from conversation_member cm5
                join actor a5 on a5.id = cm5.actor_id
@@ -829,7 +832,11 @@ chat.get('/conversations/:id/members', async (c) => {
     /* With what the list of them shows when opened — what each does and
        whether they are here — `docs/specs/room-people.md`. */
     const rows = await tx`
-      select cm.*, a.title, case when m.actor_id is not null then presence_of(a.seen_at, a.presence) end as presence, m.role
+      select cm.*,
+             /* Nothing a member waiting for their own Join keeps for the
+                workspaces they are in — password-after-proof.md. */
+             case when m.joined_at is not null or m.actor_id is null then a.title end as title,
+             case when m.joined_at is not null then presence_of(a.seen_at, a.presence) end as presence, m.role
       from channel_members(${id}) cm
       join actor a on a.id = cm.actor_id
       left join membership m on m.actor_id = cm.actor_id
@@ -982,7 +989,8 @@ const Imported = z.object({
 
 chat.post('/conversations/:id/import', async (c) => {
   const ctx = c.get('ctx')
-  if (ctx.viaMcp) return c.json(forbidden, 403)
+  // A person's press, not a tool's, a GitHub event's or an import worker's.
+  if (ctx.viaMcp || ctx.viaGithub || ctx.viaImport) return c.json(forbidden, 403)
   const id = c.req.param('id')
   const body = Imported.safeParse(await c.req.json().catch(() => ({})))
   if (!body.success) return c.json({ error: { code: 'invalid' } }, 400)
@@ -1014,13 +1022,20 @@ chat.post('/conversations/:id/import', async (c) => {
     /*
      * Whose face a line is drawn with. Whoever brings the room across is
      * the author of their own lines; somebody else's are theirs only when
-     * the one bringing them may change what other people said — the owner,
-     * whoever runs the project — and only for somebody who can read the
-     * room. Everybody else keeps the name they were said under, *from
-     * Slack* beside it. A member could otherwise put any colleague's face
-     * on any line, in a room that colleague would never open.
+     * the owner brings them, and only for somebody who can read the room.
+     * Everybody else keeps the name they were said under, *from Slack*
+     * beside it. A member could otherwise put any colleague's face on any
+     * line, in a room that colleague would never open.
+     *
+     * It was the owner or whoever runs the project. Since whoever starts a
+     * project runs it, running one is a right a
+     * member can give themselves in one press — and then the owner's face
+     * on "I approve the transfer", dated last January, was one import
+     * away. Speaking for somebody is not a right of the project: it asks
+     * what only the owner may (`audit.read`), which an owner who has not
+     * proved their address is refused too.
      */
-    const vouches = allowIn(ctx, 'content.edit.said', room.project_id, { isAuthor: false })
+    const vouches = allow(ctx, 'audit.read')
     const others = [...new Set(byEmail.values())].filter((a) => a !== ctx.actorId)
     const here = new Set(
       vouches && others.length
@@ -1085,7 +1100,7 @@ const SLACK_HOSTS = /(^|\.)(slack\.com|slack-edge\.com)$/
 
 chat.post('/conversations/:id/import/file', async (c) => {
   const ctx = c.get('ctx')
-  if (ctx.viaMcp) return c.json(forbidden, 403)
+  if (ctx.viaMcp || ctx.viaGithub || ctx.viaImport) return c.json(forbidden, 403)
   const id = c.req.param('id')
   const body = z.object({ url: z.url(), name: z.string().min(1).max(300) }).safeParse(await c.req.json().catch(() => ({})))
   if (!body.success) return c.json({ error: { code: 'invalid' } }, 400)
@@ -1727,7 +1742,7 @@ chat.delete('/messages/:id/reactions/:emoji', async (c) => {
  * What # can name in some projects: their tasks, by a word of the title, a
  * number or a handle (`MYP-61`), and the documents written there, by name.
  */
-async function nameable(tx: Tx, projects: string[], raw: string, only?: string) {
+async function nameable(tx: Tx, projects: string[], raw: string, only?: string, shared = false) {
   if (projects.length === 0) return []
   const q = raw.trim().replace(/^#/, '').slice(0, 200)
   const like = `%${q.replace(/[\\%_]/g, (x) => `\\${x}`)}%`
@@ -1765,6 +1780,12 @@ async function nameable(tx: Tx, projects: string[], raw: string, only?: string) 
     where f.deleted_at is null and p.deleted_at is null
       and f.project_id = any(${projects}::uuid[])
       and f.body is not null and f.storage_key is null and f.url is null
+      ${
+        /* `?shared=1`: only what the project has, never somebody's own
+           draft — a document's body names it to every reader, and nothing
+           takes the title out there. */
+        shared ? tx`and f.audience = 'project'` : tx``
+      }
       ${q ? tx`and f.name ilike ${like}` : tx``}
     order by f.updated_at desc
     limit ${only === 'doc' ? 50 : q ? 10 : 5}`
@@ -1798,13 +1819,13 @@ chat.get('/conversations/:id/tasks', async (c) => {
   return c.json({ tasks: rows })
 })
 
-/** The same, for a task's comments: what its project can name. */
+/** The same, for a task's comments and for a body's # — what its project can name. */
 chat.get('/projects/:id/nameable', async (c) => {
   const ctx = c.get('ctx')
   const rows = await withActor(ctx.actorId, ctx.workspaceId, async (tx) => {
     const [ok] = await tx<{ ok: boolean }[]>`select in_project(${c.req.param('id')}) as ok`
     if (!ok?.ok) return null
-    return nameable(tx, [c.req.param('id')], c.req.query('q') ?? '', c.req.query('kind'))
+    return nameable(tx, [c.req.param('id')], c.req.query('q') ?? '', c.req.query('kind'), c.req.query('shared') === '1')
   })
   if (rows === null) return c.json(missing, 404)
   return c.json({ tasks: rows })

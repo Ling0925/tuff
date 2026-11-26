@@ -1904,3 +1904,34 @@ test('the worker asks for a person’s token only for a workspace and project', 
     /permission denied/,
   )
 })
+
+/*
+ * A sample is nobody's work, and anybody on it deletes it for good in one
+ * press (`drop_sample`, which takes everything it holds) — so it is never
+ * given a repository, and Delete sample never takes a link somebody set
+ * up.
+ */
+test('a sample project is refused a repository, and Delete sample still goes in one press', async () => {
+  const w = await synced('Sampled')
+  const repo = repoNamed('sample')
+  openOn.set(repo.full_name, [])
+  const made = await w.call('POST', '/projects/sample')
+  assert.equal(made.status, 201)
+  const sample = ((await made.json()) as { id: string }).id
+
+  const refused = await w.call('PUT', `/projects/${sample}/github`, { repo_id: repo.id, issues: true })
+  assert.equal(refused.status, 409)
+  assert.equal(((await refused.json()) as { error: { code: string } }).error.code, 'sample')
+  const links = async (of: string) =>
+    (await H.asTableOwner()<{ n: number }[]>`select count(*)::int as n from github_link where project_id = ${of}`)[0]!.n
+  assert.equal(await links(sample), 0, 'nothing was linked')
+
+  // The same repository on a project of the workspace's own work: linked.
+  await w.link(w.project, repo.id)
+  assert.equal(await links(w.project), 1)
+
+  assert.equal((await w.call('DELETE', `/projects/${sample}/sample`)).status, 200)
+  const [left] = await H.asTableOwner()`select id from project where id = ${sample}`
+  assert.equal(left, undefined, 'the sample is gone for good')
+  assert.equal(await links(w.project), 1, 'and the other project’s link is untouched')
+})

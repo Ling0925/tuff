@@ -56,6 +56,45 @@ export function mayEditSaid(ctx: AuthContext, authorId: string, projectId?: stri
 }
 
 /**
+ * Whether this actor may change, or take away, an announcement an agent
+ * wrote because they connected that agent.
+ * Announcements only: a comment's and a
+ * message's endpoints ask `mayEditSaid`, which never says `connectedIt`,
+ * and the name keeps a caller from widening them by passing one more
+ * argument.
+ *
+ * `connector` is `agentsConnector`'s answer. On the project means a row on
+ * its list of people (`ctx.rights` holds one key for each), or the owner
+ * with a proved address — asked here as well as by the row's policy, so
+ * `can()` refuses a connector off the project by itself.
+ */
+export function mayEditAgentsAnnouncement(ctx: AuthContext, connector: string | null, projectId: string): boolean {
+  if (connector === null || connector !== ctx.actorId) return false
+  const onIt = ctx.rights[projectId] !== undefined || (ctx.role === 'owner' && ctx.unproved !== true)
+  return allowIn(ctx, 'content.edit.said', projectId, { isAuthor: false, connectedIt: true, inProject: onIt })
+}
+
+/**
+ * Who connected the agent that wrote something — when its author is an
+ * agent still standing in this workspace, and null otherwise.
+ *
+ * Not disconnected (`deleted_at`: by its connector, by the owner, or by its
+ * connector leaving the workspace), and not
+ * stopped (`stopped_at`: its connector's account changed hands, and until
+ * a new token is made for it nobody holds it). Of this workspace
+ * alone, by the query and by the table's own policy. An announcement's
+ * endpoints ask it, so the agent's connector may change and take away what
+ * it said.
+ */
+export async function agentsConnector(tx: Tx, ctx: AuthContext, authorId: string): Promise<string | null> {
+  const [g] = await tx<{ created_by: string }[]>`
+    select g.created_by from agent g
+    where g.actor_id = ${authorId} and g.workspace_id = ${ctx.workspaceId}
+      and g.deleted_at is null and g.stopped_at is null`
+  return g?.created_by ?? null
+}
+
+/**
  * Whether this actor may put back something deleted.
  *
  * Whoever deleted it, while they are still on its project; anybody else,

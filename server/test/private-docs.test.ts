@@ -1319,3 +1319,31 @@ test('a disconnected agent is no longer one of a document’s chosen people', as
   const again = await call(w.t.ann, 'PUT', `/api/files/${id}/audience`, { audience: 'chosen', reader_ids: [w.agentId] })
   assert.equal(again.status, 400)
 })
+
+/*
+ * What # offers. Somebody else's draft is never
+ * offered; one's own is, on a line the server veils, and not to a body's
+ * `#` (`&shared=1`), whose words nothing veils.
+ */
+test('# offers a draft to its author alone, and a body’s # not even to them', async () => {
+  const w = await studio()
+  const mine = await draft(w.t.ann, w.project, 'linkable')
+  const shown = await call(w.t.ann, 'POST', `/api/projects/${w.project}/files`, {
+    name: 'Shown linkable',
+    body: para(text('for everyone')),
+    audience: 'project',
+  })
+  assert.equal(shown.status, 201, JSON.stringify(shown.body))
+  const shownId = shown.body.id as string
+  const ids = async (token: string, extra = '') => {
+    const r = await call(token, 'GET', `/api/projects/${w.project}/nameable?q=linkable${extra}`)
+    assert.equal(r.status, 200, JSON.stringify(r.body))
+    return (r.body.tasks as { id: string }[]).map((t) => t.id)
+  }
+  assert.deepEqual((await ids(w.t.ann)).sort(), [mine, shownId].sort())
+  assert.deepEqual(await ids(w.t.ben), [shownId])
+  assert.deepEqual(await ids(w.t.ann, '&shared=1'), [shownId])
+  assert.deepEqual(await ids(w.t.ben, '&shared=1'), [shownId])
+  /* Not on the project, nothing at all. */
+  assert.equal((await call(w.t.dev, 'GET', `/api/projects/${w.project}/nameable?q=linkable`)).status, 404)
+})

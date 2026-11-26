@@ -2444,6 +2444,7 @@
                   "workspace.transfer",
                   "workspace.delete",
                   "workspace.leave",
+                  "workspace.confirm",
                   "people.invite",
                   "people.role",
                   "people.read",
@@ -2465,6 +2466,7 @@
                   "file.delete",
                   "list.agent",
                   "file.share",
+                  "post.publish",
                   "file.for_agents",
                   "channel.create.workspace",
                   "channel.leave",
@@ -3630,6 +3632,85 @@
         "invitations"
       ]
     },
+    "UnconfirmedWorkspaces": {
+      "title": "UnconfirmedWorkspaces",
+      "type": "object",
+      "properties": {
+        "waiting": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "name": {
+                "type": "string"
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "owner",
+                  "member"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "role"
+            ]
+          }
+        }
+      },
+      "required": [
+        "waiting"
+      ]
+    },
+    "UnconfirmedAnswered": {
+      "title": "UnconfirmedAnswered",
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean",
+          "const": true
+        },
+        "answer": {
+          "type": "string",
+          "enum": [
+            "joined",
+            "left"
+          ]
+        },
+        "access_token": {
+          "type": "string"
+        },
+        "refresh_token": {
+          "type": "string"
+        },
+        "expires_in": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "actor_id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "workspace_id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        }
+      },
+      "required": [
+        "ok",
+        "answer"
+      ]
+    },
     "Providers": {
       "title": "Providers",
       "type": "object",
@@ -3642,6 +3723,15 @@
         },
         "github": {
           "type": "boolean"
+        },
+        "oidc": {
+          "type": "boolean"
+        },
+        "oidc_name": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "mail": {
           "type": "boolean"
@@ -3657,6 +3747,8 @@
         "google",
         "apple",
         "github",
+        "oidc",
+        "oidc_name",
         "mail",
         "no_mail",
         "sign_up"
@@ -4004,7 +4096,8 @@
           "enum": [
             "google",
             "apple",
-            "github"
+            "github",
+            "oidc"
           ]
         },
         "email": {
@@ -4035,9 +4128,16 @@
             "enum": [
               "google",
               "apple",
-              "github"
+              "github",
+              "oidc"
             ]
           }
+        },
+        "oidc_name": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "ways": {
           "type": "array",
@@ -4059,6 +4159,7 @@
       },
       "required": [
         "offered",
+        "oidc_name",
         "ways",
         "password",
         "asks"
@@ -4085,7 +4186,8 @@
           "enum": [
             "google",
             "apple",
-            "github"
+            "github",
+            "oidc"
           ]
         },
         "email": {
@@ -6589,6 +6691,12 @@
             "string",
             "null"
           ]
+        },
+        "stopped_at": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -7403,6 +7511,60 @@
         }
       }
     },
+    "AddressLink": {
+      "title": "AddressLink",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/AddressLinkKind"
+        },
+        "email": {
+          "type": "string"
+        },
+        "account": {
+          "$ref": "#/$defs/AddressLinkAccount"
+        },
+        "needs_session": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "email",
+        "account",
+        "needs_session"
+      ]
+    },
+    "AddressLinkAccount": {
+      "title": "AddressLinkAccount",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "name": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "email"
+      ]
+    },
+    "AddressLinkKind": {
+      "title": "AddressLinkKind",
+      "type": "string",
+      "enum": [
+        "approve",
+        "email"
+      ]
+    },
     "Pending": {
       "title": "Pending",
       "type": "object",
@@ -8195,6 +8357,12 @@
         },
         "created_at": {
           "type": "string"
+        },
+        "stopped_at": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -8236,6 +8404,22 @@
       "required": [
         "id",
         "secret"
+      ]
+    },
+    "WebhookChanged": {
+      "title": "WebhookChanged",
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean",
+          "const": true
+        },
+        "secret": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ok"
       ]
     },
     "GithubHello": {
@@ -8996,6 +9180,9 @@
         "webhook_url": {
           "type": "string"
         },
+        "webhook_stopped": {
+          "type": "boolean"
+        },
         "connections": {
           "type": "array",
           "items": {
@@ -9033,6 +9220,9 @@
               "type": "null"
             }
           ]
+        },
+        "stopped": {
+          "type": "boolean"
         }
       },
       "required": [
@@ -10344,6 +10534,9 @@
         },
         "reply_count": {
           "$ref": "#/$defs/Count"
+        },
+        "audience": {
+          "type": "string"
         }
       },
       "required": [
@@ -10367,6 +10560,12 @@
             "string",
             "null"
           ]
+        },
+        "drafts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PostInProject"
+          }
         }
       },
       "required": [
@@ -10480,7 +10679,19 @@
             "reply_count": {
               "$ref": "#/$defs/Count"
             },
+            "audience": {
+              "type": "string"
+            },
             "subscribed": {
+              "type": "boolean"
+            },
+            "author_agent": {
+              "type": "boolean"
+            },
+            "may_edit": {
+              "type": "boolean"
+            },
+            "may_delete": {
               "type": "boolean"
             }
           },
@@ -10505,6 +10716,29 @@
       },
       "required": [
         "post"
+      ]
+    },
+    "PostPublished": {
+      "title": "PostPublished",
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "audience": {
+          "type": "string"
+        },
+        "published_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "ok",
+        "audience",
+        "published_at"
       ]
     },
     "CommentsPage": {
@@ -11629,6 +11863,7 @@
     "workspace.transfer",
     "workspace.delete",
     "workspace.leave",
+    "workspace.confirm",
     "people.invite",
     "people.role",
     "people.read",
@@ -11650,6 +11885,7 @@
     "file.delete",
     "list.agent",
     "file.share",
+    "post.publish",
     "file.for_agents",
     "channel.create.workspace",
     "channel.leave",
@@ -11676,6 +11912,7 @@
   "x-never-via-mcp": [
     "workspace.create",
     "workspace.enter",
+    "workspace.confirm",
     "workspace.billing",
     "workspace.transfer",
     "workspace.delete",
@@ -11689,6 +11926,7 @@
     "channel.delete",
     "file.delete",
     "file.share",
+    "post.publish",
     "project.member.remove",
     "project.leave",
     "channel.leave",

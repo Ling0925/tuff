@@ -16,13 +16,32 @@ step "Postgres"
 # The development database by name: a `.env` that also runs a server of
 # your own says COMPOSE_FILE=docker-compose.prod.yml, and this is not that.
 dev_db() { docker compose -f docker-compose.dev.yml "$@"; }
-dev_db up -d >/dev/null 2>&1
+# Asked of the database `DATABASE_URL` names, not of a container: 0 when it
+# answers, 2 when nothing listens there at all, 1 for anything else — a
+# database not made yet, a wrong password.
+db_answers() {
+  (cd server && node -e '
+    const sql = require("postgres")(process.env.DATABASE_URL, { max: 1, connect_timeout: 3, onnotice() {} })
+    sql`select 1`.then(() => process.exit(0), (e) => process.exit(e.code === "ECONNREFUSED" ? 2 : 1))
+  ') >/dev/null 2>&1
+}
+# Brought up only when nothing answers. A Postgres already running there is
+# used as it is — the one another checkout of this repository started, with
+# `.env` naming a database of this checkout's own on it. Starting the compose
+# file from a second folder would be a second container under that folder's
+# name, on the same port and on the same named volume as the first.
+db_answers; was=$?
+[ $was = 2 ] && dev_db up -d >/dev/null 2>&1
 for _ in $(seq 1 40); do
-  dev_db exec -T postgres pg_isready -U tracker -d tracker >/dev/null 2>&1 && break
+  db_answers && break
   sleep 1
 done
-dev_db exec -T postgres pg_isready -U tracker -d tracker >/dev/null 2>&1 \
-  && ok "up" || { bad "did not come up"; exit 1; }
+if db_answers; then
+  [ $was = 2 ] && ok "up" || ok "up — the one already running"
+else
+  bad "did not come up — or DATABASE_URL names a database it does not have"
+  exit 1
+fi
 pnpm --filter @tracker/server migrate >/dev/null 2>&1 && ok "migrations applied" || bad "migrations"
 
 step "Permissions"

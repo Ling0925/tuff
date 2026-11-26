@@ -7,7 +7,7 @@ import { DocMark, MarkRails, MentionedIn, Popover, Toolbar, readLinks, urlField 
 import { Round, RoundFace } from './TaskDetail.jsx'
 import { Icon, type IconName } from './glyphs.jsx'
 import { Discussion, type Comment } from './Comments.jsx'
-import { Editor, type EditorHandle, type OnWords } from './Editor.jsx'
+import { type Caret, Editor, type EditorHandle, type OnWords } from './Editor.jsx'
 import type { Editor as Tip } from '@tiptap/react'
 import { WordsCard, type CardAt, type WordsCardState } from './WordsCard.jsx'
 import { anchorOf, threadsIn, wait, waitingRange } from './editor/comment.js'
@@ -26,7 +26,6 @@ import { DOC_TEMPLATE as TEMPLATE } from '../words/docTemplates.js'
 import { readTemplates } from '../data/docTemplates.js'
 import { useCoedit } from '../data/coedit.js'
 import { collaboration } from './editor/collab.js'
-import { SubscribePill } from './Leaving.jsx'
 import { DocAccess, type Audience } from './DocAccess.jsx'
 import { UploadInto } from '../data/upload.js'
 import { VersionHistory, nearVersions, readyVersions } from './VersionHistory.jsx'
@@ -376,8 +375,9 @@ export function FileDetail({
   )
   /* The caret goes with the swap: somebody who had clicked into the body
      the moment before it was bound is still in it after, rather than
-     typing into nothing. */
-  const focusedBefore = useRef(false)
+     typing into nothing — and where they clicked, not at the end of the
+     document, where it was sent until. */
+  const focusedBefore = useRef<Caret | null>(null)
   /* Asked in the render that swaps them, while the old editor is still on
      the page: a press into the body renders nothing here, so a value kept
      from the render before was from before the press, and the keys typed
@@ -385,12 +385,15 @@ export function FileDetail({
      shortcuts. */
   const boundBefore = useRef<unknown>(null)
   if (collab !== boundBefore.current) {
-    if (collab && !boundBefore.current) focusedBefore.current = Boolean(written.current?.contains(document.activeElement))
+    if (collab && !boundBefore.current && written.current?.contains(document.activeElement)) {
+      focusedBefore.current = into.current?.caret?.() ?? null
+    }
     boundBefore.current = collab
   }
   useEffect(() => {
-    if (collab && focusedBefore.current) into.current?.end?.()
-    focusedBefore.current = false
+    const at = focusedBefore.current
+    if (collab && at) into.current?.keep?.(at)
+    focusedBefore.current = null
   }, [collab])
   /* What the document opens on next time is what it last showed. */
   const latest = useRef<unknown>(null)
@@ -740,13 +743,6 @@ export function FileDetail({
                   }}
                 />
               )}
-              <SubscribePill
-                testId="follow-file"
-                on={Boolean(file.subscribed)}
-                path={`/files/${file.id}`}
-                words={W}
-                onChange={(on) => setFile((f) => (f ? { ...f, subscribed: on } : f))}
-              />
               <Popover
                 shape="bare"
                 width={232}
@@ -778,6 +774,30 @@ export function FileDetail({
                     >
                       <Icon name="link" size={16} className="text-ink-2" />
                       {W.copyLink}
+                    </button>
+                    {/* Whether somebody else's comment is a notification to
+                      you: the reader's own, so in the menu rather than on
+                      the head, where it was a pill as wide as a button.
+                      Optimistic, and put back if
+                      the server says no. */}
+                    <button
+                      data-row
+                      role="switch"
+                      aria-checked={Boolean(file.subscribed)}
+                      data-testid="follow-file"
+                      onClick={() => {
+                        const next = !file.subscribed
+                        setFile((f) => (f ? { ...f, subscribed: next } : f))
+                        void api(`/files/${file.id}/subscription`, { method: next ? 'POST' : 'DELETE' }).catch(() =>
+                          setFile((f) => (f ? { ...f, subscribed: !next } : f)),
+                        )
+                      }}
+                      className="flex w-full items-center gap-3 px-3 text-left text-base text-ink"
+                      style={{ height: 'var(--row-h)' }}
+                    >
+                      <Icon name="bell" size={16} style={{ color: file.subscribed ? 'var(--accent)' : 'var(--ink-2)' }} />
+                      <span className="min-w-px flex-1">{W.subscribe}</span>
+                      <Switch on={Boolean(file.subscribed)} />
                     </button>
                     {/* On the web, for anybody with the link — a written
                       document only, for whoever may edit it; the server
@@ -942,7 +962,11 @@ export function FileDetail({
         <div className="relative flex min-h-0 flex-1 flex-col" {...drop.handlers}>
           {drop.held && <DropHere bleed said={EDITOR.dropIntoDocument} />}
           <div data-foot className="reads min-h-0 flex-1 overflow-y-auto pt-4">
-            <div ref={column} data-document className="relative max-w-[640px]">
+            {/* As wide as a task's column, and its words held to the same
+              measure, so a document and a task opened one after the other
+              stand in one column. It was 640, and read as the
+              narrower of the two. */}
+            <div ref={column} data-document className="relative max-w-[800px]">
               {/* The open threads' words tinted, the one whose card is open
                 more. Ids are uuids. */}
               {openIds.length > 0 && (

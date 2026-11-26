@@ -133,6 +133,7 @@ export function Fact({
   chip = false,
   lead = false,
   snug = false,
+  after,
   children,
 }: {
   icon: IconName
@@ -147,20 +148,26 @@ export function Fact({
       the same: the extra on the right is for a word, and here the word is
       in the inner pill. */
   snug?: boolean
+  /** Beside the fact, outside its pressable ground: a button of its own,
+      on a ground of its own, so pressing it is never pressing the fact. */
+  after?: React.ReactNode
   children: React.ReactNode
 }) {
   if (chip)
     return (
-      <span
-        data-testid={testId}
-        data-fact={label}
-        title={label}
-        onClick={pressInside}
-        className={`flex h-8 max-w-full min-w-px cursor-default items-center gap-2 rounded-full ${snug ? 'px-2' : 'pr-3 pl-2'} text-base text-ink bg-track`}
-      >
-        {lead && <Icon name={icon} size={14} className="text-ink-3" style={{ flexShrink: 0 }} />}
-        {children}
-      </span>
+      <>
+        <span
+          data-testid={testId}
+          data-fact={label}
+          title={label}
+          onClick={pressInside}
+          className={`flex h-8 max-w-full min-w-px cursor-default items-center gap-2 rounded-full ${snug ? 'px-2' : 'pr-3 pl-2'} text-base text-ink bg-track`}
+        >
+          {lead && <Icon name={icon} size={14} className="text-ink-3" style={{ flexShrink: 0 }} />}
+          {children}
+        </span>
+        {after}
+      </>
     )
   return (
     <div className="flex h-9 min-w-px items-center gap-3">
@@ -175,6 +182,7 @@ export function Fact({
       >
         {children}
       </span>
+      {after}
     </div>
   )
 }

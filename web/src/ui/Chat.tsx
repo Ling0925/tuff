@@ -1,7 +1,7 @@
-import { SAYS } from '../data/words.js'
+import { BAR, SAYS } from '../data/words.js'
 import { CHAT as W } from '../words/chat.js'
 import { Icon } from './glyphs.jsx'
-import { Avatar, Find, PageTitle, Segments, Toolbar } from './kit.jsx'
+import { Avatar, Find, PageTitle, Resizer, Segments, Toolbar } from './kit.jsx'
 import { PersonFace } from './PersonCard.jsx'
 import { RoomNotify, asChannelName } from './Channels.jsx'
 
@@ -12,6 +12,7 @@ import { FirstAndMore, Round } from './chat/roomPeople.jsx'
 import { roomView } from './chat/roomView.jsx'
 import { useRoomTools } from './chat/useRoomTools.jsx'
 import { useRoomHistory } from './chat/useRoomHistory.js'
+import { ROOM_KEEPS, THREAD_MAX, THREAD_MIN, THREAD_W, setThreadWidth, threadDragging, useThreadWidth } from './chat/threadWidth.js'
 
 /**
  * Chat around the work.
@@ -216,7 +217,10 @@ export function Chat({
      * rather than scanned, and a column of text with the whole window to one
      * side of it reads as a thing that failed to fill its space.
      */
-    <div ref={frame} className={`thread-ease mx-auto flex h-full w-full ${head && beside ? 'max-w-[1184px]' : 'max-w-[800px]'}`}>
+    <div
+      ref={frame}
+      className={`thread-ease mx-auto flex h-full w-full ${head && beside ? 'max-w-[calc(824px+var(--thread-w,360px))]' : 'max-w-[800px]'}`}
+    >
       {/* The room. Kept, not unmounted, while a thread is over it on a narrow
         screen — coming back is to where it was read to. */}
       <div className={`min-w-px flex-1 flex-col ${head && !beside ? 'hidden' : 'flex'}`}>
@@ -416,7 +420,7 @@ export function Chat({
         })}
       </div>
       {paneHead && room && roomId && (
-        <Beside on={beside} shutting={!head}>
+        <Beside on={beside} shutting={!head} frame={frame}>
           <ThreadPane
             roomId={roomId}
             head={paneHead}
@@ -455,15 +459,51 @@ export function Chat({
  * its width the whole way and only the edges move. Over the room on a
  * narrow window it is simply there. `docs/specs/chat-threads.md`.
  */
-function Beside({ on, shutting, children }: { on: boolean; shutting: boolean; children: React.ReactNode }) {
+function Beside({
+  on,
+  shutting,
+  frame,
+  children,
+}: {
+  on: boolean
+  shutting: boolean
+  /** The room and the thread together, whose room is measured to say how wide the thread may go. */
+  frame: React.RefObject<HTMLDivElement | null>
+  children: React.ReactNode
+}) {
+  const width = useThreadWidth()
   if (!on) return shutting ? null : <>{children}</>
+  /* As wide as the reader drags it, while the room beside keeps its line:
+     past that the thread would go over the room under the hand. */
+  const widest = () => {
+    const host = frame.current?.parentElement
+    if (!host) return THREAD_MAX
+    const pad = getComputedStyle(host)
+    return host.clientWidth - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight) - ROOM_KEEPS
+  }
   return (
     /* The gap is a child and not padding: a box with padding cannot fold
        below its padding, so the pane stopped twenty-four pixels short of
        nothing and the room jumped that much when it went. */
     <div data-thread-shutting={shutting || undefined} className="thread-beside flex shrink-0 overflow-hidden">
       <div aria-hidden className="w-6 shrink-0" />
-      {children}
+      <div className="relative flex shrink-0">
+        {/* On the thread's left edge, half over the gap: the thread grows
+            into the room, so a drag left widens it. Double-click puts it
+            back to 360. */}
+        <Resizer
+          side="left"
+          label={BAR.threadWidth}
+          width={width}
+          onChange={(n) => setThreadWidth(Math.min(n, widest()))}
+          onReset={() => setThreadWidth(THREAD_W)}
+          onGrab={() => threadDragging(true)}
+          onDone={() => threadDragging(false)}
+          min={THREAD_MIN}
+          max={THREAD_MAX}
+        />
+        {children}
+      </div>
     </div>
   )
 }

@@ -18,6 +18,11 @@ export const NEW = say({
   dueOfNewTask: ['Due date of the new task', 'Échéance de la nouvelle tâche', '新任务的截止日期'],
   postTitle: ['Announcement title', 'Titre de l’annonce', '公告标题'],
   writePost: ['Write your announcement…', 'Rédigez votre annonce…', '撰写你的公告…'],
+  /* The announcement's two ways out. Basecamp's
+     "Post this message" and "Save as a draft", said short. */
+  post: ['Post', 'Publier', '发布'],
+  saveDraft: ['Save draft', 'Enregistrer le brouillon', '保存草稿'],
+  toPost: ['⌘↵ to post', '⌘↵ pour publier', '⌘↵ 发布'],
   /* The switch beside Create that keeps the window open for the next
      task — Linear's words for it. */
   createMore: ['Create more', 'Créer d’autres', '继续创建'],

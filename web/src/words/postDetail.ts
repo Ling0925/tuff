@@ -21,6 +21,10 @@ export const POST_DETAIL = say({
   couldNotCopy: ['Couldn’t copy link', 'Impossible de copier le lien', '无法复制链接'],
   copyLink: ['Copy link', 'Copier le lien', '复制链接'],
   deletePost: ['Delete announcement', 'Supprimer l’annonce', '删除公告'],
+  /* On an agent's announcement, to whoever may change it — its title and
+     words open until Done. */
+  editPost: ['Edit announcement', 'Modifier l’annonce', '编辑公告'],
+  doneEditing: ['Done', 'Terminé', '完成'],
   deleteTheirs: [
     (who: string) => `Delete ${who}’s announcement for everyone? You can undo this right after.`,
     (who: string) => `Supprimer l’annonce de ${who} pour tout le monde ? Vous pourrez annuler juste après.`,
@@ -39,4 +43,10 @@ export const POST_DETAIL = say({
   ],
   whatAbout: ['What is it about?', 'De quoi s’agit-il ?', '这是关于什么的？'],
   nothingWritten: ['Nothing written yet.', 'Rien d’écrit pour l’instant.', '还没有写任何内容。'],
+  /* An announcement kept as its author's draft.
+     As a document's draft says it (`words/fileDetail.ts`). */
+  draft: ['Draft', 'Brouillon', '草稿'],
+  publish: ['Publish', 'Publier', '发布'],
+  draftOnlyYou: ['Only you can see this draft', 'Vous seul pouvez voir ce brouillon', '只有你能看到此草稿'],
+  couldNotPublish: ['Couldn’t publish. Try again.', 'Impossible de publier. Réessayez.', '发布失败，请重试。'],
 })
