@@ -989,7 +989,8 @@ const Imported = z.object({
 
 chat.post('/conversations/:id/import', async (c) => {
   const ctx = c.get('ctx')
-  if (ctx.viaMcp) return c.json(forbidden, 403)
+  // A person's press, not a tool's, a GitHub event's or an import worker's.
+  if (ctx.viaMcp || ctx.viaGithub || ctx.viaImport) return c.json(forbidden, 403)
   const id = c.req.param('id')
   const body = Imported.safeParse(await c.req.json().catch(() => ({})))
   if (!body.success) return c.json({ error: { code: 'invalid' } }, 400)
@@ -1030,9 +1031,11 @@ chat.post('/conversations/:id/import', async (c) => {
      * project runs it, running one is a right a
      * member can give themselves in one press — and then the owner's face
      * on "I approve the transfer", dated last January, was one import
-     * away. Speaking for somebody is not a right of the project.
+     * away. Speaking for somebody is not a right of the project: it asks
+     * what only the owner may (`audit.read`), which an owner who has not
+     * proved their address is refused too.
      */
-    const vouches = ctx.role === 'owner'
+    const vouches = allow(ctx, 'audit.read')
     const others = [...new Set(byEmail.values())].filter((a) => a !== ctx.actorId)
     const here = new Set(
       vouches && others.length
@@ -1097,7 +1100,7 @@ const SLACK_HOSTS = /(^|\.)(slack\.com|slack-edge\.com)$/
 
 chat.post('/conversations/:id/import/file', async (c) => {
   const ctx = c.get('ctx')
-  if (ctx.viaMcp) return c.json(forbidden, 403)
+  if (ctx.viaMcp || ctx.viaGithub || ctx.viaImport) return c.json(forbidden, 403)
   const id = c.req.param('id')
   const body = z.object({ url: z.url(), name: z.string().min(1).max(300) }).safeParse(await c.req.json().catch(() => ({})))
   if (!body.success) return c.json({ error: { code: 'invalid' } }, 400)
