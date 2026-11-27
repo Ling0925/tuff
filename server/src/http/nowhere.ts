@@ -1,7 +1,9 @@
 import { Hono, type Context, type Next } from 'hono'
 import { DEFAULT_SETTINGS } from '@tracker/shared-schema'
 import { authSql, bounded, sql, withoutActor } from '../db.js'
+import { hostOf } from '../host.js'
 import { edition } from '../edition.js'
+import { brandOfInvite } from '../brand.js'
 import { faced } from '../storage.js'
 import { allow, type AuthContext } from '../auth/context.js'
 import { verifyNowhereToken } from '../auth/tokens.js'
@@ -54,6 +56,8 @@ nowhere.use('*', async (c, next) => {
   if (edition.openApi(path)) return next()
   const claims = await verifyNowhereToken(token)
   if (!claims) return next()
+  /* Never made on a workspace's own domain, and nobody there. */
+  if (hostOf(c)) return c.json({ error: { code: 'unauthorized' } }, 401)
   const [[alive], [person]] = await Promise.all([
     /* With the moment it was asked, by the database's clock: a session
        this request makes is dated from it (`Meta.since`). */
@@ -206,12 +210,15 @@ nowhere.post(
 nowhere.get(
   '/invite/:token',
   only(async (c, who) => {
+    const hash = hashToken(c.req.param('token') ?? '')
     const [row] = await withoutActor(
       (tx) => tx<{ workspace_name: string; role: string; email: string | null; state: string }[]>`
-        select * from preview_invite(${hashToken(c.req.param('token') ?? '')})`,
+        select * from preview_invite(${hash})`,
     )
     if (!row || row.state === 'revoked') return c.json({ state: 'invalid' })
-    return c.json({ ...row, you: { name: who.person.name, email: who.person.email }, member: false })
+    /* The workspace's own mark, where its plan wears it. */
+    const brand = edition.brands && row.state === 'open' ? await withoutActor((tx) => brandOfInvite(tx, hash)) : null
+    return c.json({ ...row, brand, you: { name: who.person.name, email: who.person.email }, member: false })
   }),
 )
 nowhere.post(

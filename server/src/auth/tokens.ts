@@ -25,6 +25,9 @@ export type AccessClaims = {
   via?: 'github' | 'import' | 'feedback' | undefined
   /** The import a `via: 'import'` token writes for. */
   imp?: string | undefined
+  /** The workspace's own domain the session was made on.
+      Signed, so nobody can claim it away; `NEVER_ON_A_HOST` follows it everywhere. */
+  host?: string | undefined
 }
 
 export async function issueAccessToken(claims: AccessClaims): Promise<string> {
@@ -34,6 +37,7 @@ export async function issueAccessToken(claims: AccessClaims): Promise<string> {
       ...(claims.sid ? { sid: claims.sid } : {}),
       ...(claims.via ? { via: claims.via } : {}),
       ...(claims.imp ? { imp: claims.imp } : {}),
+      ...(claims.host ? { host: claims.host } : {}),
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setSubject(claims.sub)
@@ -56,6 +60,7 @@ export async function verifyAccessToken(token: string): Promise<AccessClaims | n
       sid: typeof payload.sid === 'string' ? payload.sid : undefined,
       via: payload.via === 'github' || payload.via === 'import' || payload.via === 'feedback' ? payload.via : undefined,
       imp: typeof payload.imp === 'string' ? payload.imp : undefined,
+      host: typeof payload.host === 'string' ? payload.host : undefined,
     }
   } catch {
     return null

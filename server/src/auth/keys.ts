@@ -32,6 +32,9 @@ export type Purpose =
   /* Not a signature: what a refresh's successor token is made from, so it
      can be made again for the same request asked twice. */
   | 'refresh-successor'
+  /* A provider's start sealed on a workspace's own domain for usetuff.com
+     to open. */
+  | 'host-handoff'
 
 const made = new Map<Purpose, Buffer>()
 

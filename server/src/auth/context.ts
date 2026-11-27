@@ -112,6 +112,13 @@ export type AuthContext = {
    * the write leaves it ended.
    */
   checkedAt?: Date
+  /**
+   * The workspace's own domain the session was made on.
+   * From the signed token, never a header:
+   * `can` refuses it `NEVER_ON_A_HOST` wherever it is used, and on a host
+   * nothing else is let in (`host.ts`, `usableHere`).
+   */
+  host?: string
 }
 
 type Row = {
@@ -272,11 +279,17 @@ export async function authenticate(header: string | undefined): Promise<AuthCont
   ])
   /* Signed for a page that is gone: it is nobody now. */
   if (claims.via === 'feedback' && !feedbackProject) return null
+  /* Made on a workspace's own domain that no longer opens this workspace —
+     removed, paused, taken: nobody, here as there. Its session was ended
+     when the name stopped (migration 326); this holds before the worker
+     has written so. */
+  if (claims.host && !(edition.hosts && (await edition.hosts.answers(claims.host, claims.workspace_id).catch(() => false)))) return null
   return ctx
     ? {
         ...ctx,
         within,
         ...(claims.sid ? { sessionId: claims.sid } : {}),
+        ...(claims.host ? { host: claims.host } : {}),
         ...(claims.via === 'github' ? { viaGithub: true } : {}),
         ...(claims.via === 'import' && claims.imp ? { viaImport: claims.imp } : {}),
         ...(claims.via === 'feedback' ? { feedbackPage: true, feedbackProjectId: feedbackProject! } : {}),
@@ -319,6 +332,11 @@ async function sessionAlive(sid: string): Promise<boolean> {
  * which otherwise went on hearing everything after its person signed out.
  */
 export async function alive(ctx: AuthContext): Promise<boolean> {
+  /* Made on a workspace's own domain that no longer opens this workspace —
+     the plan dropped, the name removed or taken: the same question the API
+     asks (`authenticate`), so a socket does not outlive what a request may
+     not do. */
+  if (ctx.host && !(edition.hosts && (await edition.hosts.answers(ctx.host, ctx.workspaceId).catch(() => false)))) return false
   /* And still in the workspace: removing somebody left a socket of theirs
      open as long as the session behind it lived —
      `docs/specs/removing-someone.md`. */
@@ -391,6 +409,8 @@ export function allow(ctx: AuthContext, action: z.infer<typeof Action>, about: P
     /* And nothing a handler says makes an unproved address a proved one. */
     unproved: ctx.unproved === true,
     byHand: ctx.byHand === true,
+    /* And nothing a handler says lifts what a host's session may not do. */
+    onAHost: Boolean(ctx.host),
   })
 }
 

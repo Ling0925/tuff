@@ -77,6 +77,29 @@ export type Ceilings = {
   }
 }
 
+/**
+ * A workspace's own domain. The service's
+ * only: a server of one's own already has an address of its own.
+ */
+export type Hosts = {
+  /** Before any route: a request through the Worker with a good signature
+      is its workspace's (`host` on the request), meets the host's
+      allow-list, or is redirected to the same path here. */
+  mount(app: App): void
+  /** Routes of its own before the bearer: signing in by a code on a host. */
+  open(app: App): void
+  /** A workspace's connected domain on a branded plan, as an origin; null
+      for none. Read under the policies in a request, by the worker's own
+      function in the worker. */
+  originOf(tx: Tx, workspaceId: string): Promise<string | null>
+  /** A connected, branded domain by the id the server sealed into a
+      provider's start: where its ticket may go. */
+  byId(domainId: string): Promise<{ hostname: string; workspaceId: string } | null>
+  /** Whether a name still opens this workspace: a session made on it is
+      nobody anywhere once it does not. */
+  answers(hostname: string, workspaceId: string): Promise<boolean>
+}
+
 /** A loop the worker runs, waiting `every` milliseconds between runs. */
 export type Job = { every: number; run: () => Promise<void> }
 
@@ -89,6 +112,14 @@ export type Edition = {
   plans: boolean
   /** What a workspace is held to; null for nothing at all — `Ceilings`. */
   ceilings: Ceilings | null
+  /**
+   * Whether a workspace on a plan that says so wears its own name and mark
+   * on what it shows to people. Off, the
+   * database is never asked and every answer's `brand` is null.
+   */
+  brands: boolean
+  /** A workspace's own domain; null where there are none — `Hosts`. */
+  hosts: Hosts | null
   /**
    * The French of the messages only this edition's own routes send, beside
    * the core's (`words.ts`): exact, and matched whole with a number in it.

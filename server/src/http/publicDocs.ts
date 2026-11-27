@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { brandOfDocument } from '../brand.js'
 import { withoutActor } from '../db.js'
 import { linkFor } from '../storage.js'
 import { forStrangers } from '../yjson.js'
@@ -26,7 +27,10 @@ publicDocs.get('/docs/:token', async (c) => {
     if (!doc) return null
     const files = await tx<{ id: string; storage_key: string; display_key: string | null; content_type: string | null }[]>`
       select * from public_document_files(${token})`
-    return { doc, files }
+    /* Whose it is, only where the workspace's plan wears its own name.
+       Anywhere else, nothing about who. */
+    const brand = await brandOfDocument(tx, token)
+    return { doc, files, brand }
   })
   if (!found) return unshared()
   const pictures: Record<string, { url: string; display_url: string | null }> = {}
@@ -39,5 +43,11 @@ publicDocs.get('/docs/:token', async (c) => {
   c.header('x-robots-tag', 'noindex')
   /* Without what belongs to the people on the project: the threads on its
      words, and the tasks named in it, which are their title and no more. */
-  return c.json({ name: found.doc.name, body: forStrangers(found.doc.body), updated_at: found.doc.updated_at, pictures })
+  return c.json({
+    name: found.doc.name,
+    body: forStrangers(found.doc.body),
+    updated_at: found.doc.updated_at,
+    pictures,
+    brand: found.brand,
+  })
 })

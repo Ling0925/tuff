@@ -3,6 +3,12 @@ import { say } from '../data/words.js'
 /** Following an invitation — `ui/Join.tsx`. */
 export const JOIN = say({
   docTitle: ['Join — Tuff', 'Rejoindre — Tuff', '加入 — Tuff'],
+  /* An invitation into a workspace that wears its own name. */
+  docTitleIn: [
+    (workspace: string) => `Join — ${workspace}`,
+    (workspace: string) => `Rejoindre — ${workspace}`,
+    (workspace: string) => `加入 — ${workspace}`,
+  ],
   couldntJoin: ['Couldn’t join. Try again.', 'Impossible de rejoindre l’espace de travail. Réessayez.', '无法加入，请重试。'],
   enterAll: [
     'Enter your name, email and password.',

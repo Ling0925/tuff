@@ -13,8 +13,16 @@ import { ACCESS as W } from '../words/access.jsx'
  * own page, and the two screens of a forgotten password.
  */
 
-/** The same quiet frame for every screen before the app. */
-export function AuthShell({ title, children }: { title: string; children: React.ReactNode }) {
+/**
+ * The same quiet frame for every screen before the app.
+ *
+ * `mark` is what stands above the title in Tuff's place: a branded
+ * workspace's own, on the page an invitation into it opens,
+ * or null while that page does not yet know
+ * whose it is — an empty square of the same size, so the title does not move
+ * and Tuff's mark is never shown and then swapped. Left out, Tuff's.
+ */
+export function AuthShell({ title, children, mark }: { title: string; children: React.ReactNode; mark?: React.ReactNode }) {
   return (
     /*
      * In the middle of the window, near enough: the top of the block sits
@@ -33,9 +41,15 @@ export function AuthShell({ title, children }: { title: string; children: React.
           the name said again what the mark already says. The landing's
           drawing and not the favicon's, which is 64 pixels and soft at
           twice the size on a retina screen. */}
-      <a href="/welcome" aria-label="Tuff" className="block">
-        <img src="/landing/mark.svg" alt="" draggable={false} width={56} height={56} className="block" />
-      </a>
+      {mark === undefined ? (
+        <a href="/welcome" aria-label="Tuff" className="block">
+          <img src="/landing/mark.svg" alt="" draggable={false} width={56} height={56} className="block" />
+        </a>
+      ) : (
+        <span data-auth-mark className="block size-14">
+          {mark}
+        </span>
+      )}
       <div className="mt-12 flex w-full max-w-[400px] flex-col gap-3">
         <h1 className="mb-2 text-center text-display font-semibold" style={{ letterSpacing: '-0.02em' }}>
           {title}

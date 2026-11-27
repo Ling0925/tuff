@@ -53,6 +53,8 @@ export type WebEdition = {
   TokensLocked: ComponentType<{ onSettings?: () => void }> | null
   /** The workspace's plan, in its settings. */
   Plan: ComponentType | null
+  /** The workspace's own domain, in its settings, for its owner. */
+  Domain: ComponentType<{ look: { id: string; brand?: import('@tracker/shared-schema').Brand | null | undefined } }> | null
   /** The settings' lines that say more where there are plans: what a new owner takes on, and that deleting cancels what is paid for. */
   settingsSays: { newOwnerTakes: string; paidCancelled: string } | null
   /** What a provider's sign-in came back saying that only the service says, or null. */

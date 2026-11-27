@@ -1,4 +1,5 @@
 import { CHAT as W } from '../../words/chat.js'
+import { onHost } from '../../data/host.js'
 import { PushOffer } from '../PushOffer.jsx'
 import { SlackImport } from '../SlackImport.jsx'
 import { EmptyState, Avatar } from '../kit.jsx'
@@ -327,7 +328,8 @@ export function roomView({
               Standing on the line to write on, over
               the newest messages, and taking no height of its own. */}
         <div className="relative h-0">
-          <PushOffer />
+          {/* Not on a workspace's own domain, where push is not offered. */}
+          {!onHost() && <PushOffer />}
         </div>
         <div {...(room.others_gone ? {} : attach.drop)}>
           {/* Somebody removed from the workspace reads nothing written here,

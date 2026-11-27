@@ -46,7 +46,6 @@ export const FEEDBACK = say({
   confirmedBody: ['Thanks. The team will see it.', 'Merci. L’équipe la verra.', '谢谢，团队会看到。'],
   linkGone: ['This link has expired or was already used.', 'Ce lien a expiré ou a déjà été utilisé.', '此链接已过期或已被使用。'],
   backToPage: ['Go to the page', 'Aller à la page', '前往页面'],
-  madeWith: ['Made with Tuff', 'Fait avec Tuff', '由 Tuff 制作'],
 
   /* The project's settings. */
   head: ['Feedback page', 'Page de retours', '反馈页面'],

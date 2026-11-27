@@ -7,6 +7,7 @@
  * through the site settings, which nobody finds.
  */
 import { api } from './api.js'
+import { onHost } from './host.js'
 import { PUSH } from '../words/push.js'
 
 export type PushState =
@@ -32,7 +33,10 @@ function keyBytes(key: string): ArrayBuffer {
   return out
 }
 
-export const canPush = (): boolean => typeof navigator !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window
+/* Never on a workspace's own domain: a subscription would outlive the
+   session that made it. */
+export const canPush = (): boolean =>
+  typeof navigator !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && !onHost()
 
 async function worker(): Promise<ServiceWorkerRegistration> {
   return navigator.serviceWorker.register('/sw.js', { scope: '/' })

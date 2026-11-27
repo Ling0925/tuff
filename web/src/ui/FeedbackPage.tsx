@@ -3,7 +3,8 @@ import type { FeedbackPublic } from '@tracker/shared-schema'
 import { now } from '../data/words.js'
 import { FEEDBACK as W } from '../words/feedback.js'
 import { ProjectMark } from './icons.jsx'
-import { Looks } from './PublicDoc.jsx'
+import { Looks, MadeBy } from './PublicDoc.jsx'
+import { wearBrand } from '../data/brand.js'
 import { notALogin } from './kit.jsx'
 
 /**
@@ -138,10 +139,7 @@ function Shell({ page, children }: { page: FeedbackPublic | null; children: Reac
         >
           <span className="ml-auto flex items-center gap-4">
             <Looks />
-            <a href="/?from=feedback" className="flex items-center gap-2 text-ink-2">
-              <img src="/favicon.png" alt="" draggable={false} width={16} height={16} style={{ borderRadius: 4 }} />
-              {W.madeWith}
-            </a>
+            <MadeBy known brand={page?.brand} from="feedback" />
           </span>
         </footer>
       </main>
@@ -198,6 +196,8 @@ function usePage(slug: string): { page: FeedbackPublic | null; missing: boolean;
   }, [slug])
   useEffect(() => {
     document.title = state.page ? W.title(state.page.name) : 'Tuff'
+    /* The workspace's mark on the tab, where its plan wears one. */
+    wearBrand(state.page?.brand ?? null)
   }, [state.page])
   return {
     ...state,
