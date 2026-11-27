@@ -371,11 +371,11 @@ test('the clear-out removes OAuth clients nothing has named for a week, and only
 /* ----------------------------------------------------------------- 14 */
 
 test('a PNG past the format’s bounds has no size, and an upload that fails leaves no bytes behind (14)', async () => {
+  /* A whole small PNG with the width overwritten: the header's bytes are
+     the probe, and the rest of the file is what a picture needs to be one —
+     the upload asks wholeness of what it stores now. */
   const png = (width: number) => {
-    const b = Buffer.from([
-      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, 0x49, 0x48, 0x44, 0x52, 0, 0, 0, 0, 0, 0, 0, 1, 8, 6, 0, 0, 0, 0, 0, 0,
-      0,
-    ])
+    const b = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
     b.writeUInt32BE(width, 16)
     return b
   }

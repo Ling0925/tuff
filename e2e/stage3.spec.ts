@@ -403,7 +403,7 @@ test('a message is edited in place, its file taken out, and then deleted', async
       name: `edit-${stamp}.png`,
       mimeType: 'image/png',
       buffer: Buffer.from(
-        'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAJ0lEQVR42u3OMQEAAAgDoC251a3gLzRgcrcpAQEBAQEBAQEBAQGBHwtGFgABRpW1ugAAAABJRU5ErkJggg==',
+        'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYklEQVR4nO3PMQ0AIADAMEAI/qUgCxEcDcmqYJtn7/GzpQNeNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaBdQ3UBhOjh6FcAAAAASUVORK5CYII=',
         'base64',
       ),
     })
@@ -1173,7 +1173,7 @@ test('a picked file waits inside the line as a tile, and goes with the message',
   })
   const composer = page.locator('[data-chat-composer]')
   const png = Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAJ0lEQVR42u3OMQEAAAgDoC251a3gLzRgcrcpAQEBAQEBAQEBAQGBHwtGFgABRpW1ugAAAABJRU5ErkJggg==',
+    'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYklEQVR4nO3PMQ0AIADAMEAI/qUgCxEcDcmqYJtn7/GzpQNeNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaBdQ3UBhOjh6FcAAAAASUVORK5CYII=',
     'base64',
   )
   const stamp = Date.now()

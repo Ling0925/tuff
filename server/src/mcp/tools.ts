@@ -49,7 +49,7 @@ Links: every project, task, document and announcement in an answer carries a \`u
 
 Where things go: a brief, a spec or notes are documents in Docs (create_doc). What a task is for, what it needs and how to know it is done go in the task's description (create_task or update_task), not in a comment. An announcement (create_post) is news or a decision for everyone on the project. Comments are for talking about something.
 
-Bodies are Markdown, drawn as Tuff's own blocks: headings (#, ##, ###), bulleted and numbered lists (nested by indent), > quotes, fenced code with a language, --- dividers, tables, **bold**, *italic*, ~~strike~~, \`code\`, [text](url) links, and ![caption](file:<id>) on its own line for an uploaded file. A bare https:// or www. address becomes a link. A task's handle, like ACM-41, in a body in that task's own project shows as the task with its title and status: write the handle alone, not its title after it. Elsewhere it stays text. Use headings, lists and tables to give a long body shape. A callout is GitHub's alert, \`> [!NOTE]\` (or TIP, IMPORTANT, WARNING, CAUTION) with its words on the quoted lines after it; a toggle is \`<details><summary>Its line</summary>\` with what it folds after it and \`</details>\` to close. There are no checkboxes: \`- [ ] x\` is a plain list item.
+Bodies are Markdown, drawn as Tuff's own blocks: headings (#, ##, ###), bulleted and numbered lists (nested by indent), > quotes, fenced code with a language, --- dividers, tables, **bold**, *italic*, ~~strike~~, \`code\`, [text](url) links, and ![caption](file:<id>) on its own line for an uploaded file — or the file's id in a body's attachments, one or the other, never both: both shows the file twice. Upload pictures at full resolution exactly as they were saved, PNG or lossless for screenshots, never downscaled or recompressed to be smaller. A bare https:// or www. address becomes a link. A task's handle, like ACM-41, in a body in that task's own project shows as the task with its title and status: write the handle alone, not its title after it. Elsewhere it stays text. Use headings, lists and tables to give a long body shape. A callout is GitHub's alert, \`> [!NOTE]\` (or TIP, IMPORTANT, WARNING, CAUTION) with its words on the quoted lines after it; a toggle is \`<details><summary>Its line</summary>\` with what it folds after it and \`</details>\` to close. There are no checkboxes: \`- [ ] x\` is a plain list item.
 
 Documents can be open in Tuff while you change them, with people typing in them. To change one, read it with read_doc and pass the rev it gives as base_rev to update_doc: your change is merged with what people wrote since. update_doc answers with the new rev, for your next change, and with conflicts: the number of places where people changed the same text, which were left as they wrote it — read the document again to see them. If it is refused as stale, read it again and make the change on what is there now.
 
@@ -694,7 +694,7 @@ export function tuffServer(given: Call, site: string, reader?: Reader): McpServe
       assignee_ids: z.array(z.uuid()).max(10).optional(),
       label_ids: z.array(z.uuid()).optional(),
       cycle_id: z.uuid().nullish(),
-      /** Files from upload_file, put at the end of it — or write `![caption](file:<id>)` on a line of its own. */
+      /** Files from upload_file, put at the end of it — or write `![caption](file:<id>)` on a line of its own, one or the other, never both. */
       attachments: z.array(z.uuid()).optional(),
       repeat: REPEAT,
     },
@@ -741,7 +741,7 @@ export function tuffServer(given: Call, site: string, reader?: Reader): McpServe
       label_ids: z.array(z.uuid()).optional(),
       /** A sprint from list_cycles, or null to take it out of one. */
       cycle_id: z.uuid().nullish(),
-      /** Files from upload_file, put at the end of it — or write `![caption](file:<id>)` on a line of its own. */
+      /** Files from upload_file, put at the end of it — or write `![caption](file:<id>)` on a line of its own, one or the other, never both. */
       attachments: z.array(z.uuid()).optional(),
       /** Tasks it now waits on, by id or handle like ACM-41. */
       blocked_by_add: z.array(z.string()).max(50).optional(),
@@ -1470,6 +1470,36 @@ export function tuffServer(given: Call, site: string, reader?: Reader): McpServe
     },
   )
 
+  /*
+   * Base64 decoded strictly, or not at all.
+   *
+   * Node's own decoder passes over anything not in the alphabet without a
+   * word: one character mistyped or dropped in transport does not fail the
+   * decode, it shifts every byte after it — and the file that comes out has
+   * a sound header and corrupt insides, which is exactly the picture that
+   * lists fine, with the right size and dimensions, and draws as a blur.
+   * Better to refuse the input and say where. Whitespace is fine — a long
+   * string is often wrapped — but nothing else outside the alphabet is.
+   */
+  const strictBase64 = (input: string): Uint8Array<ArrayBuffer> => {
+    const bad = /[^A-Za-z0-9+/=\s]/.exec(input)
+    if (bad) {
+      throw new Error(
+        `content_base64 is not valid base64: unexpected character ${JSON.stringify(bad[0])} at position ${bad.index}. Encode the file's exact bytes as standard base64 — do not write or alter it by hand.`,
+      )
+    }
+    const stripped = input.replace(/\s+/g, '')
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(stripped) || stripped.length % 4 === 1) {
+      throw new Error(
+        "content_base64 is not valid base64: padding belongs at the end and the length is wrong. Encode the file's exact bytes as standard base64.",
+      )
+    }
+    const raw = Buffer.from(stripped, 'base64')
+    const out = new Uint8Array(raw.byteLength)
+    out.set(raw)
+    return out
+  }
+
   /* ----------------------------------------------------------------- files */
 
   /*
@@ -1479,7 +1509,7 @@ export function tuffServer(given: Call, site: string, reader?: Reader): McpServe
    */
   made.upload_file = server.tool(
     'upload_file',
-    "Put a file into a project's Docs. Give text for a text file, or content_base64 for anything else. Answers with its id: to show it in a task, comment, document, post or message, pass the id in attachments, or write ![caption](file:<id>) on a line of its own.",
+    "Put a file into a project's Docs. Give text for a text file, or content_base64 for anything else. For a picture, upload the original file's bytes exactly as they were saved, at full resolution: never downscale, recompress or re-encode it to make it smaller — a screenshot is read for its words, so prefer PNG or another lossless format over JPEG for one, and small or heavily compressed pictures are illegible to everybody. Answers with its id: to show it in a task, comment, document, post or message, EITHER write ![caption](file:<id>) on a line of its own in the body, OR pass the id in attachments — one or the other, never both.",
     {
       project_id: z.uuid(),
       name: z.string().min(1).max(300),
@@ -1490,7 +1520,7 @@ export function tuffServer(given: Call, site: string, reader?: Reader): McpServe
       if ((words === undefined) === (content_base64 === undefined)) {
         throw new Error('Give either text or content_base64.')
       }
-      const bytes = words !== undefined ? new TextEncoder().encode(words) : Buffer.from(content_base64!, 'base64')
+      const bytes = words !== undefined ? new TextEncoder().encode(words) : strictBase64(content_base64!)
       const form = new FormData()
       form.set('file', new File([bytes], name, { type: typeOf(name) }))
       const { id } = (await call(`/api/projects/${project_id}/uploads`, { method: 'POST', body: form })) as {

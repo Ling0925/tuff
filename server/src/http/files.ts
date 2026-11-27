@@ -5,6 +5,7 @@ import { DocTemplate, MAX_FILE_BYTES, MarkIcon, MarkTint, fillTemplate, template
 import { v7 as uuidv7 } from 'uuid'
 import { randomBytes } from 'node:crypto'
 import { pixelsOf } from '../pixels.js'
+import { wholeImage } from '../wholeImage.js'
 import { withActor, type Tx } from '../db.js'
 import { allow, allowIn, type AuthContext } from '../auth/context.js'
 import { record } from './activity.js'
@@ -1387,6 +1388,23 @@ async function takeUpload(
   }
 
   const bytes = new Uint8Array(await upload.arrayBuffer())
+  /* A picture that is not all there is refused here rather than stored:
+     its header alone reads fine — size, even pixel dimensions — so it would
+     list as any other picture and draw as a blur or a grey box, and nobody
+     would ever be told. What is whole is stored byte for byte, as always.
+     `wholeImage.ts`. */
+  if (wholeImage(bytes) === 'broken') {
+    return c.json(
+      {
+        error: {
+          code: 'broken',
+          message:
+            'That image is incomplete — the file ends before the picture does. Upload the original file exactly as it was saved, without shortening or altering it.',
+        },
+      },
+      400,
+    )
+  }
   const id = uuidv7()
   let projectId = 'projectId' in home ? home.projectId : null
   const conversationId = 'conversationId' in home ? home.conversationId : null
@@ -1511,6 +1529,11 @@ files.post('/files/:id/display', async (c) => {
   if (row.author_id !== ctx.actorId) return c.json(forbidden, 403)
   if (!row.content_type?.startsWith('image/')) {
     return c.json({ error: { code: 'invalid', message: 'Only images can have a display version.' } }, 400)
+  }
+  /* Whole, as the original was asked to be: a copy cut short on its way up
+     would draw as a blur beside a sound original, and nobody would know why. */
+  if (wholeImage(bytes) === 'broken') {
+    return c.json({ error: { code: 'broken', message: 'That image is incomplete — the file ends before the picture does.' } }, 400)
   }
   const stored = await put(ctx.workspaceId, bytes, type)
   await withActor(
