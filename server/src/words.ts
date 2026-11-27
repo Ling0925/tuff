@@ -79,6 +79,11 @@ export const one = (n: number, language: Language): boolean => (language === 'fr
  * fails on one this table has not heard of.
  */
 export const ERRORS_FR: Record<string, string> = {
+  /* An upload that is not all there. */
+  'That image is incomplete — the file ends before the picture does. Upload the original file exactly as it was saved, without shortening or altering it.':
+    'Cette image est incomplète — le fichier se termine avant la fin de l’image. Téléversez le fichier original exactement tel qu’il a été enregistré, sans le raccourcir ni le modifier.',
+  'That image is incomplete — the file ends before the picture does.':
+    'Cette image est incomplète — le fichier se termine avant la fin de l’image.',
   /* A workspace's own domain, and a session made on it. */
   'Passwords aren’t used here. Sign in with a code sent to your email.':
     'Les mots de passe ne sont pas utilisés ici. Connectez-vous avec un code envoyé par e-mail.',
@@ -469,6 +474,12 @@ export const ERRORS_FR: Record<string, string> = {
 
 /** The Chinese for each message an error carries, keyed by its English — the French's `ERRORS_FR`. */
 export const ERRORS_ZH: Record<string, string> = {
+  /* A workspace's own domain, and a session made on it. */
+  'Passwords aren’t used here. Sign in with a code sent to your email.': '此处不使用密码。请使用发送到您邮箱的验证码登录。',
+  'Open Tuff at usetuff.com to change this.': '请打开 usetuff.com 上的 Tuff 来更改此项。',
+  'That image is incomplete — the file ends before the picture does. Upload the original file exactly as it was saved, without shortening or altering it.':
+    '图片不完整——文件在图像结束前就终止了。请按保存时的原样上传原始文件，不要截断或修改。',
+  'That image is incomplete — the file ends before the picture does.': '图片不完整——文件在图像结束前就终止了。',
   'This page doesn’t exist.': '此页面不存在。',
   'This page is paused. Try again later.': '此页面已暂停。请稍后再试。',
   'Send your request from the page.': '请从该页面发送你的请求。',
