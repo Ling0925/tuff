@@ -362,6 +362,24 @@ export function tuffServer(given: Call, site: string, reader?: Reader): McpServe
     swap(doc, 0)
   }
 
+  /* Which files a body already shows, wherever they stand in it — so one
+     written out in the markdown is not put at its end a second time. An
+     agent that does both, as the tools say it may, doubled every picture:
+     the inline one and the copy appended after it, and two of the same
+     screenshot one after another are read as a row of small tiles rather
+     than as the picture. */
+  const filesShown = (doc: Doc): Set<string> => {
+    const ids = new Set<string>()
+    const walk = (nodes: Doc[] | undefined) => {
+      for (const n of nodes ?? []) {
+        if (n.type === 'attachment' && typeof n.attrs?.fileId === 'string') ids.add(n.attrs.fileId.toLowerCase())
+        walk(n.content)
+      }
+    }
+    walk(doc.content)
+    return ids
+  }
+
   const text = async (t: string, attachments: string[] = [], where?: Where): Promise<Doc> => {
     /* A bound on what is read: only the request's five megabytes held a
        body, and five megabytes of `[a` were hours of the server's one
@@ -370,7 +388,9 @@ export function tuffServer(given: Call, site: string, reader?: Reader): McpServe
     if (reader && !(await reader.spend())) throw new Error('rate_limited: Too many requests. Try again in a minute.')
     const doc = (await readMarkdown(t, reader?.key)) as Doc
     await chipped(doc, where)
-    doc.content = [...(doc.content ?? []), ...attachments.map((id) => ({ type: 'attachment', attrs: { fileId: id } }))]
+    const shown = filesShown(doc)
+    const more = [...new Set(attachments.map((id) => id.toLowerCase()))].filter((id) => !shown.has(id))
+    doc.content = [...(doc.content ?? []), ...more.map((id) => ({ type: 'attachment', attrs: { fileId: id } }))]
     for (const n of doc.content) {
       if (n.type !== 'attachment') continue
       const id = String(n.attrs?.fileId ?? '')
@@ -398,10 +418,15 @@ export function tuffServer(given: Call, site: string, reader?: Reader): McpServe
     if (doc.content.length === 0) doc.content = [{ type: 'paragraph' }]
     return doc
   }
-  /* What a body says now, with more files put at its end. */
+  /* What a body says now, with more files put at its end — bar the ones
+     already in it: a file the body shows is not shown again. */
   const appended = async (said: unknown, attachments: string[]): Promise<Doc> => {
     const was = (said && typeof said === 'object' ? said : { type: 'doc', content: [] }) as Doc
-    const more = await text('', attachments)
+    const there = filesShown(was)
+    const more = await text(
+      '',
+      attachments.filter((id) => !there.has(id.toLowerCase())),
+    )
     const kept = (was.content ?? []).filter((n) => !(n.type === 'paragraph' && !n.content?.length))
     return { type: 'doc', content: [...kept, ...(more.content ?? []).filter((n) => n.type === 'attachment')] }
   }

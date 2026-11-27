@@ -14,6 +14,7 @@ import { DOC as W } from '../words/doc.js'
 import { addresses } from '@tracker/shared-schema'
 import { followHere } from '../data/route.js'
 import { emojiOf, toneOf } from '../data/callout.js'
+import { fitFrame } from '../data/fitFrame.js'
 
 /**
  * A body, drawn and not edited.
@@ -264,15 +265,12 @@ export function Lightbox({
   /* Its shape from the picture on the page it stands for — read again as
      the pages turn, so each one is sized before it has loaded. */
   const shape = from && from.naturalWidth && from.naturalHeight ? { w: from.naturalWidth, h: from.naturalHeight } : null
-  /* Its size in the window: its own, or as large as fits inside the 32
-     around it — worked out here so the box is the picture exactly, and
-     where it will land can be measured before it has loaded. */
-  const fit = shape
-    ? (() => {
-        const k = Math.min(1, (innerWidth - 64) / shape.w, (innerHeight - 64) / shape.h)
-        return { w: Math.round(shape.w * k), h: Math.round(shape.h * k) }
-      })()
-    : null
+  /* Its size in the window: as large as fits inside the 32 around it,
+     grown to it when it is small — opened is for reading, and a picture
+     that opens no bigger than it was cannot be read. Worked out here so
+     the box is the picture exactly, and where it will land can be measured
+     before it has loaded. `data/fitFrame.ts`. */
+  const fit = shape ? fitFrame(shape, { w: innerWidth, h: innerHeight }) : null
   const still = () => matchMedia('(prefers-reduced-motion: reduce)').matches
 
   /* From the picture's place on the page to its place in the window — the
