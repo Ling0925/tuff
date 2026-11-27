@@ -215,8 +215,8 @@ const listColumns = (tx: Tx) => tx`
              t.created_at, t.repeat,
              /* What the description says, flattened and shortened for the
                 row and the card. Two hundred and forty characters is a
-                preview, not the body: enough for the card's two lines and
-                for a wide row's one. No backticks in here. */
+                preview, not the body: enough for the card's supporting text
+                and for a wide row's one line. No backticks in here. */
              nullif(left(btrim(regexp_replace(coalesce((
                select string_agg(x.a #>> '{}', ' ' order by x.o)
                from jsonb_path_query(coalesce(t.body, '{}'::jsonb), 'strict $.**.text') with ordinality as x(a, o)
