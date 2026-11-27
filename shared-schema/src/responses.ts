@@ -2249,6 +2249,11 @@ export const TaskCopied = z.object({
 })
 export type TaskCopied = z.infer<typeof TaskCopied>
 
+/** A task moved to another project — the same shape of plan as a copy, with
+    the count of comments that go with it. */
+export const TaskMoved = TaskCopied.extend({ comments: z.number().int() })
+export type TaskMoved = z.infer<typeof TaskMoved>
+
 /**
  * A project's feedback page, as its settings section reads it — `GET
  * /api/projects/:id/feedback`. `page` is null until

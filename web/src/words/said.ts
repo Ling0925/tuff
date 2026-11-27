@@ -39,6 +39,8 @@ export const DONE = say<Record<string, string>>({
   /* A copy, and the original it came from. */
   'task.copy': ['copied', 'a copié', '复制了'],
   'task.copied': ['copied', 'a copié', '复制了'],
+  'task.move': ['moved', 'a déplacé', '移动了'],
+  'task.moved': ['moved', 'a déplacé', '移动了'],
   /* The next one of a series, made when the last was done. */
   'task.repeat': ['made the next one of', 'a créé la suivante de', '创建了下一项'],
   'task.comment': ['commented on', 'a commenté', '评论了'],
@@ -146,6 +148,8 @@ export const ALONE = say<Record<string, readonly [string, string]>>({
   'task.delete': [both('deleted it'), ['l’a supprimé', 'l’a supprimée'], both('删除了它')],
   'task.copy': [both('made it as a copy'), ['l’a créé en copie', 'l’a créée en copie'], both('以副本创建了它')],
   'task.copied': [both('copied it'), ['l’a copié', 'l’a copiée'], both('复制了它')],
+  'task.move': [both('moved it'), ['l’a déplacé', 'l’a déplacée'], both('移动了它')],
+  'task.moved': [both('moved it'), ['l’a déplacé', 'l’a déplacée'], both('移动了它')],
   'task.repeat': [both('made it as the next one'), ['l’a créé comme le suivant', 'l’a créée comme la suivante'], both('创建了它的下一项')],
   setRepeat: [both('set it to repeat'), both('a défini la répétition'), both('设置为重复')],
   clearedRepeat: [both('stopped it repeating'), both('a arrêté la répétition'), both('取消了重复')],

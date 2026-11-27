@@ -19,6 +19,7 @@ import { relationsOf, tellUnblocked, waitingOnNow, type Waiting } from './blocks
 import { makeNext, ruleToStore, takeNextBack, type Finished } from '../repeat.js'
 import { used } from './used.js'
 import { liveStatuses } from '../doing.js'
+import { publish } from '../realtime.js'
 
 type Vars = { ctx: AuthContext }
 export const tasks = new Hono<{ Variables: Vars }>()
@@ -2415,6 +2416,264 @@ async function copyTask(
   return { ...said, id: madeId, number: made?.number ?? null }
 }
 
+/**
+ * The task itself in another project — not a copy: the same row, the same
+ * comments, its parts with it, and a new number where it lands.
+ *
+ * `dry` answers what the move would be and changes nothing, from the same
+ * function the move then runs through. The window reads that before the
+ * press, as the copy window does.
+ */
+async function moveTask(tx: Tx, ctx: AuthContext, id: string, o: { target: string; listId?: string | null; dry: boolean }) {
+  type Row = {
+    id: string
+    author_id: string
+    project_id: string
+    parent_id: string | null
+    list_id: string | null
+    title: string
+    body: unknown
+    number: number
+    assignee_ids: string[]
+    due_on: string | null
+    priority: string | null
+    cycle_id: string | null
+    completed_at: string | null
+    starts_at: string | null
+    ends_at: string | null
+    sort_key: string
+  }
+  const columns = tx`id, author_id, project_id, parent_id, list_id, title, body, number, assignee_ids, due_on, priority,
+                     cycle_id, completed_at, starts_at, ends_at, sort_key`
+  /* Held before anything is planned or written: a move and a delete racing
+     each other settle one after the other, not halfway through each other. */
+  const [from] = await tx<Row[]>`select ${columns} from task where id = ${id} and deleted_at is null for update`
+  if (!from) return 'missing' as const
+  if (from.parent_id) return 'subtask' as const
+  const target = o.target
+  if (target === from.project_id) return 'same' as const
+  const [to] = await tx<{ name: string; archived_at: string | null }[]>`
+    select name, archived_at from project where id = ${target} and deleted_at is null`
+  if (!to) return 'missing' as const
+  if (to.archived_at) return 'archived' as const
+  /* Out of one project as deletion is answered there; into the other as
+     making a task is answered there. Never through a tool: the task leaves
+     one project's sight and becomes readable to another's. */
+  if (ctx.viaMcp || ctx.viaGithub || ctx.viaImport) return 'forbidden' as const
+  if (from.author_id !== ctx.actorId && !allowIn(ctx, 'task.delete', from.project_id)) return 'forbidden' as const
+  if (!allowIn(ctx, 'task.create', target)) return 'forbidden' as const
+  const [busy] = await tx<{ on: boolean }[]>`select project_importing(${target}) as on`
+  if (busy?.on) return 'importing' as const
+
+  const parts = await tx<Row[]>`
+    select ${columns} from task where parent_id = ${id} and deleted_at is null order by sort_key asc for update`
+  const lists = await tx<{ id: string; name: string; finishes: boolean; intake: boolean }[]>`
+    select id, name, finishes, intake from task_list
+    where project_id = ${target} and deleted_at is null order by sort_key`
+  const [was] = from.list_id ? await tx<{ name: string }[]>`select name from task_list where id = ${from.list_id}` : []
+  let into: { id: string; name: string } | null =
+    lists.find((l) => was && l.name.toLowerCase() === was.name.toLowerCase()) ??
+    lists.find((l) => !l.finishes && !l.intake) ??
+    lists.find((l) => !l.intake) ??
+    lists[0] ??
+    null
+  if (o.listId) {
+    const chosen = lists.find((l) => l.id === o.listId)
+    if (!chosen) return 'list' as const
+    into = chosen
+  }
+  if (!into) return 'list' as const
+
+  /* Labels by name, as a copy carries them; a word the project does not
+     have stays behind. */
+  const ids = [from, ...parts].map((t) => t.id)
+  const labels = await tx<{ task_id: string; name: string }[]>`
+    select tl.task_id, l.name::text as name from task_label tl join label l on l.id = tl.label_id
+    where tl.task_id = any(${ids}::uuid[]) and l.deleted_at is null`
+  const theirs = await tx<{ id: string; name: string }[]>`
+    select id, name::text as name from label where project_id = ${target} and deleted_at is null`
+  const labelFor = new Map(theirs.map((l) => [l.name.toLowerCase(), l.id]))
+  const names = (xs: string[]) => [...new Set(xs)].sort()
+  const kept = names(labels.filter((l) => labelFor.has(l.name.toLowerCase())).map((l) => l.name))
+  const dropped = names(labels.filter((l) => !labelFor.has(l.name.toLowerCase())).map((l) => l.name))
+
+  /* Only whoever is on the project it goes to. */
+  const everyone = [...new Set([from, ...parts].flatMap((t) => t.assignee_ids))]
+  const onIt = everyone.length
+    ? await tx<{ actor_id: string }[]>`
+        select m.actor_id from membership m
+        where m.workspace_id = ${ctx.workspaceId} and m.actor_id = any(${everyone}::uuid[])
+          and m.deleted_at is null and m.joined_at is not null
+          and (m.role = 'owner' or exists (
+            select 1 from project_member pm
+            where pm.project_id = ${target} and pm.actor_id = m.actor_id and pm.deleted_at is null))`
+    : []
+  const stays = new Set(onIt.map((r) => r.actor_id))
+  const notOn = everyone.filter((a) => !stays.has(a))
+  const notOnNames = notOn.length
+    ? await tx<{ actor_id: string; name: string }[]>`
+        select id as actor_id, name from actor where id = any(${notOn}::uuid[]) order by name`
+    : []
+  const [cycle] = from.cycle_id
+    ? await tx<{ name: string }[]>`select name from cycle where id = ${from.cycle_id} and deleted_at is null`
+    : []
+  const [saidCount] = await tx<{ n: number }[]>`
+    select count(*)::int as n from comment
+    where object_type = 'task' and object_id = any(${ids}::uuid[]) and deleted_at is null`
+
+  /* Project-owned files shown in the descriptions are copied as files of
+     the target over the same bytes, exactly as a copy's are. Files named in
+     comments keep their own access rules; the words themselves move. */
+  const shown = new Set<string>()
+  for (const t of [from, ...parts]) fileIdsIn(t.body, shown)
+  const files = shown.size
+    ? await tx<Record<string, unknown>[]>`
+        select id, name, body, storage_key, content_type, size_bytes, uploaded_at, checksum, url,
+               display_key, display_bytes, pixel_width, pixel_height
+        from file
+        where id = any(${[...shown]}::uuid[]) and deleted_at is null
+          and project_id = ${from.project_id} and conversation_id is null
+          and audience = 'project' and held_by is null`
+    : []
+  const [github] = await tx<{ on: boolean }[]>`
+    select exists (select 1 from github_link where project_id = ${target} and issues and deleted_at is null) as on`
+
+  const plan = {
+    id: null as string | null,
+    from_project_id: from.project_id,
+    project_id: target,
+    number: null as number | null,
+    list_id: into.id,
+    list_name: into.name,
+    subtasks: parts.length,
+    comments: saidCount?.n ?? 0,
+    labels_kept: kept,
+    labels_dropped: dropped,
+    cycle: cycle?.name ?? null,
+    assignees_dropped: notOnNames,
+    files: files.length,
+    github_to: github?.on === true,
+  }
+  if (o.dry) return plan
+
+  const bytes = files.reduce((n, f) => n + Number(f.size_bytes ?? 0) + Number(f.display_bytes ?? 0), 0)
+  if (bytes > 0 && !(await roomFor(tx, ctx.workspaceId, bytes))) return 'full' as const
+
+  /* New numbers in the project it joins, in one counter step so no other
+     task can be numbered between these. */
+  const [counter] = await tx<{ first: number }[]>`
+    update project set task_seq = task_seq + ${ids.length}
+    where id = ${target}
+    returning task_seq - ${ids.length} + 1 as first`
+  const firstNumber = counter?.first ?? null
+  if (!firstNumber) return 'missing' as const
+
+  /* The copy for showing is made first, so a refusal leaves the task where
+     it was. Rows only: the bytes are already stored and are shared. */
+  const swap = new Map<string, string>()
+  for (const f of files) swap.set(f.id as string, uuidv7())
+  for (const f of files) {
+    await tx`
+      insert into file (id, workspace_id, project_id, author_id, name, body, storage_key, content_type, size_bytes,
+                        uploaded_at, checksum, url, display_key, display_bytes, pixel_width, pixel_height,
+                        origin_type, origin_id)
+      values (${swap.get(f.id as string)!}, ${ctx.workspaceId}, ${target}, ${ctx.actorId}, ${f.name as string},
+              ${f.body ? tx.json(f.body as never) : null}, ${f.storage_key as string | null}, ${f.content_type as string | null}, ${f.size_bytes as number | null},
+              ${f.uploaded_at as string | null}, ${f.checksum as string | null}, ${f.url as string | null},
+              ${f.display_key as string | null}, ${f.display_bytes as number | null},
+              ${f.pixel_width as number | null}, ${f.pixel_height as number | null}, 'task', ${id})`
+  }
+
+  /* At the top of the list it joins, where a new card goes. The parts keep
+     their order among themselves, which is what their keys mean. */
+  const [edge] = await tx<{ sort_key: string }[]>`
+    select sort_key from task
+    where project_id = ${target} and deleted_at is null and parent_id is null
+      and list_id is not distinct from ${into.id}
+    order by sort_key asc limit 1`
+  const topKey = generateKeyBetween(null, edge?.sort_key ?? null)
+
+  /* Links to another project's tools are that project's. The task itself
+     travels; its GitHub pairing does not, or the next target write would
+     update the source repository's issue. */
+  await tx`delete from github_issue where task_id = any(${ids}::uuid[])`
+  await tx`delete from github_pull_task where task_id = any(${ids}::uuid[])`
+
+  for (const [i, t] of [from, ...parts].entries()) {
+    const assignees = t.assignee_ids.filter((a) => stays.has(a))
+    const words = t.body ? withFiles(t.body, swap) : null
+    await tx`
+      update task set project_id = ${target}, list_id = ${into.id},
+        number = ${firstNumber + i}, assignee_ids = ${assignees}::uuid[], cycle_id = null,
+        sort_key = ${t.parent_id ? t.sort_key : topKey}, decided_at = now(), repeat_next_id = null,
+        body = ${words ? tx.json(words as never) : null}
+      where id = ${t.id}`
+    /* A part is finished or not on its own; the list is only where it is
+       drawn with its task. The trigger reads the list, so put its own tick
+       back after the move. */
+    if (t.parent_id) {
+      await tx`update task set completed_at = ${t.completed_at} where id = ${t.id}
+               and completed_at is distinct from ${t.completed_at}`
+    }
+  }
+
+  /* The words, remapped by name; what the target does not have is gone. */
+  await tx`delete from task_label where task_id = any(${ids}::uuid[])`
+  const wanted = labels
+    .filter((l) => labelFor.has(l.name.toLowerCase()))
+    .map((l) => ({
+      id: uuidv7(),
+      workspace_id: ctx.workspaceId,
+      task_id: l.task_id,
+      label_id: labelFor.get(l.name.toLowerCase())!,
+    }))
+  if (wanted.length) {
+    await tx`insert into task_label ${tx(wanted, 'id', 'workspace_id', 'task_id', 'label_id')}
+             on conflict (task_id, label_id) do nothing`
+  }
+
+  /* The comments are the task's own record and move with it. The definer
+     asks the same permissions again inside the database. */
+  await tx`select move_task_comments_with_task(${id})`
+
+  const [numbered] = await tx<{ number: number }[]>`select number from task where id = ${id}`
+  const movedNumber = numbered?.number ?? null
+  const meta = {
+    from_project_id: from.project_id,
+    from_number: from.number,
+    to_project_id: target,
+    to_number: movedNumber,
+    moved_to: into.name,
+    title: from.title,
+    ...(dropped.length ? { labels_dropped: dropped } : {}),
+    ...(notOnNames.length ? { assignees_dropped: notOnNames.map((a) => a.name) } : {}),
+  }
+  await record(tx, ctx, 'task.move', {
+    projectId: target,
+    objectType: 'task',
+    objectId: id,
+    meta,
+  })
+  /* The project it left keeps the line, without telling that project's
+     webhook or GitHub queue a second time. Its screens are told directly:
+     the row really did leave the board they are looking at. */
+  await record(tx, ctx, 'task.moved', {
+    projectId: from.project_id,
+    objectType: 'task',
+    objectId: id,
+    feedOnly: true,
+    meta,
+  })
+  await publish(
+    `project:${from.project_id}`,
+    'task.move',
+    { object_type: 'task', object_id: id, actor_id: ctx.actorId, tab: ctx.tab ?? null },
+    tx,
+  )
+  await subscribe(tx, ctx, 'task', id)
+  return { ...plan, id, number: movedNumber }
+}
+
 tasks.post('/tasks/:id/copy', async (c) => {
   const ctx = c.get('ctx')
   const body = CopyBody.safeParse(await c.req.json().catch(() => ({})))
@@ -2434,6 +2693,31 @@ tasks.post('/tasks/:id/copy', async (c) => {
       tasks: [...(await listRows(tx, ctx.actorId, { ids: [made.id] })), ...(await listRows(tx, ctx.actorId, { parent: made.id }))],
     }
   })
+  if (typeof result === 'string') return refused(c, result)
+  return c.json(result, body.data.dry ? 200 : 201)
+})
+
+tasks.post('/tasks/:id/move', async (c) => {
+  const ctx = c.get('ctx')
+  const body = CopyBody.safeParse(await c.req.json().catch(() => ({})))
+  if (!body.success) return c.json({ error: { code: 'invalid' } }, 400)
+  const result = await withActor(ctx.actorId, ctx.workspaceId, async (tx) => {
+    const moved = await moveTask(tx, ctx, c.req.param('id'), {
+      target: body.data.project_id,
+      listId: body.data.list_id ?? null,
+      dry: body.data.dry === true,
+    })
+    if (typeof moved === 'string' || !moved.id) return moved
+    /* The row and its parts as their new project's list draws them, so the
+       screen that moved them can put them down without reading that project. */
+    return {
+      ...moved,
+      tasks: [...(await listRows(tx, ctx.actorId, { ids: [moved.id] })), ...(await listRows(tx, ctx.actorId, { parent: moved.id }))],
+    }
+  })
+  if (result === 'same') {
+    return c.json({ error: { code: 'invalid', message: 'Choose another project to move the task to.' } }, 400)
+  }
   if (typeof result === 'string') return refused(c, result)
   return c.json(result, body.data.dry ? 200 : 201)
 })

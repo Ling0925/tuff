@@ -28,12 +28,13 @@ export function takenBar({
   makeLabel,
   sharedLabels,
   toAll,
+  startMove,
 }: Pick<TasksProps, 'canWrite'> &
   Pick<TaskData, 'tasks' | 'people' | 'lists' | 'cycles' | 'patch'> &
   Pick<BoardMoves, 'taken' | 'setTaken' | 'bar'> &
   Pick<TaskActions, 'removeAll'> &
   Pick<ListShape, 'allLabels'> &
-  Pick<TaskKeys, 'makeLabel' | 'sharedLabels' | 'toAll'>): React.ReactNode {
+  Pick<TaskKeys, 'makeLabel' | 'sharedLabels' | 'toAll'> & { startMove: (ids: string[]) => void }): React.ReactNode {
   return bar.mounted ? (
     /*
      * It opens rather than appears.
@@ -157,6 +158,10 @@ export function takenBar({
               )}
               {/* Last and in red, as in a row's own menu: the one of these
                   that takes the work off the screen. */}
+              <button data-testid="taken-move" onClick={() => startMove([...taken])} className={ACT}>
+                <Icon name="chevR" size={16} />
+                <span className="text-base">{ACTS.moveToProject}</span>
+              </button>
               <button
                 data-testid="taken-delete"
                 onClick={() => void removeAll([...taken])}
