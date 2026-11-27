@@ -196,6 +196,20 @@ export function cardRenderer({
           </div>
         )}
 
+        {t.excerpt && (
+          /* `line-clamp` is itself the box the clamp is drawn in; a `block`
+             beside it lands later in the stylesheet and undoes it. */
+          <span
+            data-task-excerpt
+            data-text
+            title={t.excerpt}
+            className="mt-1.5 line-clamp-2 text-sm leading-5 [overflow-wrap:anywhere]"
+            style={{ color: t.completed_at ? 'var(--ink-3)' : 'var(--ink-2)', letterSpacing: 'var(--track-body)' }}
+          >
+            {t.excerpt}
+          </span>
+        )}
+
         {/*
           What is true about it, as chips.
           

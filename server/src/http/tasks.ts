@@ -213,6 +213,14 @@ const listColumns = (tx: Tx) => tx`
              t.priority, t.starts_at, t.ends_at, t.sort_key, t.cycle_id,
              t.completed_at, t.decided_at, t.author_id, t.parent_id, t.updated_at,
              t.created_at, t.repeat,
+             /* What the description says, flattened and shortened for the
+                row and the card. Two hundred and forty characters is a
+                preview, not the body: enough for the card's two lines and
+                for a wide row's one. No backticks in here. */
+             nullif(left(btrim(regexp_replace(coalesce((
+               select string_agg(x.a #>> '{}', ' ' order by x.o)
+               from jsonb_path_query(coalesce(t.body, '{}'::jsonb), 'strict $.**.text') with ordinality as x(a, o)
+             ), ''), '\\s+', ' ', 'g')), 240), '') as excerpt,
              /* The words on it, with the list rather than behind a second
                 request: a label is drawn on the row, so a screen that has the
                 rows and not the labels is a screen drawn twice.

@@ -13,6 +13,8 @@ export type Task = {
   /** What the address calls it in its project. */
   number: number
   title: string
+  /** What its description says, flattened and shortened; null for none. */
+  excerpt?: string | null
   list_id: string | null
   /** Everybody it is given to, in order; empty for nobody yet.
       Read through `whoOf`. */

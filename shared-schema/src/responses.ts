@@ -759,6 +759,9 @@ export const TaskInProject = z.object({
   /** When anything about it last changed, which says an agent at it is
    *  still there. */
   updated_at: z.string().nullable().optional(),
+  /** What its description says, flattened and shortened for a row or a card;
+   *  null when it has none. */
+  excerpt: z.string().nullable().optional(),
   /** Its first picture, for a card — only when asked with `?pictures=1`,
    *  and only one the reader may open. */
   picture: TaskPicture.optional(),
