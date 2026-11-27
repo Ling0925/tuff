@@ -110,7 +110,18 @@ export const TASK_DETAIL = say({
     '没有其他你有权限移入任务的项目。',
   ],
   movePick: ['Choose the project it is moving to.', 'Choisissez le projet de destination.', '选择要移动到的项目。'],
-  moveDefaultList: ['Default list', 'Liste par défaut', '默认列表'],
+  moveReading: ['Reading what will move…', 'Lecture de ce qui sera déplacé…', '正在读取移动后的内容…'],
+  moveSameStatus: ['Same status', 'Même statut', '相同状态'],
+  moveStatusCreated: [
+    (l: string) => `The status ${l} will be copied there too.`,
+    (l: string) => `Le statut ${l} sera copié lui aussi.`,
+    (l: string) => `状态 ${l} 也将一并复制。`,
+  ],
+  moveLabelsCreated: [
+    (names: string) => `Labels copied there: ${names}.`,
+    (names: string) => `Étiquettes copiées dans le projet : ${names}.`,
+    (names: string) => `将复制到项目中的标签：${names}。`,
+  ],
   /* The facts at the head of the PDF. */
   done: ['Done', 'Terminée', '已完成'],
   assignedTo: [(who: string) => `Assigned to ${who}`, (who: string) => `Attribuée à ${who}`, (who: string) => `已指派给 ${who}`],

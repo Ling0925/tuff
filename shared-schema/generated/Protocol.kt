@@ -597,6 +597,9 @@ data class Contract (
     @SerialName("TaskList")
     val taskList: TaskList? = null,
 
+    @SerialName("TaskMoved")
+    val taskMoved: TaskMoved? = null,
+
     @SerialName("TaskPage")
     val taskPage: TaskPage? = null,
 
@@ -4408,7 +4411,7 @@ data class TaskChanged (
 @Serializable
 data class TaskCopied (
     @SerialName("assignees_dropped")
-    val assigneesDropped: List<AssigneesDropped>,
+    val assigneesDropped: List<TaskCopiedAssigneesDropped>,
 
     val cycle: String? = null,
     val files: Long,
@@ -4443,7 +4446,7 @@ data class TaskCopied (
 )
 
 @Serializable
-data class AssigneesDropped (
+data class TaskCopiedAssigneesDropped (
     @SerialName("actor_id")
     val actorID: String,
 
@@ -4694,6 +4697,64 @@ enum class Icon(val value: String) {
     @SerialName("started") Started("started"),
     @SerialName("stopped") Stopped("stopped");
 }
+
+@Serializable
+data class TaskMoved (
+    @SerialName("assignees_dropped")
+    val assigneesDropped: List<TaskMovedAssigneesDropped>,
+
+    val comments: Long,
+    val cycle: String? = null,
+    val files: Long,
+
+    @SerialName("from_project_id")
+    val fromProjectID: String,
+
+    @SerialName("github_to")
+    val githubTo: Boolean,
+
+    val id: String? = null,
+
+    @SerialName("labels_created")
+    val labelsCreated: List<String>,
+
+    @SerialName("labels_dropped")
+    val labelsDropped: List<String>,
+
+    @SerialName("labels_kept")
+    val labelsKept: List<String>,
+
+    @SerialName("list_color")
+    val listColor: String? = null,
+
+    @SerialName("list_created")
+    val listCreated: Boolean,
+
+    @SerialName("list_icon")
+    val listIcon: String,
+
+    @SerialName("list_id")
+    val listID: String? = null,
+
+    @SerialName("list_name")
+    val listName: String? = null,
+
+    val number: Long? = null,
+
+    @SerialName("project_id")
+    val projectID: String,
+
+    val subtasks: Long,
+    val tasks: List<TaskInProject>? = null
+)
+
+@Serializable
+data class TaskMovedAssigneesDropped (
+    @SerialName("actor_id")
+    val actorID: String,
+
+    val name: String
+)
 
 @Serializable
 data class TaskPage (
