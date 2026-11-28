@@ -1,22 +1,25 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ProjectInList, TaskCopied } from '@tracker/shared-schema'
-import { MORE } from '../data/words.js'
+import { useEffect, useRef, useState } from 'react'
+import type { ProjectInList, TaskMoved } from '@tracker/shared-schema'
+import { MORE, PLACES } from '../data/words.js'
 import { TASK_DETAIL as W } from '../words/taskDetail.js'
 import { TASKS } from '../words/tasks.js'
 import { api } from '../data/api.js'
 import { recall } from '../data/memory.js'
-import { Button, Dialog } from './kit.jsx'
-import { Icon } from './glyphs.jsx'
-import { ProjectMark, markOf } from './icons.jsx'
+import { Button, Dialog, Dot, ListPick, ProjectPick } from './kit.jsx'
+import { Icon, type IconName, ProjectMark as Mark, markOf } from './icons.jsx'
 
-type TaskList = { id: string; name: string; finishes: boolean; intake: boolean }
-type Moved = TaskCopied & { comments?: number }
+type TaskList = { id: string; name: string; finishes: boolean; intake: boolean; icon: string; color?: string | null }
+type Moved = TaskMoved
 
 /**
- * Moving tasks to another project. The same project-and-plan shape Copy
- * has: the server answers what the move will be before it is made. More
- * than one id is moved one press at a time; the plan shown is the first
- * task's, and every task is moved with the same target and list.
+ * Moving tasks to another project.
+ *
+ * Compact because the question is compact: where, and where in it. The
+ * projects live behind the same picker a new task uses rather than as a
+ * second, permanent list; the server's dry run underneath says what the
+ * move will carry before the press. More than one id is moved one press at
+ * a time; the plan shown is the first task's, and with no status chosen
+ * each task keeps its own.
  */
 export function MoveTasksDialog({
   taskIds,
@@ -50,26 +53,47 @@ export function MoveTasksDialog({
   const [listId, setListId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [said, setSaid] = useState<string | null>(null)
-  const asked = useRef<string | null>(null)
+  const asking = useRef(0)
 
-  const ask = useCallback(
-    (to: string) => {
-      if (asked.current === to) return
-      asked.current = to
-      setPlan(null)
-      setListId(null)
-      void api<Moved>(`/tasks/${first}/move`, { method: 'POST', body: JSON.stringify({ project_id: to, dry: true }) })
-        .then((p) => setPlan(p))
-        .catch(() => setPlan('failed'))
-      void api<{ lists: TaskList[] }>(`/projects/${to}/lists`)
-        .then((r) => setLists(r.lists))
-        .catch(() => setLists([]))
-    },
-    [first],
-  )
+  /* Read the plan again when either answer changes: the target, and whether
+     the person has overridden where in it the work lands. A slow answer for
+     the project somebody has since left is dropped. */
   useEffect(() => {
-    if (chosen) ask(chosen)
-  }, [chosen, ask])
+    if (!chosen) {
+      setPlan(null)
+      setLists([])
+      return
+    }
+    const round = ++asking.current
+    const to = chosen
+    const override = listId
+    setPlan(null)
+    void api<Moved>(`/tasks/${first}/move`, {
+      method: 'POST',
+      body: JSON.stringify({ project_id: to, dry: true, ...(override ? { list_id: override } : {}) }),
+    })
+      .then((p) => {
+        if (asking.current === round) setPlan(p)
+      })
+      .catch(() => {
+        if (asking.current === round) setPlan('failed')
+      })
+    void api<{ lists: TaskList[] }>(`/projects/${to}/lists`)
+      .then((r) => {
+        if (asking.current === round) setLists(r.lists)
+      })
+      .catch(() => {
+        if (asking.current === round) setLists([])
+      })
+  }, [chosen, listId, first])
+
+  const pickProject = (id: string) => {
+    if (id === chosen) return
+    setChosen(id)
+    setListId(null)
+    setLists([])
+    setPlan(null)
+  }
 
   const target = projects.find((p) => p.id === chosen)
   const ready = Boolean(target && plan && plan !== 'failed')
@@ -90,20 +114,51 @@ export function MoveTasksDialog({
       setBusy(false)
     }
   }
+
   const names = (people: { name: string }[]) => people.map((p) => p.name).join(', ')
-  const lines =
+  /* The plan as rows rather than as bare sentences: at each line's head
+     the mark of what it is about — the project's own for where the task
+     goes, the status's ring for where it lands, a small glyph for the
+     rest — and what the move does not carry in the quieter ink, so the
+     panel reads as what happens and then what does not. */
+  type PlanRow = { mark: React.ReactNode; text: string; tone?: 'strong' | 'dim' }
+  const glyph = (name: IconName, tone: 'plain' | 'dim' = 'plain') => (
+    <Icon name={name} size={14} className={tone === 'dim' ? 'text-ink-3' : 'text-ink-2'} />
+  )
+  const planRows: PlanRow[] =
     target && plan && plan !== 'failed'
-      ? [
-          W.moveThere(target.name),
-          plan.list_name ? W.copyList(listId ? (lists.find((l) => l.id === listId)?.name ?? plan.list_name) : plan.list_name) : null,
-          plan.subtasks > 0 ? W.copyParts(plan.subtasks) : null,
-          (plan.comments ?? 0) > 0 ? W.moveComments(plan.comments!) : null,
-          plan.files > 0 ? W.copyFiles(plan.files) : null,
-          plan.labels_dropped.length ? W.copyLabels(plan.labels_dropped.join(', ')) : null,
-          plan.assignees_dropped.length ? W.copyUnassigned(names(plan.assignees_dropped), target.name) : null,
-          W.moveNotCarried,
-        ].filter((l): l is string => Boolean(l))
+      ? (
+          [
+            { mark: <Mark {...markOf(target)} size={16} />, text: W.moveThere(target.name), tone: 'strong' },
+            plan.list_name
+              ? {
+                  mark: <Dot icon={plan.list_icon} color={plan.list_color} />,
+                  text: plan.list_created ? W.moveStatusCreated(plan.list_name) : W.copyList(plan.list_name),
+                }
+              : null,
+            plan.subtasks > 0 ? { mark: glyph('list'), text: W.moveParts(plan.subtasks) } : null,
+            plan.comments > 0 ? { mark: glyph('bubble'), text: W.moveComments(plan.comments) } : null,
+            plan.files > 0 ? { mark: glyph('clip'), text: W.copyFiles(plan.files) } : null,
+            plan.labels_created.length ? { mark: glyph('tag'), text: W.moveLabelsCreated(plan.labels_created.join(', ')) } : null,
+            plan.labels_dropped.length
+              ? { mark: glyph('tag', 'dim'), text: W.copyLabels(plan.labels_dropped.join(', ')), tone: 'dim' }
+              : null,
+            plan.assignees_dropped.length
+              ? { mark: glyph('person', 'dim'), text: W.copyUnassigned(names(plan.assignees_dropped), target.name), tone: 'dim' }
+              : null,
+            { mark: glyph('repeat', 'dim'), text: W.moveNotCarried, tone: 'dim' },
+            plan.github_to ? { mark: glyph('github'), text: W.copyGithubTo(target.name) } : null,
+          ] as (PlanRow | null)[]
+        ).filter((r): r is PlanRow => Boolean(r))
       : []
+
+  const shownList = listId
+    ? lists.find((l) => l.id === listId)
+    : plan && plan !== 'failed'
+      ? lists.find((l) => l.id === plan.list_id)
+      : null
+  const statusIcon = shownList?.icon ?? (plan && plan !== 'failed' ? plan.list_icon : null)
+  const statusColor = shownList?.color ?? (plan && plan !== 'failed' ? plan.list_color : null)
 
   return (
     <Dialog
@@ -127,61 +182,58 @@ export function MoveTasksDialog({
       {projects.length === 0 ? (
         <p className="px-4 pt-2 pb-4 text-base leading-5 text-ink-2">{W.moveNowhere}</p>
       ) : (
-        <div className="flex flex-col">
-          <div role="radiogroup" aria-label={W.moveTitle} className="flex max-h-[220px] flex-col overflow-y-auto px-2 pt-1 pb-2">
-            {projects.map((p) => {
-              const on = p.id === chosen
-              return (
-                <button
-                  key={p.id}
-                  data-row
-                  role="radio"
-                  aria-checked={on}
-                  data-testid="move-task-project"
-                  onPointerEnter={() => ask(p.id)}
-                  onFocus={() => ask(p.id)}
-                  onClick={() => setChosen(p.id)}
-                  className="flex w-full shrink-0 items-center gap-3 px-2 text-left text-base text-ink"
-                  style={{ height: 'var(--row-h)', borderRadius: 'var(--r-row)', background: on ? 'var(--hover)' : undefined }}
-                >
-                  <ProjectMark {...markOf(p)} size={20} />
-                  <span className="min-w-0 flex-1 truncate">{p.name}</span>
-                  <Icon name="check" size={16} className="text-accent" style={{ opacity: on ? 1 : 0 }} />
-                </button>
-              )
-            })}
+        <div className="flex flex-col px-4 pt-1 pb-4">
+          {/* The two answers the move needs, in labelled rows rather than a
+              page of radio buttons. */}
+          <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 pb-3">
+            <span className="text-sm text-ink-2">{PLACES.project}</span>
+            <div className="flex min-w-px items-center">
+              <ProjectPick projects={projects} value={chosen ?? ''} onPick={pickProject} testId="move-task-project" />
+            </div>
+            {target && (
+              <>
+                <span className="text-sm text-ink-2">{TASKS.columnsLists}</span>
+                <div className="flex min-w-px items-center">
+                  <ListPick
+                    testId="move-task-list"
+                    lists={lists.filter((l) => !l.intake)}
+                    value={listId}
+                    noneLabel={W.moveSameStatus}
+                    faceIcon={statusIcon}
+                    faceColor={statusColor}
+                    onPick={(id) => setListId(id)}
+                  />
+                </div>
+              </>
+            )}
           </div>
-          <div
-            className="flex h-[190px] flex-col gap-1 overflow-y-auto px-4 pt-3 pb-4 text-sm leading-5 text-ink-2"
-            style={{ borderTop: '1px solid var(--line)' }}
-            data-testid="move-task-plan"
-          >
+          {/* What the server says the first move will be. This grows with
+              what there is to say rather than keeping a blank panel open. */}
+          <div data-testid="move-task-plan" className="flex flex-col border-t border-line pt-3 text-sm leading-5 text-ink-2">
             {!target ? (
               <p className="text-ink-3">{W.movePick}</p>
             ) : plan === 'failed' ? (
               <p className="text-danger">{W.couldntMove}</p>
+            ) : !plan ? (
+              <p className="text-ink-3">{W.moveReading}</p>
             ) : (
-              lines.map((l) => <p key={l}>{l}</p>)
-            )}
-            {target && lists.length > 0 && (
-              <label className="mt-2 flex items-center gap-2 text-ink">
-                <span>{TASKS.columnsLists}</span>
-                <select
-                  data-testid="move-task-list"
-                  value={listId ?? ''}
-                  onChange={(e) => setListId(e.target.value || null)}
-                  className="h-8 rounded border border-line bg-panel px-2 text-sm"
-                >
-                  <option value="">{W.moveDefaultList}</option>
-                  {lists
-                    .filter((l) => !l.intake)
-                    .map((l) => (
-                      <option key={l.id} value={l.id}>
-                        {l.name}
-                      </option>
-                    ))}
-                </select>
-              </label>
+              /* One ground for the whole of it, the grey a group of rows is
+                 printed on: read as a panel rather than as lines left
+                  hanging under the hairline. */
+              <div className="flex flex-col gap-1.5 px-3 py-2.5 bg-panel" style={{ borderRadius: 'var(--r-card)' }}>
+                {planRows.map((r) => (
+                  <div key={r.text} className="flex items-start gap-2.5">
+                    {/* A column of marks the width of the widest of them, so
+                        the sentences start on one line whatever they are
+                        about; centred on the first line of the sentence,
+                        which is where the eye looks for it. */}
+                    <span aria-hidden className="flex h-5 w-[18px] shrink-0 items-center justify-center">
+                      {r.mark}
+                    </span>
+                    <p className={`min-w-px flex-1 ${r.tone === 'dim' ? 'text-ink-3' : r.tone === 'strong' ? 'text-ink' : ''}`}>{r.text}</p>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>

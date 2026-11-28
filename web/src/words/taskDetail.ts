@@ -92,9 +92,14 @@ export const TASK_DETAIL = say({
     (p: string) => `任务本身将移动到 ${p}。`,
   ],
   moveComments: [
-    (n: number) => `${n === 1 ? '1 comment' : `${n} comments`} move with it.`,
-    (n: number) => `${n} commentaire${n === 1 ? '' : 's'} la suivent.`,
+    (n: number) => `${n === 1 ? '1 comment moves' : `${n} comments move`} with it.`,
+    (n: number) => (n === 1 ? '1 commentaire la suit.' : `${n} commentaires la suivent.`),
     (n: number) => `${n} 条评论将一起移动。`,
+  ],
+  moveParts: [
+    (n: number) => (n === 1 ? '1 subtask moves with it, whether done or not.' : `${n} subtasks move with it, whether done or not.`),
+    (n: number) => (n === 1 ? '1 sous-tâche la suit, terminée ou non.' : `${n} sous-tâches la suivent, terminées ou non.`),
+    (n: number) => `${n} 个子任务将一起移动，完成状态保持不变。`,
   ],
   moveNotCarried: [
     'Its sprint and repeating chain stay behind.',
@@ -110,7 +115,18 @@ export const TASK_DETAIL = say({
     '没有其他你有权限移入任务的项目。',
   ],
   movePick: ['Choose the project it is moving to.', 'Choisissez le projet de destination.', '选择要移动到的项目。'],
-  moveDefaultList: ['Default list', 'Liste par défaut', '默认列表'],
+  moveReading: ['Reading what will move…', 'Lecture de ce qui sera déplacé…', '正在读取移动后的内容…'],
+  moveSameStatus: ['Same status', 'Même statut', '相同状态'],
+  moveStatusCreated: [
+    (l: string) => `Goes to ${l}, which will be copied there too.`,
+    (l: string) => `Elle ira dans ${l}, qui sera copié dans le projet.`,
+    (l: string) => `将放入 ${l}，该状态也会一并复制。`,
+  ],
+  moveLabelsCreated: [
+    (names: string) => `Labels copied there: ${names}.`,
+    (names: string) => `Étiquettes copiées dans le projet : ${names}.`,
+    (names: string) => `将复制到项目中的标签：${names}。`,
+  ],
   /* The facts at the head of the PDF. */
   done: ['Done', 'Terminée', '已完成'],
   assignedTo: [(who: string) => `Assigned to ${who}`, (who: string) => `Attribuée à ${who}`, (who: string) => `已指派给 ${who}`],

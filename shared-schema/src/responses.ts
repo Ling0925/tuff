@@ -2250,8 +2250,21 @@ export const TaskCopied = z.object({
 export type TaskCopied = z.infer<typeof TaskCopied>
 
 /** A task moved to another project — the same shape of plan as a copy, with
-    the count of comments that go with it. */
-export const TaskMoved = TaskCopied.extend({ comments: z.number().int() })
+    the count of comments that go with it. A move carries the project's own
+    arrangement with it: labels the target did not have are made there, and a
+    status the target did not have is made for the task to land in. */
+export const TaskMoved = TaskCopied.extend({
+  comments: z.number().int(),
+  /** The labels the target project did not have, made there by name with
+      their colour, in the order they are made. */
+  labels_created: z.array(z.string()),
+  /** Whether `list_name` was missing there and is made for the move. */
+  list_created: z.boolean(),
+  /** The mark and colour of the status it lands in, so a dry run can draw
+      the one it would copy before it exists. */
+  list_icon: z.string(),
+  list_color: z.string().nullable(),
+})
 export type TaskMoved = z.infer<typeof TaskMoved>
 
 /**

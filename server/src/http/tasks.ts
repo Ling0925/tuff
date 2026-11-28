@@ -2464,38 +2464,77 @@ async function moveTask(tx: Tx, ctx: AuthContext, id: string, o: { target: strin
   if (!allowIn(ctx, 'task.create', target)) return 'forbidden' as const
   const [busy] = await tx<{ on: boolean }[]>`select project_importing(${target}) as on`
   if (busy?.on) return 'importing' as const
+  /* A real move may have to add the target's missing list and labels. The
+     project row is the gate every move through here waits at, so two moves
+     pressed together make one of each rather than two. A dry run only reads. */
+  if (!o.dry) await tx`select id from project where id = ${target} for update`
 
   const parts = await tx<Row[]>`
     select ${columns} from task where parent_id = ${id} and deleted_at is null order by sort_key asc for update`
-  const lists = await tx<{ id: string; name: string; finishes: boolean; intake: boolean }[]>`
-    select id, name, finishes, intake from task_list
+  type Placing = {
+    id: string
+    name: string
+    sort_key: string
+    progress: number | null
+    finishes: boolean
+    icon: string
+    color: string | null
+    narrow: boolean
+    intake: boolean
+  }
+  const lists = await tx<Placing[]>`
+    select id, name, sort_key, progress, finishes, icon, color, narrow, intake from task_list
     where project_id = ${target} and deleted_at is null order by sort_key`
-  const [was] = from.list_id ? await tx<{ name: string }[]>`select name from task_list where id = ${from.list_id}` : []
-  let into: { id: string; name: string } | null =
-    lists.find((l) => was && l.name.toLowerCase() === was.name.toLowerCase()) ??
-    lists.find((l) => !l.finishes && !l.intake) ??
-    lists.find((l) => !l.intake) ??
-    lists[0] ??
-    null
+  const [was] = from.list_id
+    ? await tx<Placing[]>`
+        select id, name, sort_key, progress, finishes, icon, color, narrow, intake from task_list where id = ${from.list_id}`
+    : []
+
+  /* The status it had, by name. An intake is the project's one intake first:
+     Triage is a place in the project rather than a name somebody happened
+     to give a list. Only when the target has no such list at all is the
+     source's own arrangement copied. */
+  let into: (Omit<Placing, 'id'> & { id: string | null }) | null = null
+  let makingList = false
   if (o.listId) {
     const chosen = lists.find((l) => l.id === o.listId)
     if (!chosen) return 'list' as const
     into = chosen
+  } else {
+    const sameName = was ? lists.find((l) => l.name.toLowerCase() === was.name.toLowerCase()) : undefined
+    into = (was?.intake ? (lists.find((l) => l.intake) ?? sameName) : sameName) ?? null
+    if (!into && was) {
+      into = { ...was, id: null }
+      makingList = true
+    }
+    into ??= lists.find((l) => !l.finishes && !l.intake) ?? lists.find((l) => !l.intake) ?? lists[0] ?? null
   }
   if (!into) return 'list' as const
 
-  /* Labels by name, as a copy carries them; a word the project does not
-     have stays behind. */
+  /* Labels by name, as a copy carries them — but a move is the task itself,
+     so a word the project does not have is made there rather than left off.
+     The first spelling and colour are the source's own; the target's order
+     is kept and new words are put after it. */
   const ids = [from, ...parts].map((t) => t.id)
-  const labels = await tx<{ task_id: string; name: string }[]>`
-    select tl.task_id, l.name::text as name from task_label tl join label l on l.id = tl.label_id
-    where tl.task_id = any(${ids}::uuid[]) and l.deleted_at is null`
-  const theirs = await tx<{ id: string; name: string }[]>`
-    select id, name::text as name from label where project_id = ${target} and deleted_at is null`
+  const labels = await tx<{ task_id: string; name: string; color: string | null }[]>`
+    select tl.task_id, l.name::text as name, l.color
+    from task_label tl join label l on l.id = tl.label_id
+    where tl.task_id = any(${ids}::uuid[]) and l.deleted_at is null
+    order by l.sort_key nulls last, l.name, l.id`
+  const theirs = await tx<{ id: string; name: string; sort_key: string | null }[]>`
+    select id, name::text as name, sort_key from label
+    where project_id = ${target} and deleted_at is null
+    order by sort_key nulls last, name`
   const labelFor = new Map(theirs.map((l) => [l.name.toLowerCase(), l.id]))
+  const own = new Map<string, { name: string; color: string | null }>()
+  for (const l of labels) {
+    const key = l.name.toLowerCase()
+    if (!own.has(key)) own.set(key, { name: l.name, color: l.color })
+  }
+  const missingLabels = [...own.entries()].filter(([key]) => !labelFor.has(key)).map(([, l]) => l)
   const names = (xs: string[]) => [...new Set(xs)].sort()
   const kept = names(labels.filter((l) => labelFor.has(l.name.toLowerCase())).map((l) => l.name))
-  const dropped = names(labels.filter((l) => !labelFor.has(l.name.toLowerCase())).map((l) => l.name))
+  const dropped: string[] = []
 
   /* Only whoever is on the project it goes to. */
   const everyone = [...new Set([from, ...parts].flatMap((t) => t.assignee_ids))]
@@ -2548,7 +2587,11 @@ async function moveTask(tx: Tx, ctx: AuthContext, id: string, o: { target: strin
     subtasks: parts.length,
     comments: saidCount?.n ?? 0,
     labels_kept: kept,
+    labels_created: missingLabels.map((l) => l.name),
     labels_dropped: dropped,
+    list_created: makingList,
+    list_icon: into.icon,
+    list_color: into.color,
     cycle: cycle?.name ?? null,
     assignees_dropped: notOnNames,
     files: files.length,
@@ -2558,6 +2601,65 @@ async function moveTask(tx: Tx, ctx: AuthContext, id: string, o: { target: strin
 
   const bytes = files.reduce((n, f) => n + Number(f.size_bytes ?? 0) + Number(f.display_bytes ?? 0), 0)
   if (bytes > 0 && !(await roomFor(tx, ctx.workspaceId, bytes))) return 'full' as const
+
+  /* The missing status, with the source list's own face and meaning — except
+     its agent, who belongs to the project it came from. A copied intake goes
+     first, as triage does; every other copied status takes the end of the
+     board rather than inserting itself among columns somebody arranged. */
+  if (makingList) {
+    const key = into.intake
+      ? generateKeyBetween(null, lists[0]?.sort_key ?? null)
+      : generateKeyBetween(lists[lists.length - 1]?.sort_key ?? null, null)
+    const [made] = await tx<{ id: string }[]>`
+      insert into task_list (id, workspace_id, project_id, author_id, name, sort_key,
+                             progress, finishes, icon, color, narrow, intake)
+      values (${uuidv7()}, ${ctx.workspaceId}, ${target}, ${ctx.actorId}, ${into.name}, ${key},
+              ${into.progress}, ${into.finishes}, ${into.icon}, ${into.color}, ${into.narrow}, ${into.intake})
+      on conflict (project_id) where intake and deleted_at is null do nothing
+      returning id`
+    let madeId = made?.id ?? null
+    if (!madeId && into.intake) {
+      /* Triage turned on in the target at the same moment: one intake is
+         the whole rule, so the task lands in the one that is there. */
+      const [intake] = await tx<{ id: string; name: string }[]>`
+        select id, name from task_list where project_id = ${target} and intake and deleted_at is null`
+      if (intake) {
+        madeId = intake.id
+        into.name = intake.name
+        plan.list_name = intake.name
+        plan.list_created = false
+      }
+    }
+    if (!madeId) throw new Error('the list a move needed was not made')
+    into.id = madeId
+    plan.list_id = madeId
+  }
+
+  /* The missing words. A target whose labels have been ordered keeps that
+     order and the copied words go after it in their source order; one that
+     has not keeps its ordinary alphabetical order, which the null keys mean. */
+  const ordered = theirs.length > 0 && theirs.every((l) => l.sort_key !== null)
+  let labelKey = ordered ? (theirs[theirs.length - 1]?.sort_key ?? null) : null
+  const labelsMade: string[] = []
+  for (const l of missingLabels) {
+    if (ordered) labelKey = generateKeyBetween(labelKey, null)
+    const [made] = await tx<{ id: string }[]>`
+      insert into label (id, workspace_id, project_id, name, color, sort_key)
+      values (${uuidv7()}, ${ctx.workspaceId}, ${target}, ${l.name}, ${l.color}, ${ordered ? labelKey : null})
+      on conflict (project_id, name) where deleted_at is null do nothing
+      returning id`
+    const key = l.name.toLowerCase()
+    const id =
+      made?.id ??
+      (
+        await tx<{ id: string }[]>`
+        select id from label where project_id = ${target} and name = ${l.name} and deleted_at is null`
+      )[0]?.id
+    if (!id) throw new Error('the label a move needed was not made')
+    if (made) labelsMade.push(l.name)
+    labelFor.set(key, id)
+  }
+  plan.labels_created = labelsMade
 
   /* New numbers in the project it joins, in one counter step so no other
      task can be numbered between these. */
@@ -2617,7 +2719,8 @@ async function moveTask(tx: Tx, ctx: AuthContext, id: string, o: { target: strin
     }
   }
 
-  /* The words, remapped by name; what the target does not have is gone. */
+  /* The words, remapped by name to the target's own rows — the rows just
+     made there included. */
   await tx`delete from task_label where task_id = any(${ids}::uuid[])`
   const wanted = labels
     .filter((l) => labelFor.has(l.name.toLowerCase()))
@@ -2645,6 +2748,8 @@ async function moveTask(tx: Tx, ctx: AuthContext, id: string, o: { target: strin
     to_number: movedNumber,
     moved_to: into.name,
     title: from.title,
+    ...(plan.list_created ? { list_created: into.name } : {}),
+    ...(plan.labels_created.length ? { labels_created: plan.labels_created } : {}),
     ...(dropped.length ? { labels_dropped: dropped } : {}),
     ...(notOnNames.length ? { assignees_dropped: notOnNames.map((a) => a.name) } : {}),
   }

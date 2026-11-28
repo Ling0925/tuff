@@ -130,6 +130,7 @@ const RESPONSES: Record<string, z.ZodType> = {
   Created: S.Created,
   AtNumber: S.AtNumber,
   TaskCopied: S.TaskCopied,
+  TaskMoved: S.TaskMoved,
   FeedbackSettings: S.FeedbackSettings,
   FeedbackPublic: S.FeedbackPublic,
   // A workspace's own name and mark.
