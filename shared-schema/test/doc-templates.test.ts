@@ -4,16 +4,18 @@ import { DOC_TEMPLATES, DocTemplate, fillTemplate, templateDoc } from '../src/in
 
 /* The built-in documents. */
 
-test('every built-in template is written in French too, block for block', () => {
+test('every built-in template is written in French and Chinese too, block for block', () => {
   for (const key of DocTemplate.options) {
-    const { en, fr } = DOC_TEMPLATES[key]
-    assert.ok(en.name && fr.name && en.said && fr.said, key)
-    assert.deepEqual(
-      fr.blocks.map((b) => b[0]),
-      en.blocks.map((b) => b[0]),
-      key,
-    )
-    assert.notDeepEqual(fr.blocks, en.blocks, `${key} is not translated`)
+    const { en, fr, zh } = DOC_TEMPLATES[key]
+    assert.ok(en.name && fr.name && zh.name && en.said && fr.said && zh.said, key)
+    for (const written of [fr, zh]) {
+      assert.deepEqual(
+        written.blocks.map((b) => b[0]),
+        en.blocks.map((b) => b[0]),
+        key,
+      )
+      assert.notDeepEqual(written.blocks, en.blocks, `${key} is not translated`)
+    }
   }
 })
 
@@ -30,7 +32,7 @@ test('a template is the editor’s document, and its placeholders are filled in 
   assert.deepEqual(fillTemplate(link, { date: 'today', project: 'P' }), { ...link, text: 'today' })
   /* No text is left empty, which a document may not hold. */
   for (const key of DocTemplate.options) {
-    for (const lang of ['en', 'fr'] as const) {
+    for (const lang of ['en', 'fr', 'zh'] as const) {
       assert.doesNotMatch(JSON.stringify(templateDoc(key, lang).body), /"text":""/)
     }
   }

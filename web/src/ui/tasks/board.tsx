@@ -45,6 +45,7 @@ export const BoardCard = memo(function BoardCard({
   fns,
   slot = t.id,
   landing = false,
+  drag = true,
 }: {
   t: Task
   col: string
@@ -65,6 +66,8 @@ export const BoardCard = memo(function BoardCard({
    * its way in. That doubled face was the flicker on release.
    */
   landing?: boolean
+  /** Whether the board will carry it; without a drag the browser keeps touch panning. */
+  drag?: boolean
   /** Changes when anything a card draws changes; read by `memo`, not here. */
   look: object
   /** Its parts' count, which lives outside the task. */
@@ -167,8 +170,11 @@ export const BoardCard = memo(function BoardCard({
          *
          * Static, not set at the hold: set mid-gesture it
          * is specified to be ignored, and is.
+         *
+         * Where no drag is listening — the labels view — the refusal would
+         * only cost the pan, so the browser keeps its own.
          */
-        touchAction: 'none',
+        touchAction: drag ? 'none' : undefined,
         /*
          * The ordinary arrow, on a card that can be
          * dragged and opened both.

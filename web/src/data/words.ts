@@ -1132,7 +1132,8 @@ const SHORT_MONTHS = {
  * reader. The long form has no such quirk and is the locale's own.
  */
 export function dayMonth(d: Date, year = false): string {
-  const months = SHORT_MONTHS[now === 'fr' ? 'fr' : now === 'zh' ? 'zh' : 'en']
+  if (now === 'zh') return `${year ? `${d.getFullYear()}年` : ''}${d.getMonth() + 1}月${d.getDate()}日`
+  const months = SHORT_MONTHS[now === 'fr' ? 'fr' : 'en']
   /* The first of the month is "1er" in French. */
   const day = now === 'fr' && d.getDate() === 1 ? '1er' : String(d.getDate())
   return `${day} ${months[d.getMonth()]}${year ? ` ${d.getFullYear()}` : ''}`

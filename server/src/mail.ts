@@ -541,9 +541,15 @@ export function letter(lines: string[], button: { label: string; url: string }, 
   const esc = (s: string) =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
   const fr = language === 'fr'
-  const text = [...lines, '', `${button.label}${fr ? ' :' : ':'} ${button.url}`, '', '— Tuff'].join('\n')
-  const fallback = fr ? 'Si le bouton ne fonctionne pas, ouvrez ce lien :' : 'If the button doesn’t work, open this link:'
-  const html = `<!doctype html><html${fr ? ' lang="fr"' : ''}><body style="margin:0;background:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  const zh = language === 'zh'
+  const linkLine = zh ? `${button.label}：${button.url}` : `${button.label}${fr ? ' :' : ':'} ${button.url}`
+  const text = [...lines, '', linkLine, '', '— Tuff'].join('\n')
+  const fallback = zh
+    ? '如果按钮无法使用，请打开此链接：'
+    : fr
+      ? 'Si le bouton ne fonctionne pas, ouvrez ce lien :'
+      : 'If the button doesn’t work, open this link:'
+  const html = `<!doctype html><html${language === 'en' ? '' : ` lang="${language}"`}><body style="margin:0;background:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:40px 16px">
 <table width="480" cellpadding="0" cellspacing="0" style="max-width:480px;background:#fff;border-radius:16px;padding:32px">
 <tr><td style="font-size:17px;font-weight:600;color:#1d1d1f;padding-bottom:16px">Tuff</td></tr>
@@ -570,9 +576,11 @@ export function note(
   const esc = (s: string) =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
   const fr = language === 'fr'
-  const text = [...before, `${link.label}${fr ? ' :' : ':'} ${link.url}`, ...after].join('\n\n')
+  const zh = language === 'zh'
+  const linkLine = zh ? `${link.label}：${link.url}` : `${link.label}${fr ? ' :' : ':'} ${link.url}`
+  const text = [...before, linkLine, ...after].join('\n\n')
   const p = (inner: string) => `<p style="margin:0 0 16px">${inner}</p>`
-  const html = `<!doctype html><html${fr ? ' lang="fr"' : ''}><body>
+  const html = `<!doctype html><html${language === 'en' ? '' : ` lang="${language}"`}><body>
 <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#222">
 ${[...before.map((l) => p(esc(l))), p(`<a href="${esc(link.url)}">${esc(link.label)}</a>`), ...after.map((l) => p(esc(l)))].join('\n')}
 </div></body></html>`

@@ -386,11 +386,11 @@ files.post('/projects/:projectId/files', async (c) => {
       const [where] = await tx<{ project: string; today: string; language: string }[]>`
         select (select name from project where id = ${projectId}) as project,
                ${todayFor(tx, ctx.actorId)}::text as today, language_of(${ctx.actorId}) as language`
-      const fr = where?.language === 'fr'
+      const language = where?.language === 'fr' ? 'fr' : where?.language === 'zh' ? 'zh' : 'en'
       /* A saved one is read as the asker, so only a template in a project
          they can read is one they can start from. */
       const from = DocTemplate.safeParse(template).success
-        ? templateDoc(template as DocTemplate, fr ? 'fr' : 'en')
+        ? templateDoc(template as DocTemplate, language)
         : (
             await tx<{ name: string; body: Doc }[]>`
               select name, body from file
@@ -399,7 +399,7 @@ files.post('/projects/:projectId/files', async (c) => {
           )[0]
       if (!from) return 'no_template' as const
       const date = new Date(`${where?.today ?? new Date().toISOString().slice(0, 10)}T12:00:00Z`).toLocaleDateString(
-        fr ? 'fr-FR' : 'en-GB',
+        language === 'fr' ? 'fr-FR' : language === 'zh' ? 'zh-CN' : 'en-GB',
         { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' },
       )
       const said = { date, project: where?.project ?? '' }

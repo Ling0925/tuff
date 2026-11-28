@@ -26,6 +26,7 @@ export const CONNECT = say({
   goesTo: [
     (host: ReactNode) => <>Allowing sends you to {host}. If you don’t know that address, cancel.</>,
     (host: ReactNode) => <>En autorisant, vous serez envoyé vers {host}. Si vous ne connaissez pas cette adresse, annulez.</>,
+    (host: ReactNode) => <>授权后会前往 {host}。如果你不认识这个地址，请取消。</>,
   ],
   workspace: ['Workspace', 'Espace de travail', '工作区'],
   canChange: [

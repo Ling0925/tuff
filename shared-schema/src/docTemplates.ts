@@ -25,7 +25,7 @@ export type TemplateBlock =
 
 type Written = { readonly name: string; readonly said: string; readonly blocks: readonly TemplateBlock[] }
 
-export const DOC_TEMPLATES: Record<DocTemplate, { readonly en: Written; readonly fr: Written }> = {
+export const DOC_TEMPLATES: Record<DocTemplate, { readonly en: Written; readonly fr: Written; readonly zh: Written }> = {
   brief: {
     en: {
       name: 'Brief',
@@ -69,6 +69,27 @@ export const DOC_TEMPLATES: Record<DocTemplate, { readonly en: Written; readonly
         ['ul', ['Responsable : …', 'Valide : …']],
       ],
     },
+    zh: {
+      name: '简报',
+      said: '我们要做什么、为谁做，以及如何判断是否成功。',
+      blocks: [
+        ['callout', '💡', 'grey', '一页说明：我们要做什么、为谁做，以及如何判断是否成功。'],
+        ['h', '背景'],
+        ['p', '用两三句话说明是什么促成了这项工作。'],
+        ['h', '目标'],
+        ['p', '这项工作要达成的唯一结果。'],
+        ['h', '受众'],
+        ['p', '面向谁，以及他们需要从中得到什么。'],
+        ['h', '范围'],
+        ['ul', ['包含：…', '不包含：…']],
+        ['h', '交付物'],
+        ['ul', ['…']],
+        ['h', '时间线'],
+        ['ul', ['开始：{date}', '评审：…', '交付：…']],
+        ['h', '联系人'],
+        ['ul', ['负责人：…', '验收人：…']],
+      ],
+    },
   },
   meeting: {
     en: {
@@ -103,6 +124,23 @@ export const DOC_TEMPLATES: Record<DocTemplate, { readonly en: Written; readonly
         ['ul', ['…']],
         ['h', 'Actions'],
         ['ul', ['Qui — quoi — pour quand']],
+      ],
+    },
+    zh: {
+      name: '会议记录 {date}',
+      said: '谁参加了、讨论了什么、决定了什么，以及谁负责做什么。',
+      blocks: [
+        ['p', '{project} · {date}'],
+        ['h', '参会人员'],
+        ['ul', ['…']],
+        ['h', '议程'],
+        ['ol', ['…']],
+        ['h', '笔记'],
+        ['p', '…'],
+        ['h', '决定'],
+        ['ul', ['…']],
+        ['h', '行动项'],
+        ['ul', ['谁 — 做什么 — 何时完成']],
       ],
     },
   },
@@ -141,6 +179,24 @@ export const DOC_TEMPLATES: Record<DocTemplate, { readonly en: Written; readonly
         ['h', 'Questions ouvertes'],
         ['ul', ['…']],
         ['toggle', 'Autres pistes envisagées', 'Ce qui a été considéré, et pourquoi ce n’est pas retenu.'],
+      ],
+    },
+    zh: {
+      name: '规格说明',
+      said: '问题、方案，以及仍未确定的事项。',
+      blocks: [
+        ['callout', 'ℹ️', 'blue', '状态：草稿 · 负责人：… · {date}'],
+        ['h', '问题'],
+        ['p', '目前哪里有问题，以及影响了谁。'],
+        ['h', '目标'],
+        ['ul', ['…']],
+        ['h', '非目标'],
+        ['ul', ['…']],
+        ['h', '方案'],
+        ['p', '逐步说明它将如何工作。'],
+        ['h', '待解决问题'],
+        ['ul', ['…']],
+        ['toggle', '考虑过的替代方案', '还权衡过哪些方案，以及为什么没有采用。'],
       ],
     },
   },
@@ -183,6 +239,25 @@ export const DOC_TEMPLATES: Record<DocTemplate, { readonly en: Written; readonly
         ['ul', ['…']],
       ],
     },
+    zh: {
+      name: '客户报告 {date}',
+      said: '当前进展、下一步，以及需要客户提供的事项。',
+      blocks: [
+        ['p', '{project} · {date}'],
+        ['h', '摘要'],
+        ['callout', '✅', 'green', '用一句话说明当前进展。'],
+        ['h', '自上次报告以来已完成'],
+        ['ul', ['…']],
+        ['h', '进行中'],
+        ['ul', ['…']],
+        ['h', '下一步'],
+        ['ul', ['…']],
+        ['h', '风险和阻碍'],
+        ['callout', '⚠️', 'yellow', '任何可能影响日期的事项，以及我们正在如何应对。'],
+        ['h', '需要你方提供'],
+        ['ul', ['…']],
+      ],
+    },
   },
 }
 
@@ -192,7 +267,7 @@ const words = (text: string): Node[] => (text ? [{ type: 'text', text }] : [])
 const para = (text: string): Node => ({ type: 'paragraph', content: words(text) })
 
 /** A built-in template as the editor's document, in a language, not yet filled. */
-export function templateDoc(key: DocTemplate, language: 'en' | 'fr'): { name: string; body: Node } {
+export function templateDoc(key: DocTemplate, language: 'en' | 'fr' | 'zh'): { name: string; body: Node } {
   const t = DOC_TEMPLATES[key][language]
   const content = t.blocks.map((b): Node => {
     switch (b[0]) {

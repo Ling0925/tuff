@@ -453,12 +453,13 @@ async function mailInvite(
     {
       /* A person's note, not an announcement: "You're invited" is how
            a sale opens, and Gmail reads the subject too. */
-      subject: ['Invitation to join a workspace on Tuff', 'Invitation à rejoindre un espace de travail sur Tuff'],
-      someone: ['Someone', 'Quelqu’un'],
-      theirs: ['their workspace', 'son espace de travail'],
+      subject: ['Invitation to join a workspace on Tuff', 'Invitation à rejoindre un espace de travail sur Tuff', '加入 Tuff 工作区的邀请'],
+      someone: ['Someone', 'Quelqu’un', '有人'],
+      theirs: ['their workspace', 'son espace de travail', '其工作区'],
       invited: [
         (sender: string, ws: string) => `${sender} invited you to join “${ws}” on Tuff.`,
         (sender: string, ws: string) => `${sender} vous invite à rejoindre « ${ws} » sur Tuff.`,
+        (sender: string, ws: string) => `${sender} 邀请你加入 Tuff 上的「${ws}」。`,
       ],
       project: [
         (names: string[]) =>
@@ -469,12 +470,15 @@ async function mailInvite(
           names.length === 1
             ? `Vous aurez accès au projet « ${names[0]} ».`
             : `Vous aurez accès à ces projets : ${names.map((n) => `« ${n} »`).join(', ')}.`,
+        (names: string[]) =>
+          names.length === 1 ? `你将可以访问项目「${names[0]}」。` : `你将可以访问这些项目：${names.map((n) => `「${n}」`).join('、')}。`,
       ],
       expires: [
         (n: number) => `The invitation expires in ${n} ${n === 1 ? 'day' : 'days'}.`,
         (n: number) => `L’invitation expire dans ${n} ${one(n, 'fr') ? 'jour' : 'jours'}.`,
+        (n: number) => `邀请将在 ${n} 天后过期。`,
       ],
-      join: ['Accept the invitation', 'Accepter l’invitation'],
+      join: ['Accept the invitation', 'Accepter l’invitation', '接受邀请'],
     },
     language,
   )

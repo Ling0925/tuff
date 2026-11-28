@@ -1,5 +1,5 @@
 import { useMemo, useRef } from 'react'
-import { ACTS, HEADS, MAKE } from '../data/words.js'
+import { ACTS, FACTS, HEADS, MAKE } from '../data/words.js'
 import { TASKS as W } from '../words/tasks.js'
 import { NewButton } from './New.jsx'
 import { PageTitle, Segments, Toolbar } from './kit.jsx'
@@ -10,6 +10,7 @@ import { View } from './tasks/view.jsx'
 import { boardView } from './tasks/boardView.jsx'
 import { listView } from './tasks/listView.jsx'
 import { peopleView, personColumns, peopleWalk, usePeopleMoves } from './tasks/peopleView.jsx'
+import { labelView, labelColumns, labelWalk, labelByColumn } from './tasks/labelView.jsx'
 import { takenBar } from './tasks/takenBar.jsx'
 import { taskMenu } from './tasks/taskMenu.jsx'
 import { useColumnPanes } from './tasks/useColumnPanes.js'
@@ -279,7 +280,13 @@ export function Tasks({
     () => (view === 'people' ? personColumns({ lists, byColumn, people, who, meId, sort, dir }) : []),
     [view, lists, byColumn, people, who, meId, sort, dir],
   )
-  const walk = useMemo(() => peopleWalk(columns), [columns])
+  /* Each label's open work as a column, from the same already-filtered
+     board rows — only while the labels view is on the screen. */
+  const labelCols = useMemo(
+    () => (view === 'labels' ? labelColumns({ lists, byColumn, allLabels, sort, dir }) : []),
+    [view, lists, byColumn, allLabels, sort, dir],
+  )
+  const walk = useMemo(() => (view === 'labels' ? labelWalk(labelCols) : peopleWalk(columns)), [view, labelCols, columns])
   /* The board's drag with a drop of its own: carried to a column, a card
      is given to that person. */
   const peopleMoves = usePeopleMoves({ canWrite, sort, tasks, patch, undone, people, lists, columns, EDGE })
@@ -287,6 +294,10 @@ export function Tasks({
      with its status where the board draws the face. */
   const peopleFns = useRef<CardFns>(null as unknown as CardFns)
   peopleFns.current = { ...cardFns.current, card: (t, col) => card(t, col, col) }
+  /* Range selection runs down the label column it began in; the ordinary
+     status board's columns would mean nothing here. */
+  const labelFns = useRef<CardFns>(null as unknown as CardFns)
+  labelFns.current = { ...cardFns.current, byColumn: labelByColumn(labelCols), card: (t, col) => card(t, col, col) }
   const { columnPane, paneNode, paneReady, pane, before, after, pageTo } = useColumnPanes({
     projectId,
     mode,
@@ -407,15 +418,17 @@ export function Tasks({
           that starts forty pixels further down for no answer it gives.
         */}
         {/*
-          Two drawings and no third: a board of members is a way of drawing
-          the board, chosen in its View menu.
+          Labels is a third drawing because the task switch names it beside List
+          and Board; a board of members stays a way of drawing the board, chosen
+          in its View menu.
         */}
         <Segments
           items={[
             { key: 'list', label: ACTS.list, icon: 'list' as const, testId: 'view-list-mode' },
             { key: 'board', label: W.board, icon: 'board' as const, testId: 'view-board' },
+            { key: 'labels', label: FACTS.labels, icon: 'tag' as const, testId: 'view-labels-mode' },
           ]}
-          value={view === 'list' ? 'list' : 'board'}
+          value={view === 'list' ? 'list' : view === 'labels' ? 'labels' : 'board'}
           onPick={(k) => onNavigate({ mode: k })}
         />
         <View
@@ -537,6 +550,36 @@ export function Tasks({
         card,
         fns: peopleFns,
         moves: peopleMoves,
+      })}
+
+      {labelView({
+        projectId,
+        canMake,
+        view,
+        wide,
+        panel,
+        shows,
+        setShows,
+        people,
+        lists,
+        load,
+        group,
+        sort,
+        dir,
+        who,
+        list,
+        labels,
+        meId,
+        onNavigate,
+        allLabels,
+        columns: labelCols,
+        columnPane,
+        taken,
+        look,
+        partsSaid,
+        card,
+        fns: labelFns,
+        board,
       })}
 
       {boardView({

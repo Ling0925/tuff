@@ -21,7 +21,7 @@ import { subscribe } from './objects.js'
 import { faced, linkFor, put } from '../storage.js'
 import { statusByAgent } from '../doing.js'
 import { isMoment, pageSize, spendOn } from './limits.js'
-import { LABELS_FR, LABELS_ZH, SAMPLE, SAMPLE_FR, TEMPLATES_FR, doc, listName, type Label } from '../templates.js'
+import { LABELS_FR, LABELS_ZH, SAMPLE, SAMPLE_FR, SAMPLE_ZH, TEMPLATES_FR, TEMPLATES_ZH, doc, listName, type Label } from '../templates.js'
 import { languageOf, type Language } from '../words.js'
 
 type Vars = { ctx: AuthContext }
@@ -190,10 +190,10 @@ projects.post('/projects', async (c) => {
      * made, and the rest are part of it.
      */
     if (plan) {
-      const fr = language === 'fr' ? TEMPLATES_FR[body.data.template!] : null
+      const written = language === 'fr' ? TEMPLATES_FR[body.data.template!] : language === 'zh' ? TEMPLATES_ZH[body.data.template!] : null
       const keys = new Map<string, string | null>()
       for (const { title: english, list } of plan.tasks) {
-        const title = fr?.tasks[english] ?? english
+        const title = written?.tasks[english] ?? english
         const key = generateKeyBetween(keys.get(list) ?? null, null)
         keys.set(list, key)
         const taskId = uuidv7()
@@ -206,8 +206,8 @@ projects.post('/projects', async (c) => {
       }
       await tx`
         insert into file (id, workspace_id, project_id, author_id, name, body)
-        values (${uuidv7()}, ${ctx.workspaceId}, ${id}, ${ctx.actorId}, ${(fr?.doc ?? plan.doc).name},
-                ${tx.json(doc(...(fr?.doc ?? plan.doc).body) as never)})`
+        values (${uuidv7()}, ${ctx.workspaceId}, ${id}, ${ctx.actorId}, ${(written?.doc ?? plan.doc).name},
+                ${tx.json(doc(...(written?.doc ?? plan.doc).body) as never)})`
     }
     await record(tx, ctx, 'project.create', { projectId: id, objectType: 'project', objectId: id })
   })
@@ -351,10 +351,10 @@ projects.post('/projects/sample', async (c) => {
   const id = uuidv7()
   try {
     await withActor(ctx.actorId, ctx.workspaceId, async (tx) => {
-      /* Written in French for somebody who reads it, and not translated
+      /* Written in its maker's language, and not translated
          for whoever is put on it after. */
       const language = await languageOf(tx, ctx.actorId)
-      const sample = language === 'fr' ? SAMPLE_FR : SAMPLE
+      const sample = language === 'fr' ? SAMPLE_FR : language === 'zh' ? SAMPLE_ZH : SAMPLE
       await tx`
         insert into project (id, workspace_id, name, description, tools, sample)
         values (${id}, ${ctx.workspaceId}, ${sample.name}, ${sample.description},

@@ -54,7 +54,7 @@ const RANK: Record<Reason, number> = {
  */
 export async function doer(tx: Tx, actorId: string): Promise<(language: Language) => string> {
   const [a] = await tx<{ name: string }[]>`select name from actor where id = ${actorId}`
-  return (language) => a?.name ?? (language === 'fr' ? 'Quelqu’un' : 'Somebody')
+  return (language) => a?.name ?? (language === 'fr' ? 'Quelqu’un' : language === 'zh' ? '某人' : 'Somebody')
 }
 
 /**
@@ -70,51 +70,97 @@ export type Line = string | null | ((language: Language) => string | null)
 export const LINES = (language: Language) =>
   say(
     {
-      commented: [(who: string) => `${who} commented`, (who: string) => `${who} a commenté`],
-      addedYou: [(who: string) => `${who} added you`, (who: string) => `${who} vous a ajouté`],
+      commented: [(who: string) => `${who} commented`, (who: string) => `${who} a commenté`, (who: string) => `${who} 发表了评论`],
+      addedYou: [(who: string) => `${who} added you`, (who: string) => `${who} vous a ajouté`, (who: string) => `${who} 添加了你`],
       /* Chosen for a document. */
-      sharedYou: [(who: string) => `${who} shared a document with you`, (who: string) => `${who} a partagé un document avec vous`],
-      posted: [(who: string) => `${who} posted`, (who: string) => `${who} a publié une annonce`],
-      replied: [(who: string) => `${who} replied in a thread`, (who: string) => `${who} a répondu dans un fil de discussion`],
-      gaveYou: [(who: string) => `${who} gave it to you`, (who: string) => `${who} vous l’a attribuée`],
-      finished: [(who: string) => `${who} finished it`, (who: string) => `${who} l’a terminée`],
-      reopened: [(who: string) => `${who} reopened it`, (who: string) => `${who} l’a rouverte`],
+      sharedYou: [
+        (who: string) => `${who} shared a document with you`,
+        (who: string) => `${who} a partagé un document avec vous`,
+        (who: string) => `${who} 与你分享了一个文档`,
+      ],
+      posted: [(who: string) => `${who} posted`, (who: string) => `${who} a publié une annonce`, (who: string) => `${who} 发布了公告`],
+      replied: [
+        (who: string) => `${who} replied in a thread`,
+        (who: string) => `${who} a répondu dans un fil de discussion`,
+        (who: string) => `${who} 在话题中回复了`,
+      ],
+      gaveYou: [
+        (who: string) => `${who} gave it to you`,
+        (who: string) => `${who} vous l’a attribuée`,
+        (who: string) => `${who} 把它指派给了你`,
+      ],
+      finished: [(who: string) => `${who} finished it`, (who: string) => `${who} l’a terminée`, (who: string) => `${who} 完成了它`],
+      reopened: [(who: string) => `${who} reopened it`, (who: string) => `${who} l’a rouverte`, (who: string) => `${who} 重新打开了它`],
       moved: [
         (who: string, list: string) => `${who} moved it to ${list}`,
         (who: string, list: string) => `${who} l’a déplacée dans ${list}`,
+        (who: string, list: string) => `${who} 把它移动到了${list}`,
       ],
-      gave: [(who: string, to: string) => `${who} gave it to ${to}`, (who: string, to: string) => `${who} l’a attribuée à ${to}`],
+      gave: [
+        (who: string, to: string) => `${who} gave it to ${to}`,
+        (who: string, to: string) => `${who} l’a attribuée à ${to}`,
+        (who: string, to: string) => `${who} 把它指派给了 ${to}`,
+      ],
       tookOff: [
         (who: string, off: string | null) => `${who} took ${off ?? 'the assignee'} off it`,
         (who: string, off: string | null) => (off ? `${who} a retiré ${off} de la tâche` : `${who} a retiré le responsable`),
+        (who: string, off: string | null) => (off ? `${who} 移除了负责人 ${off}` : `${who} 移除了负责人`),
       ],
       dated: [
         (who: string, day: string) => `${who} set the due date to ${day}`,
         (who: string, day: string) => `${who} a fixé l’échéance au ${day}`,
+        (who: string, day: string) => `${who} 将到期日设为 ${day}`,
       ],
-      undated: [(who: string) => `${who} took the due date off`, (who: string) => `${who} a retiré l’échéance`],
-      wrote: [(who: string) => `${who} wrote in the description`, (who: string) => `${who} a écrit dans la description`],
-      dueTomorrow: ['Due tomorrow', 'Échéance demain'],
-      overdue: [(day: string) => `Overdue since ${day}`, (day: string) => `En retard depuis le ${day}`],
-      reminder: ['Reminder', 'Rappel'],
+      undated: [
+        (who: string) => `${who} took the due date off`,
+        (who: string) => `${who} a retiré l’échéance`,
+        (who: string) => `${who} 移除了到期日`,
+      ],
+      wrote: [
+        (who: string) => `${who} wrote in the description`,
+        (who: string) => `${who} a écrit dans la description`,
+        (who: string) => `${who} 在描述中写了内容`,
+      ],
+      dueTomorrow: ['Due tomorrow', 'Échéance demain', '明天到期'],
+      overdue: [
+        (day: string) => `Overdue since ${day}`,
+        (day: string) => `En retard depuis le ${day}`,
+        (day: string) => `自 ${day} 起已逾期`,
+      ],
+      reminder: ['Reminder', 'Rappel', '提醒'],
       /* The handles, never a title, so a lock
          screen says no more than the inbox's subject does. */
       unblocked: [
         (done: string, task: string) => `${done} is done — you can start ${task}`,
         (done: string, task: string) => `${done} est terminée — vous pouvez commencer ${task}`,
+        (done: string, task: string) => `${done} 已完成——可以开始 ${task} 了`,
       ],
       /* Never the question itself: a push
          puts the line on a lock screen. */
-      asked: [(who: string) => `${who} asked a question`, (who: string) => `${who} a posé une question`],
-      askedYou: [(who: string) => `${who} asked you a question`, (who: string) => `${who} vous pose une question`],
-      answered: [(who: string) => `${who} answered your question`, (who: string) => `${who} a répondu à votre question`],
+      asked: [
+        (who: string) => `${who} asked a question`,
+        (who: string) => `${who} a posé une question`,
+        (who: string) => `${who} 提出了一个问题`,
+      ],
+      askedYou: [
+        (who: string) => `${who} asked you a question`,
+        (who: string) => `${who} vous pose une question`,
+        (who: string) => `${who} 向你提出了一个问题`,
+      ],
+      answered: [
+        (who: string) => `${who} answered your question`,
+        (who: string) => `${who} a répondu à votre question`,
+        (who: string) => `${who} 回答了你的问题`,
+      ],
       handedOff: [
         'Agents handed this back and forth 3 times. Take a look.',
         'Des agents se sont passé ceci 3 fois de suite. Jetez-y un œil.',
+        '代理已经连续 3 次来回移交这项工作。请查看。',
       ],
       handoffCap: [
         'Agents handed work to each other 60 times in the last hour, so they were paused. Take a look.',
         'Des agents se sont passé du travail 60 fois en une heure, ils ont donc été mis en pause. Jetez-y un œil.',
+        '代理在过去一小时内互相移交工作 60 次，因此已被暂停。请查看。',
       ],
     },
     language,
@@ -122,11 +168,14 @@ export const LINES = (language: Language) =>
 
 /** A date as a line says it — `3 Nov`, `3 nov.` — read as a day, not a moment. */
 export const shortDay = (on: string | Date, language: Language) =>
-  new Date(typeof on === 'string' ? `${on.slice(0, 10)}T00:00:00Z` : on).toLocaleDateString(language === 'fr' ? 'fr-FR' : 'en-GB', {
-    day: 'numeric',
-    month: 'short',
-    timeZone: 'UTC',
-  })
+  new Date(typeof on === 'string' ? `${on.slice(0, 10)}T00:00:00Z` : on).toLocaleDateString(
+    language === 'fr' ? 'fr-FR' : language === 'zh' ? 'zh-CN' : 'en-GB',
+    {
+      day: 'numeric',
+      month: 'short',
+      timeZone: 'UTC',
+    },
+  )
 
 /** What was done, as the inbox draws it — the names of the lines above. */
 export type Kind =

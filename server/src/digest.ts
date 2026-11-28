@@ -90,15 +90,21 @@ function digestLetter(
       subject: [
         (n: number) => (n === 1 ? 'One thing is waiting for you on Tuff' : `${n} things are waiting for you on Tuff`),
         (n: number) => (one(n, 'fr') ? 'Un élément vous attend sur Tuff' : `${n} éléments vous attendent sur Tuff`),
+        (n: number) => `Tuff 上有 ${n} 项待处理事项`,
       ],
       hi: [
         (name: string) => `Hi ${name}, this is what you haven’t read yet.`,
         (name: string) => `Bonjour ${name}, voici ce que vous n’avez pas encore lu.`,
+        (name: string) => `${name}，你好，这是你尚未阅读的内容。`,
       ],
-      more: [(n: number) => `And ${n} more in Tuff.`, (n: number) => `Et ${n} de plus dans Tuff.`],
-      stop: ['Stop these emails', 'Ne plus recevoir ces e-mails'],
-      colon: [':', ' :'],
-      daily: ['One email a day, for what you haven’t read.', 'Un e-mail par jour, pour ce que vous n’avez pas lu.'],
+      more: [(n: number) => `And ${n} more in Tuff.`, (n: number) => `Et ${n} de plus dans Tuff.`, (n: number) => `Tuff 中还有 ${n} 项。`],
+      stop: ['Stop these emails', 'Ne plus recevoir ces e-mails', '停止接收这些邮件'],
+      colon: [':', ' :', '：'],
+      daily: [
+        'One email a day, for what you haven’t read.',
+        'Un e-mail par jour, pour ce que vous n’avez pas lu.',
+        '每天一封邮件，汇总你尚未阅读的内容。',
+      ],
     },
     language,
   )
@@ -114,7 +120,7 @@ function digestLetter(
     '',
     '— Tuff',
   ].join('\n')
-  const html = `<!doctype html><html${language === 'fr' ? ' lang="fr"' : ''}><body style="margin:0;background:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  const html = `<!doctype html><html${language === 'en' ? '' : ` lang="${language}"`}><body style="margin:0;background:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:40px 16px">
 <table width="480" cellpadding="0" cellspacing="0" style="max-width:480px;background:#fff;border-radius:16px;padding:32px">
 <tr><td style="font-size:17px;font-weight:600;color:#1d1d1f;padding-bottom:16px">Tuff</td></tr>

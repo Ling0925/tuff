@@ -11,6 +11,7 @@ const read = (lang: string): EmojiGroup[] =>
   ).groups.map((g) => ({ id: g.id, e: g.e.map((r) => ({ e: r[0], name: r[1], words: r[2] ?? '', tone: r[3] || null })) }))
 const en = read('en')
 const fr = read('fr')
+const zh = read('zh')
 
 /* The server's test for a reaction, `server/src/http/chat.ts`. */
 const SERVER = /^[\p{Extended_Pictographic}\p{Emoji_Component}‍️⃣]+$/u
@@ -27,10 +28,15 @@ test('every emoji offered is one the server takes as a reaction, in every tone',
   assert.ok(n > 3000, `all of Unicode, not a short set: ${n}`)
 })
 
-test('the two languages hold the same emoji in the same order', () => {
+test('the three languages hold the same emoji in the same order', () => {
+  const order = en.flatMap((g) => g.e.map((x) => x.e))
   assert.deepEqual(
     fr.flatMap((g) => g.e.map((x) => x.e)),
-    en.flatMap((g) => g.e.map((x) => x.e)),
+    order,
+  )
+  assert.deepEqual(
+    zh.flatMap((g) => g.e.map((x) => x.e)),
+    order,
   )
 })
 
@@ -47,4 +53,7 @@ test('a word finds it, the closest name first', () => {
   /* In French, without its accents, and by its English name too. */
   assert.equal(find(fr, 'fusee')[0]?.e, '🚀')
   assert.equal(find(fr, 'rocket')[0]?.e, '🚀')
+  /* In Chinese, and by its English name too. */
+  assert.equal(find(zh, '火箭')[0]?.e, '🚀')
+  assert.equal(find(zh, 'rocket')[0]?.e, '🚀')
 })

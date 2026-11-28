@@ -216,10 +216,10 @@ export const LABELS_FR: Record<Label, string> = {
 
 /** The lists and labels a new project starts with, in Simplified Chinese. */
 export const LISTS_ZH: Record<List, string> = {
-  Backlog: '待办',
-  Todo: '待处理',
+  Backlog: '待办池',
+  Todo: '待办',
   'In Progress': '进行中',
-  'In Review': '待审核',
+  'In Review': '评审中',
   Done: '已完成',
   Canceled: '已取消',
 }
@@ -285,6 +285,54 @@ export const TEMPLATES_FR: Record<
     doc: {
       name: 'Objectif du sprint',
       body: ['La seule chose à laquelle sert ce sprint.', 'À quoi ressemble « terminé ».', 'Ce que nous laissons pour la prochaine fois.'],
+    },
+  },
+}
+
+/** The same first tasks and documents in Simplified Chinese, keyed the same way. */
+export const TEMPLATES_ZH: typeof TEMPLATES_FR = {
+  launch: {
+    tasks: {
+      'Write the launch brief': '撰写发布简报',
+      'Set the launch date': '确定发布日期',
+      'Invite the team to this project': '邀请团队加入此项目',
+      'List what has to be ready': '列出必须准备就绪的事项',
+      'Draft the announcement': '起草发布公告',
+      'Plan the launch day': '规划发布当天',
+      'Review the results a week after': '发布一周后复盘结果',
+    },
+    doc: {
+      name: '发布简报',
+      body: ['我们要发布什么，以及面向谁。', '日期，以及到那时必须完成的事项。', '如何判断发布是否成功。'],
+    },
+  },
+  client: {
+    tasks: {
+      'Hold the kick-off call': '召开启动会',
+      'Write the scope and the timeline': '撰写范围和时间计划',
+      'Share the plan with the client': '与客户分享计划',
+      'Make the first draft': '制作第一版草稿',
+      'Collect the client’s feedback': '收集客户反馈',
+      'Deliver the final version': '交付最终版本',
+      'Send the invoice': '发送发票',
+    },
+    doc: {
+      name: '范围和时间计划',
+      body: ['客户的要求，尽量使用他们的原话。', '包含什么，不包含什么。', '日期，以及由谁验收。'],
+    },
+  },
+  sprint: {
+    tasks: {
+      'Plan the sprint': '规划迭代',
+      'Write the sprint goal': '撰写迭代目标',
+      'Sort the backlog': '整理待办池',
+      'Check in with the team mid-sprint': '迭代中期与团队检查进度',
+      'Review what shipped': '回顾已交付的内容',
+      'Hold the retrospective': '召开复盘会',
+    },
+    doc: {
+      name: '迭代目标',
+      body: ['这次迭代唯一要达成的目标。', '「完成」是什么样子。', '哪些内容留给下一次。'],
     },
   },
 }
@@ -435,5 +483,124 @@ export const SAMPLE_FR: Sample = {
   post: {
     title: 'La nouvelle page de tarifs sera en ligne la semaine prochaine',
     body: ['Nous lançons la nouvelle page de tarifs mardi prochain.', 'Ce qui reste à faire est dans En cours, sur le tableau.'],
+  },
+}
+
+/** The sample in Simplified Chinese, in the same states and with its tasks named the way the chat and the comments find them. */
+export const SAMPLE_ZH: Sample = {
+  name: '示例项目',
+  description: '用于四处看看的示例。看完后删除即可。',
+  tasks: [
+    {
+      title: '收集首批用户的反馈',
+      list: 'Backlog',
+      label: 'Improvement',
+      body: [
+        '和第一周注册的五个人聊聊。他们先尝试了什么，又停在了哪里？',
+        '把听到的内容写进此项目的一篇文档，每个人一个标题，并链接到这里。',
+      ],
+    },
+    {
+      title: '尝试首页的深色版本',
+      list: 'Backlog',
+      label: 'Feature',
+      priority: 'low',
+      body: ['这是一次快速实验，不是重新设计：同一页面换成深色背景，看截图是否更清晰。'],
+    },
+    {
+      title: '修复小屏幕上的登录按钮',
+      list: 'Todo',
+      label: 'Bug',
+      priority: 'high',
+      dueIn: 1,
+      body: ['在窄于 360 像素的手机上，按钮会超出屏幕边缘。', '关闭前，请在最小的 iPhone 和一台较旧的 Android 设备上检查。'],
+    },
+    {
+      title: '撰写发布说明',
+      list: 'Todo',
+      priority: 'medium',
+      dueIn: 3,
+      body: ['写得简短直白：发生了什么变化，以及为什么对读者重要。', '先介绍新的定价页，再用列表写较小的修复。'],
+    },
+    {
+      title: '规划下一个迭代',
+      list: 'Todo',
+      dueIn: 7,
+      body: ['一起过一遍待办池，挑出两周内能完成的工作。', '会议结束时仍没有负责人的事项，都放回待办池。'],
+    },
+    {
+      title: '重新设计定价页',
+      list: 'In Progress',
+      label: 'Feature',
+      priority: 'high',
+      dueIn: 2,
+      body: ['三个套餐并排展示，年付价格放在月付价格下方。', '页面在笔记本电脑上保持一屏以内。常见问题放在套餐下方的 FAQ 中。'],
+      parts: [{ title: '起草布局', done: true }, { title: '撰写文案' }, { title: '与团队评审' }],
+    },
+    {
+      title: '更新帮助中心',
+      list: 'In Progress',
+      label: 'Improvement',
+      priority: 'medium',
+      dueIn: -1,
+      body: ['还有三篇文章显示旧定价。替换截图和数字。', '这一项已经晚了一天，可以随发布说明一起发出。'],
+    },
+    {
+      title: '搭建项目',
+      list: 'Done',
+      doneDaysAgo: 3,
+      body: ['列表、标签和团队聊天。参与发布的所有人都在项目中。'],
+    },
+    {
+      title: '选定配色方案',
+      list: 'Done',
+      label: 'Feature',
+      doneDaysAgo: 2,
+      body: ['一个强调色、两个灰色，以及一个用于错误的红色。具体值在设计文件中。'],
+    },
+    {
+      title: '将博客迁移到新域名',
+      list: 'Done',
+      doneDaysAgo: 1,
+      body: ['旧地址会重定向到新地址，因此大家分享过的链接仍然有效。'],
+    },
+    {
+      title: '添加在线聊天组件',
+      list: 'Canceled',
+      label: 'Feature',
+      doneDaysAgo: 4,
+      body: ['暂时放弃：以目前的规模，一个在一天内回复的邮箱地址已经足够。'],
+    },
+  ],
+  doc: {
+    name: '这个项目的组织方式',
+    body: [
+      '任务承载具体工作。每个列表都是一个阶段——待办池、待办、进行中、评审中、已完成——任务会依次流转。可以在「任务」顶部切换列表和看板。',
+      '聊天是项目的频道。用 # 提及任务，用 @ 提及成员。',
+      '文档存放像这样的文档、上传的文件和链接。',
+      '公告用于发布项目成员都应看到的消息和决定。',
+      '这是一个示例。看完后，在项目顶部栏中删除即可。',
+    ],
+  },
+  chat: [
+    { ago: 50, text: '早上好！今天开始重新设计定价页。' },
+    { ago: 49, text: '计划和拆分都在这里：', task: '重新设计定价页' },
+    {
+      ago: 30,
+      text: '应该先展示年付价格，还是月付价格？',
+      reply: { ago: 29, text: '先月付，年付放在下面——布局草稿就是这样。' },
+    },
+    { ago: 26, text: '周二之前：', list: ['三个套餐的文案', '帮助中心的新截图', '发布说明'] },
+    { ago: 6, text: '午饭前快速处理一个——', task: '修复小屏幕上的登录按钮' },
+    { ago: 2, text: '布局已经完成。接下来写文案，周四和大家一起评审。' },
+  ],
+  comments: [
+    { task: '重新设计定价页', ago: 28, text: '布局草稿在「文档」里。下一步是文案。' },
+    { task: '修复小屏幕上的登录按钮', ago: 5, text: '已在 320 像素宽的屏幕上复现。内边距是固定值，不是相对值。' },
+    { task: '更新帮助中心', ago: 20, text: '三篇文章已经完成两篇。' },
+  ],
+  post: {
+    title: '新定价页下周上线',
+    body: ['我们将在下周二上线新的定价页。', '剩余工作都在看板的「进行中」。'],
   },
 }

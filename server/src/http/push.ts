@@ -191,7 +191,7 @@ push.post('/push/test', async (c) => {
   )
   /* Asked for from a screen, so its language when the account never said. */
   const { reach } = say(
-    { reach: ['Notifications reach this device.', 'Les notifications arrivent sur cet appareil.'] },
+    { reach: ['Notifications reach this device.', 'Les notifications arrivent sur cet appareil.', '通知可以送达此设备。'] },
     await languageFor(ctx.actorId, heard(c)),
   )
   const told = { title: 'Tuff', body: reach, url: '/' }

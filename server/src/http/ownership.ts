@@ -98,24 +98,35 @@ ownership.post('/workspace/transfer', async (c) => {
   const words = (language: Language) =>
     say(
       {
-        open: ['Open Tuff', 'Ouvrir Tuff'],
-        yours: ['your workspace', 'votre espace de travail'],
-        them: ['them', 'cette personne'],
-        gaveSubject: ['You handed over a workspace on Tuff', 'Vous avez transféré un espace de travail sur Tuff'],
+        open: ['Open Tuff', 'Ouvrir Tuff', '打开 Tuff'],
+        yours: ['your workspace', 'votre espace de travail', '你的工作区'],
+        them: ['them', 'cette personne', '对方'],
+        gaveSubject: [
+          'You handed over a workspace on Tuff',
+          'Vous avez transféré un espace de travail sur Tuff',
+          '你已转让 Tuff 上的一个工作区',
+        ],
         gave: [
           (who: string, where: string) => `You made ${who} the owner of “${where}”. You’re a member now, on every project you could open.`,
           (who: string, where: string) =>
             `Vous avez fait de ${who} le propriétaire de « ${where} ». Vous êtes désormais membre, sur tous les projets que vous pouviez ouvrir.`,
+          (who: string, where: string) => `你已让 ${who} 成为「${where}」的所有者。你现在是成员，仍可访问原先可打开的所有项目。`,
         ],
         gaveThen: [
           'If this wasn’t you, ask them to hand it back and change your password.',
           'Si ce n’était pas vous, demandez-lui de vous le rendre et changez votre mot de passe.',
+          '如果这不是你本人操作，请要求对方转回并修改你的密码。',
         ],
-        tookSubject: ['You’re the owner of a workspace on Tuff', 'Vous êtes propriétaire d’un espace de travail sur Tuff'],
+        tookSubject: [
+          'You’re the owner of a workspace on Tuff',
+          'Vous êtes propriétaire d’un espace de travail sur Tuff',
+          '你已成为 Tuff 上一个工作区的所有者',
+        ],
         /* With its plan, where the edition has plans. */
         took: edition.planMail?.took ?? [
           (where: string) => `You’re now the owner of “${where}”: its people and every project in it.`,
           (where: string) => `Vous êtes désormais propriétaire de « ${where} » : ses membres et tous ses projets.`,
+          (where: string) => `你现在是「${where}」的所有者，负责其中的人员和所有项目。`,
         ],
       },
       language,
@@ -282,9 +293,13 @@ ownership.post('/workspace/delete', async (c) => {
   const words = (language: Language) =>
     say(
       {
-        open: ['Open Tuff', 'Ouvrir Tuff'],
-        subject: ['A workspace was deleted on Tuff', 'Un espace de travail a été supprimé sur Tuff'],
-        mineSubject: ['You deleted a workspace on Tuff', 'Vous avez supprimé un espace de travail sur Tuff'],
+        open: ['Open Tuff', 'Ouvrir Tuff', '打开 Tuff'],
+        subject: ['A workspace was deleted on Tuff', 'Un espace de travail a été supprimé sur Tuff', 'Tuff 上的一个工作区已被删除'],
+        mineSubject: [
+          'You deleted a workspace on Tuff',
+          'Vous avez supprimé un espace de travail sur Tuff',
+          '你删除了 Tuff 上的一个工作区',
+        ],
         gone: [
           (place: string, by: string | null) =>
             by
@@ -294,15 +309,21 @@ ownership.post('/workspace/delete', async (c) => {
             by
               ? `${by} a supprimé l’espace de travail « ${place} ». Ses projets, tâches, discussions et fichiers ont disparu avec lui.`
               : `L’espace de travail « ${place} » a été supprimé. Ses projets, tâches, discussions et fichiers ont disparu avec lui.`,
+          (place: string, by: string | null) =>
+            by
+              ? `${by} 删除了工作区「${place}」。其中的项目、任务、聊天和文件也已一并删除。`
+              : `工作区「${place}」已被删除。其中的项目、任务、聊天和文件也已一并删除。`,
         ],
         yoursStay: [
           'Your account, and any other workspace you’re in, are untouched.',
           'Votre compte et vos autres espaces de travail ne sont pas touchés.',
+          '你的账户以及你所在的其他工作区不受影响。',
         ],
         /* A plan only where there are plans — `edition.planMail`. */
         mine: edition.planMail?.deletedMine ?? [
           (place: string) => `You deleted the workspace “${place}”. Everybody in it has been told.`,
           (place: string) => `Vous avez supprimé l’espace de travail « ${place} ». Tous ses membres ont été prévenus.`,
+          (place: string) => `你删除了工作区「${place}」。其中所有成员都已收到通知。`,
         ],
         /* The service's own address, or on your own server its owner, who
            can bring it back before the clear-out — whose days are theirs
@@ -311,10 +332,12 @@ ownership.post('/workspace/delete', async (c) => {
           ? [
               `We keep it for 30 days. To bring it back, write to ${support}. If this wasn’t you, write to us now and change your password.`,
               `Nous le gardons 30 jours. Pour le récupérer, écrivez à ${support}. Si ce n’était pas vous, écrivez-nous tout de suite et changez votre mot de passe.`,
+              `我们会保留 30 天。如需恢复，请写信至 ${support}。如果这不是你本人操作，请立即联系我们并修改密码。`,
             ]
           : [
               'It isn’t gone for good straight away. To bring it back, ask the owner of this server. If this wasn’t you, tell them now and change your password.',
               'Il n’est pas supprimé définitivement tout de suite. Pour le récupérer, demandez au propriétaire de ce serveur. Si ce n’était pas vous, prévenez-le tout de suite et changez votre mot de passe.',
+              '它不会立即永久删除。如需恢复，请联系此服务器的所有者。如果这不是你本人操作，请立即告知对方并修改密码。',
             ],
       },
       language,

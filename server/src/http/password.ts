@@ -75,16 +75,18 @@ password.post('/me/password', async (c) => {
   const language = await languageFor(ctx.actorId, heard(c))
   const w = say(
     {
-      subject: ['Your Tuff password was changed', 'Le mot de passe de votre compte Tuff a été modifié'],
+      subject: ['Your Tuff password was changed', 'Le mot de passe de votre compte Tuff a été modifié', '你的 Tuff 密码已修改'],
       what: [
         'The password for your Tuff account was just changed, and your other devices were signed out.',
         'Le mot de passe de votre compte Tuff vient d’être modifié, et vos autres appareils ont été déconnectés.',
+        '你的 Tuff 账户密码刚刚被修改，其他设备已退出登录。',
       ],
       then: [
         'If this wasn’t you, reset your password now and check the devices under Account.',
         'Si ce n’était pas vous, réinitialisez votre mot de passe maintenant et vérifiez les appareils dans Compte.',
+        '如果这不是你本人操作，请立即重置密码，并在「账户」中检查设备。',
       ],
-      reset: ['Reset password', 'Réinitialiser le mot de passe'],
+      reset: ['Reset password', 'Réinitialiser le mot de passe', '重置密码'],
     },
     language,
   )

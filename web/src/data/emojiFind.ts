@@ -46,9 +46,12 @@ export function find(groups: readonly EmojiGroup[], q: string, limit = 400): Emo
     for (const x of g.e) {
       i++
       const f = words(x)
-      if (!asked.every((w) => f.all.includes(` ${w}`))) continue
+      /* Chinese is written without spaces, so a character or two is found
+         inside a name; a space-separated language keeps its word starts. */
+      const has = (where: string, w: string) => (/\p{Script=Han}/u.test(w) ? where.includes(w) : where.includes(` ${w}`))
+      if (!asked.every((w) => has(f.all, w))) continue
       const named = ` ${f.name.replace(/[:,’'()]/g, ' ')}`
-      const s = f.name === whole ? 0 : asked.every((w) => named.includes(` ${w}`)) ? 1 : 2
+      const s = f.name === whole ? 0 : asked.every((w) => has(named, w)) ? 1 : 2
       scored.push({ x, s, i })
     }
   }

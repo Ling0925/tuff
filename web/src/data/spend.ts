@@ -9,7 +9,7 @@ import { now } from './words.js'
  */
 /* American English for the numbers, not the British the dates use:
    `en-GB` writes `1.2m` and `US$4.80`, which no usage page does. */
-const LOCALE = now === 'fr' ? 'fr-FR' : 'en-US'
+const LOCALE = now === 'fr' ? 'fr-FR' : now === 'zh' ? 'zh-CN' : 'en-US'
 const short = new Intl.NumberFormat(LOCALE, { notation: 'compact', maximumFractionDigits: 1 })
 const dollars = new Intl.NumberFormat(LOCALE, { style: 'currency', currency: 'USD' })
 

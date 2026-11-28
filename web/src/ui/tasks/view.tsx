@@ -239,7 +239,7 @@ export function readShows(view: 'list' | 'board'): Shows {
 type ViewProps = {
   /** Which drawing is on the screen. The people view is the board with
       assignees for columns, so it is offered what the board is. */
-  on: 'list' | 'board' | 'people'
+  on: 'list' | 'board' | 'people' | 'labels'
   group: string
   sort: string
   dir: string
@@ -281,7 +281,7 @@ function ViewAnswers({ on, group, sort, dir, who, labels, people, meId, allLabel
   const phone = usePhone()
   /* The board's columns can be its members on a desk only. */
   const desk = useWide()
-  const byMembers = group === 'who'
+  const byMembers = on !== 'labels' && group === 'who'
   const bare = phone && arranging
   /*
    * Reset is only there when there is something to undo.
@@ -405,7 +405,7 @@ function ViewAnswers({ on, group, sort, dir, who, labels, people, meId, allLabel
             grouped by assignee and the board with a column per member — so
             going between them keeps it.
           */}
-          {desk && (
+          {desk && on !== 'labels' && (
             <Choice
               said={W.columns}
               testId="view-columns"
