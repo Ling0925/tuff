@@ -122,7 +122,9 @@ export function MoveTasksDialog({
      rest — and what the move does not carry in the quieter ink, so the
      panel reads as what happens and then what does not. */
   type PlanRow = { mark: React.ReactNode; text: string; tone?: 'strong' | 'dim' }
-  const glyph = (name: IconName) => <Icon name={name} size={14} className="text-ink-3" />
+  const glyph = (name: IconName, tone: 'plain' | 'dim' = 'plain') => (
+    <Icon name={name} size={14} className={tone === 'dim' ? 'text-ink-3' : 'text-ink-2'} />
+  )
   const planRows: PlanRow[] =
     target && plan && plan !== 'failed'
       ? (
@@ -138,11 +140,13 @@ export function MoveTasksDialog({
             plan.comments > 0 ? { mark: glyph('bubble'), text: W.moveComments(plan.comments) } : null,
             plan.files > 0 ? { mark: glyph('clip'), text: W.copyFiles(plan.files) } : null,
             plan.labels_created.length ? { mark: glyph('tag'), text: W.moveLabelsCreated(plan.labels_created.join(', ')) } : null,
-            plan.labels_dropped.length ? { mark: glyph('tag'), text: W.copyLabels(plan.labels_dropped.join(', ')), tone: 'dim' } : null,
-            plan.assignees_dropped.length
-              ? { mark: glyph('person'), text: W.copyUnassigned(names(plan.assignees_dropped), target.name), tone: 'dim' }
+            plan.labels_dropped.length
+              ? { mark: glyph('tag', 'dim'), text: W.copyLabels(plan.labels_dropped.join(', ')), tone: 'dim' }
               : null,
-            { mark: glyph('repeat'), text: W.moveNotCarried, tone: 'dim' },
+            plan.assignees_dropped.length
+              ? { mark: glyph('person', 'dim'), text: W.copyUnassigned(names(plan.assignees_dropped), target.name), tone: 'dim' }
+              : null,
+            { mark: glyph('repeat', 'dim'), text: W.moveNotCarried, tone: 'dim' },
             plan.github_to ? { mark: glyph('github'), text: W.copyGithubTo(target.name) } : null,
           ] as (PlanRow | null)[]
         ).filter((r): r is PlanRow => Boolean(r))
