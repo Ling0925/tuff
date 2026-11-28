@@ -30,6 +30,7 @@ import { edition } from './edition.js'
 import { serverClaimed, signUpOpen } from './instance.js'
 import { readMarkdown } from './mcp/markdownPool.js'
 import { startWatchdog } from './watchdog.js'
+import { hostOf, hostPage, usableHere } from './host.js'
 
 /* Every error line to where somebody is told — the edition's to say where. */
 edition.watchErrors('server')
@@ -207,7 +208,10 @@ type Signed = {
 }
 async function signedSocket(c: Context, then: Signed) {
   const said = c.req.header('authorization') ?? (c.req.query('token') ? `Bearer ${c.req.query('token')}` : undefined)
-  let ctx: AuthContext | null = said ? await authenticate(said) : null
+  /* On a workspace's own domain, a session made there and nothing else —
+     `host.ts`. */
+  const here = (who: AuthContext | null) => (who && usableHere(c, who) ? who : null)
+  let ctx: AuthContext | null = said ? here(await authenticate(said)) : null
   let told = Boolean(said)
   let waiting: ReturnType<typeof setTimeout> | undefined
   const begin = (ws: WSContext) => {
@@ -229,7 +233,7 @@ async function signedSocket(c: Context, then: Signed) {
         const frame = typeof evt.data === 'string' ? evt.data : ''
         void (frame.startsWith('auth ') ? authenticate(`Bearer ${frame.slice(5)}`) : Promise.resolve(null))
           .then((who) => {
-            ctx = who
+            ctx = here(who)
             begin(ws)
           })
           .catch(() => ws.close(1011, 'unavailable'))
@@ -492,10 +496,23 @@ if (existsSync(join(client, 'index.html'))) {
      workspace whose name starts with "ws" is a page like any other, and
      went out with no policy at all. */
   const bare = /^\/(api|auth|ws)(\/|$)/
+  /* On a workspace's own domain, HSTS for that name alone: its subdomains
+     are not ours to decide. */
+  const onAHost = (h: Record<string, string>): Record<string, string> => {
+    const sts = h['strict-transport-security']
+    return sts ? { ...h, 'strict-transport-security': sts.replace(/;\s*includeSubDomains/i, '') } : h
+  }
+  const hostGuarded = onAHost(guarded)
   app.use('*', async (c, next) => {
     await next()
     if (bare.test(c.req.path)) return
-    const headers = c.res.headers.get('x-tuff-written') ? counted : c.req.path.startsWith('/f/') ? asking : guarded
+    const headers = hostOf(c)
+      ? hostGuarded
+      : c.res.headers.get('x-tuff-written')
+        ? counted
+        : c.req.path.startsWith('/f/')
+          ? asking
+          : guarded
     for (const [k, v] of Object.entries(headers)) c.header(k, v)
   })
   app.use('/assets/*', async (c, next) => {
@@ -524,6 +541,11 @@ if (existsSync(join(client, 'index.html'))) {
   const waysOf = providersMeta
   const ways = waysOf(offeredProviders())
   const withWays = (html: string, said = ways) => html.replace('</head>', `${said}</head>`)
+  /* The app's page as a workspace's own domain writes it — `cloud/domains/hosts.ts`. */
+  /* Read once, as the page's hashes above were: a deploy is a new process. */
+  const hostHtml = withWays(page)
+  hostPage.html = () => hostHtml
+  hostPage.headers = hostGuarded
   /* The public pages the build wrote, and what `/` is before the app
      answers it — the landing on the service, the app's own sign-in on your
      own server. `edition.ts`. */

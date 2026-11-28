@@ -14,6 +14,7 @@ import { DOC as W } from '../words/doc.js'
 import { addresses } from '@tracker/shared-schema'
 import { followHere } from '../data/route.js'
 import { emojiOf, toneOf } from '../data/callout.js'
+import { fitFrame } from '../data/fitFrame.js'
 
 /**
  * A body, drawn and not edited.
@@ -224,12 +225,18 @@ export function Lightbox({
   onPrev,
   onNext,
   counter,
+  pixels,
 }: {
   url: string
   name: string
   onClose: () => void
   /** The picture it was opened from: it grows out of there and goes back. */
   from?: HTMLImageElement | null
+  /** The original's own pixels, when the sender recorded them — truer than
+      the copy on the page, which may be the smaller copy for showing, and
+      there for a picture paged to from behind "+N", which has no place on
+      the page at all. */
+  pixels?: { w: number; h: number } | null
   /** What is already on the screen — the copy for showing — drawn at once
       while the original arrives over it. */
   quick?: string | null
@@ -261,18 +268,21 @@ export function Lightbox({
   /* Where it was on the page when pressed, and its own shape — read once,
      at the press, before anything moved. */
   const [start] = useState(() => (from ? from.getBoundingClientRect() : null))
-  /* Its shape from the picture on the page it stands for — read again as
-     the pages turn, so each one is sized before it has loaded. */
-  const shape = from && from.naturalWidth && from.naturalHeight ? { w: from.naturalWidth, h: from.naturalHeight } : null
-  /* Its size in the window: its own, or as large as fits inside the 32
-     around it — worked out here so the box is the picture exactly, and
-     where it will land can be measured before it has loaded. */
-  const fit = shape
-    ? (() => {
-        const k = Math.min(1, (innerWidth - 64) / shape.w, (innerHeight - 64) / shape.h)
-        return { w: Math.round(shape.w * k), h: Math.round(shape.h * k) }
-      })()
-    : null
+  /* Its shape: the original's own pixels when they were recorded, else the
+     picture on the page it stands for — read again as the pages turn, so
+     each one is sized before it has loaded. */
+  const shape =
+    pixels && pixels.w > 0 && pixels.h > 0
+      ? pixels
+      : from && from.naturalWidth && from.naturalHeight
+        ? { w: from.naturalWidth, h: from.naturalHeight }
+        : null
+  /* Its size in the window: as large as fits inside the 32 around it —
+     grown to it when it is small, because a picture that opens no bigger
+     than it already was cannot be read any better for being opened.
+     Worked out here so the box is the picture exactly, and where it will
+     land can be measured before it has loaded. `data/fitFrame.ts`. */
+  const fit = shape ? fitFrame(shape, { w: innerWidth, h: innerHeight }) : null
   const still = () => matchMedia('(prefers-reduced-motion: reduce)').matches
 
   /* From the picture's place on the page to its place in the window — the
@@ -801,7 +811,9 @@ function Attachment({
             </a>
           )}
         </span>
-        {open && url && <Lightbox url={url} quick={local ?? show} name={name} from={pic.current} onClose={() => setOpen(false)} />}
+        {open && url && (
+          <Lightbox url={url} quick={local ?? show} name={name} from={pic.current} pixels={pixels ?? null} onClose={() => setOpen(false)} />
+        )}
       </>
     )
   }
@@ -1289,6 +1301,11 @@ function Gallery({ nodes }: { nodes: Node[] }) {
           quick={previewOf(String(at.attrs?.fileId)) ?? links[open]!.display}
           name={String(at.attrs?.name ?? '')}
           kind={at.attrs?.kind === 'video' ? 'video' : 'image'}
+          pixels={
+            typeof at.attrs?.pixelWidth === 'number' && typeof at.attrs?.pixelHeight === 'number'
+              ? { w: at.attrs.pixelWidth, h: at.attrs.pixelHeight }
+              : null
+          }
           from={open < fit ? (tiles.current[open] ?? null) : null}
           counter={`${open + 1} / ${nodes.length}`}
           onPrev={open > 0 ? () => setOpen(open - 1) : undefined}

@@ -1,4 +1,5 @@
 import { api } from './api.js'
+import { onHost } from './host.js'
 import { recall, remember } from './memory.js'
 import { edition } from '../edition.jsx'
 import { membersDoor } from './doors.js'
@@ -102,12 +103,9 @@ export const membersReads = (can: string[]) => [
 ]
 /* Your own server's owner screen. */
 export const instanceReads = ['/instance']
-export const accountReads = (can: string[]) => [
-  '/me/email',
-  '/me/ways-in',
-  '/github/me',
-  '/2fa',
-  '/inbox/settings',
-  '/sessions',
-  ...(can.includes('agent.use') ? ['/tokens'] : []),
-]
+/* On a workspace's own domain Account holds the face and the language, and
+   asks nothing that belongs to the account. */
+export const accountReads = (can: string[]) =>
+  onHost()
+    ? []
+    : ['/me/email', '/me/ways-in', '/github/me', '/2fa', '/inbox/settings', '/sessions', ...(can.includes('agent.use') ? ['/tokens'] : [])]

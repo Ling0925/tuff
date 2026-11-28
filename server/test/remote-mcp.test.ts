@@ -594,20 +594,39 @@ test('an agent puts a picture it uploaded into a task and a comment', async () =
   assert.equal(pic.attrs!.name, 'bug.png')
   assert.equal(pic.attrs!.pixelWidth, 1)
 
-  // Added to what a task says, without rewriting it.
+  // Added to what a task says, without rewriting it — and not twice: the
+  // file is already in the description, so nothing is appended for it.
   assert.notEqual((await tool('update_task', { task_id: taskId, attachments: [fileId] })).isError, true)
   const again = (await json(await app.request(`/api/tasks/${taskId}`, { headers: as }))).task as {
     body: { content: { type: string }[] }
   }
   assert.deepEqual(
     again.body.content.map((n) => n.type),
-    ['paragraph', 'attachment', 'attachment'],
+    ['paragraph', 'attachment'],
   )
 
   assert.notEqual(
     (await tool('comment', { object_type: 'tasks', object_id: taskId, body: 'Same on tablet.', attachments: [fileId] })).isError,
     true,
   )
+  /* Written out in the markdown and passed in `attachments` both — as the
+     tool says it may be — the picture is in the comment once, not twice. */
+  assert.notEqual(
+    (
+      await tool('comment', {
+        object_type: 'tasks',
+        object_id: taskId,
+        body: 'Here:\n\n![bug](file:' + fileId + ')',
+        attachments: [fileId, fileId],
+      })
+    ).isError,
+    true,
+  )
+  const comments = (await json(await app.request(`/api/tasks/${taskId}/comments`, { headers: as }))) as {
+    comments: { body: { content: { type: string }[] } }[]
+  }
+  const last = comments.comments[comments.comments.length - 1]!
+  assert.equal(last.body.content.filter((n) => n.type === 'attachment').length, 1, JSON.stringify(last.body.content.map((n) => n.type)))
   const bogus = await tool('comment', {
     object_type: 'tasks',
     object_id: taskId,

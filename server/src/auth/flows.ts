@@ -46,9 +46,15 @@ async function nowhereAnswer(actorId: string, sid: string, refreshToken: string)
   }
 }
 
-async function sessionAnswer(actorId: string, workspaceId: string, sid: string, refreshToken: string): Promise<Session> {
+async function sessionAnswer(
+  actorId: string,
+  workspaceId: string,
+  sid: string,
+  refreshToken: string,
+  host: string | null = null,
+): Promise<Session> {
   return {
-    access_token: await issueAccessToken({ sub: actorId, workspace_id: workspaceId, sid }),
+    access_token: await issueAccessToken({ sub: actorId, workspace_id: workspaceId, sid, ...(host ? { host } : {}) }),
     refresh_token: refreshToken,
     expires_in: ACCESS_TTL_SECONDS,
     actor_id: actorId,
@@ -68,7 +74,7 @@ async function writeSession(
   s: { sid: string; actorId: string; workspaceId: string | null; refreshToken: string; meta: Meta; tradedFrom: string | null },
 ): Promise<void> {
   await tx`
-    insert into refresh_session (id, actor_id, workspace_id, token_hash, user_agent, ip, device, expires_at, family, traded_from, created_at)
+    insert into refresh_session (id, actor_id, workspace_id, token_hash, user_agent, ip, device, expires_at, family, traded_from, created_at, host)
     values (${s.sid}, ${s.actorId}, ${s.workspaceId}, ${hashToken(s.refreshToken)},
             ${s.meta.userAgent ?? null}, ${s.meta.ip ?? null}, ${s.meta.device ?? null},
             now() + ${`${REFRESH_TTL_DAYS} days`}::interval,
@@ -78,7 +84,8 @@ async function writeSession(
                made on when that was earlier (Meta.since). The database
                writes it ended when the account was put out at or after it:
                credential_after_put_out. */
-            least(now(), coalesce(${s.meta.since ?? null}::timestamptz, now())))`
+            least(now(), coalesce(${s.meta.since ?? null}::timestamptz, now())),
+            ${s.meta.host ?? null})`
 }
 
 /** Who is signing in from where: the address, the browser's name, and
@@ -99,6 +106,10 @@ export type Meta = {
       password read and verified, an access token checked as its request
       arrived (`AuthContext.checkedAt`). See `writeSession`. */
   since?: Date | null
+  /** The workspace's own domain the session is made on, kept on its row
+      through every refresh and never cleared.
+      From `metaOf`, which reads it only from the edition's signed pair. */
+  host?: string | null
 }
 
 /**
@@ -125,7 +136,7 @@ export async function startSession(actorId: string, workspaceId: string, meta: M
                 ${tx.json({ method: signIn } as never)})`
     }
   })
-  return sessionAnswer(actorId, workspaceId, sid, refreshToken)
+  return sessionAnswer(actorId, workspaceId, sid, refreshToken, meta.host ?? null)
 }
 
 /**
@@ -518,7 +529,10 @@ async function again(token: string, hash: string, device: string | null): Promis
   /* A successor written before 312, or by an older container mid-deploy,
      was random: nothing can be made again, and the duplicate is refused. */
   if (!same(hashToken(made), n.token_hash)) return null
-  return n.workspace_id ? sessionAnswer(n.actor_id, n.workspace_id, n.session_id, made) : nowhereAnswer(n.actor_id, n.session_id, made)
+  const [h] = await asAuth((tx) => tx<{ host: string | null }[]>`select auth_session_host(${n.session_id}) as host`)
+  return n.workspace_id
+    ? sessionAnswer(n.actor_id, n.workspace_id, n.session_id, made, h?.host ?? null)
+    : nowhereAnswer(n.actor_id, n.session_id, made)
 }
 
 /** What a spent token is traded for, inside the transaction that spent it. */
@@ -559,6 +573,11 @@ async function tradeFor(
   /* As the person from here, as `withActorEverywhere` was: the membership
      reads and the insert policy both ask who. */
   await actAs(row.actor_id)
+  /* The domain the spent session was made on, whatever this request says:
+     carried on and never cleared, so a host's session stays one wherever
+     it is refreshed. */
+  const [hosted] = await tx<{ host: string | null }[]>`select auth_session_host(${row.session_id}) as host`
+  const host = hosted?.host ?? null
   const workspaceId = await (async () => {
     if (row.workspace_id) {
       const [still] = await tx<{ workspace_id: string }[]>`
@@ -575,6 +594,9 @@ async function tradeFor(
       order by (role = 'owner') desc, created_at limit 1`
     return m?.workspace_id ?? null
   })()
+  /* And never renewed into another workspace than its own: out of it, it is
+     nobody. */
+  if (host && (!row.workspace_id || workspaceId !== row.workspace_id)) return null
   /* The browser the traded session belonged to, carried on when the request
      does not say: a session's device is what signing out and ending it from
      Account end together, and a trade that dropped it left the access
@@ -585,7 +607,13 @@ async function tradeFor(
   }
   const sid = uuidv7()
   const refreshToken = successorToken(token, sid)
-  const next = { sid, actorId: row.actor_id, refreshToken, meta: { ...meta, from: row.session_id }, tradedFrom: row.session_id }
+  const next = {
+    sid,
+    actorId: row.actor_id,
+    refreshToken,
+    meta: { ...meta, from: row.session_id, host },
+    tradedFrom: row.session_id,
+  }
   /* A session in no workspace, still in none: renewed as it was. One that
      was in a workspace and now finds none is not turned into one. */
   if (!workspaceId && !row.workspace_id) {
@@ -597,7 +625,7 @@ async function tradeFor(
   if (!workspaceId) return null
   /* A refresh rotating, every quarter of an hour: nobody signed in. */
   await writeSession(tx, { ...next, workspaceId })
-  return sessionAnswer(row.actor_id, workspaceId, sid, refreshToken)
+  return sessionAnswer(row.actor_id, workspaceId, sid, refreshToken, host)
 }
 
 /**

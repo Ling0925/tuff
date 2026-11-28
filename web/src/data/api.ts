@@ -1,3 +1,4 @@
+import type { InvitePreview } from '@tracker/shared-schema'
 import { now } from './words.js'
 import { API as W } from '../words/api.js'
 import { forget } from './memory.js'
@@ -560,10 +561,10 @@ export async function signIn(email: string, password: string, totp?: string): Pr
 }
 
 /** What an invitation is to, before anybody has an account. */
-export async function previewInvite(token: string): Promise<{ workspace_name?: string; state: string; email?: string | null }> {
+export async function previewInvite(token: string): Promise<InvitePreview> {
   const res = await fetch(`/auth/invite/${encodeURIComponent(token)}`)
   if (!res.ok) return { state: 'invalid' }
-  return (await res.json()) as { workspace_name?: string; state: string; email?: string | null }
+  return (await res.json()) as InvitePreview
 }
 
 /**

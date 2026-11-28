@@ -3,6 +3,7 @@ import { HEADS, MAKE, MORE } from '../data/words.js'
 import { api, untilAnswered } from '../data/api.js'
 import { recall, remember } from '../data/memory.js'
 import { printAsPdf } from '../data/print.js'
+import { shareOrigin } from '../data/host.js'
 import { DocMark, MarkRails, MentionedIn, Popover, Toolbar, readLinks, urlField } from './kit.jsx'
 import { Round, RoundFace } from './TaskDetail.jsx'
 import { Icon, type IconName } from './glyphs.jsx'
@@ -147,7 +148,7 @@ export function FileDetail({
   const [sharing, setSharing] = useState(false)
   const copyPublic = (token: string) =>
     navigator.clipboard
-      .writeText(`${location.origin}/d/${token}`)
+      .writeText(`${shareOrigin()}/d/${token}`)
       .then(() => setCopied(W.publicLinkCopied))
       .catch(() => setCopied(W.couldNotCopy))
       .finally(() => setTimeout(() => setCopied(null), 1800))

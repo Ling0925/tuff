@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { whenRead, known as knownRead } from '../../data/ahead.js'
-import { type ServerVersion, type ProjectInList } from '@tracker/shared-schema'
+import { type Brand, type ServerVersion, type ProjectInList } from '@tracker/shared-schema'
 
 export type Me = {
   /** `presence` is what everybody sees; `chosen` is which of the three was
@@ -18,7 +18,16 @@ export type Me = {
     /** What they read the product in, null for never said. */
     language?: string | null
   }
-  workspace: { id: string; name: string; slug: string; mark_icon?: string | null; mark_tint?: number | null; icon_url?: string | null }
+  workspace: {
+    id: string
+    name: string
+    slug: string
+    mark_icon?: string | null
+    mark_tint?: number | null
+    icon_url?: string | null
+    /** Its own name and mark, worn in Tuff's place. */
+    brand?: Brand | null
+  }
   role: 'owner' | 'member'
   settings: Record<string, string>
   can: string[]

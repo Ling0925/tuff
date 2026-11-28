@@ -32,6 +32,22 @@ export type Mail = {
    * only when it says so where the inbox looks.
    */
   fromName?: string
+  /**
+   * Whose name the From says the letter comes through: Tuff, unless it is a
+   * workspace that wears its own — "Ana via Acme", or "Acme" alone when no
+   * person sends it. The address stays ours.
+   */
+  via?: string
+  /**
+   * The brand alone in the From, with no person before it — only a letter
+   * to the workspace's own members, the digest. Said, never inferred: a
+   * person's name that cleans to nothing is "Someone via Acme", or a
+   * workspace on a trial named "PayPal Security" would mail strangers as
+   * that and nothing else, from our address.
+   */
+  bare?: boolean
+  /** The word for a person whose name cleans to nothing, in the letter's language. */
+  someone?: string
 }
 
 /**
@@ -53,21 +69,51 @@ export function oneLine(s: string): string {
  * nothing is left of it.
  */
 export function personName(name: string): string {
-  return oneLine(name.replace(/["\\<>@]+/g, ' ').replace(/=\?/g, ' '))
+  return oneLine(
+    name
+      .replace(INVISIBLE, '')
+      .replace(/["\\<>@]+/g, ' ')
+      .replace(/=\?/g, ' '),
+  )
     .slice(0, 48)
     .trim()
 }
+
+/* What a From line must not carry and a reader cannot see: zero-width
+   spaces and joiners, the marks that turn text right to left and back, the
+   byte-order mark and the soft hyphen — each a way to make "Acme" in an
+   inbox read as something else, or one name look like another. */
+const INVISIBLE = /[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF\u00AD]/g
 
 /**
  * The From line for a person's name at our address. The name is whatever
  * they typed, so it keeps to one line, has nothing that could close the
  * quotes or pass for an address, and is short; "via Tuff" says whose
  * address it is. Nothing left of it, and the mail is from the product.
+ *
+ * `via` is a branded workspace's name in Tuff's place, kept the same way:
+ * "Ana via Acme", and with no person, "Acme"
+ * alone at our address.
  */
-export function fromPerson(name: string, from: string = mailFrom()): string {
+export function fromPerson(name: string, from: string = mailFrom(), via?: string, how: { bare?: boolean; someone?: string } = {}): string {
   const address = /<([^>]+)>/.exec(from)?.[1] ?? from
-  const clean = personName(name)
-  return clean ? `"${clean} via Tuff" <${address}>` : from
+  const shown = fromShown(name, via, how)
+  return shown ? `"${shown}" <${address}>` : from
+}
+
+/**
+ * The name a From line shows, made safe, or null for the sender's own.
+ * A person comes through Tuff, or through a branded workspace; with a
+ * brand, a person whose name cleans to nothing is "Someone via Acme", and
+ * the brand stands alone only when the letter says `bare`. A brand that
+ * cleans to nothing is no brand.
+ */
+export function fromShown(name: string, via?: string, how: { bare?: boolean; someone?: string } = {}): string | null {
+  const person = personName(name)
+  const brand = via ? personName(via) : ''
+  if (!brand) return person ? `${person} via Tuff` : null
+  if (how.bare) return brand
+  return `${person || personName(how.someone ?? '') || 'Someone'} via ${brand}`
 }
 
 /**
@@ -330,7 +376,7 @@ export async function send(mail: Mail): Promise<boolean> {
       method: 'POST',
       headers: { authorization: `Bearer ${way.key}`, 'content-type': 'application/json' },
       body: JSON.stringify({
-        from: mail.fromName ? fromPerson(mail.fromName, way.from) : way.from,
+        from: fromPerson(mail.fromName ?? '', way.from, mail.via, { bare: mail.bare === true, someone: mail.someone ?? '' }),
         to: [mail.to],
         subject: mail.subject,
         text: mail.text,
@@ -496,7 +542,7 @@ async function sendSmtp(mail: Mail, smtp: SmtpWay): Promise<boolean> {
     console.error('[mail] not sent: an address is not a plain one')
     return false
   }
-  const person = mail.fromName ? personName(mail.fromName) : ''
+  const shown = fromShown(mail.fromName ?? '', mail.via, { bare: mail.bare === true, someone: mail.someone ?? '' })
   const headers = mail.headers
     ? Object.fromEntries(
         Object.entries(mail.headers)
@@ -507,7 +553,7 @@ async function sendSmtp(mail: Mail, smtp: SmtpWay): Promise<boolean> {
   try {
     const t = await smtpTransport(smtp.key, smtp.options)
     const info = await t.sendMail({
-      from: { name: person ? `${person} via Tuff` : smtp.from.name, address: smtp.from.address },
+      from: { name: shown ?? smtp.from.name, address: smtp.from.address },
       to: [mail.to],
       ...(mail.replyTo ? { replyTo: [mail.replyTo] } : {}),
       subject: oneLine(mail.subject),

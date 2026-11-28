@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { Action, DEFAULT_SETTINGS, NEVER_UNPROVED, NEVER_VIA_MCP, Role, can, type PermissionInput } from '../src/index.js'
+import { Action, DEFAULT_SETTINGS, NEVER_UNPROVED, NEVER_VIA_MCP, NEVER_ON_A_HOST, Role, can, type PermissionInput } from '../src/index.js'
 
 /**
  * Two columns, two roles, and no third sort of person.
@@ -343,12 +343,12 @@ test('the hard stop holds through MCP even for an owner', () => {
   // and `instance` are in hand to lose.
   for (const action of NEVER_VIA_MCP) {
     assert.equal(
-      can(action, base('owner', { operator: true, instanceOwner: true, connectedIt: true })),
+      can(action, base('owner', { operator: true, instanceOwner: true, connectedIt: true, plan: 'company' })),
       true,
       `${action} should be allowed in person`,
     )
     assert.equal(
-      can(action, base('owner', { viaMcp: true, operator: true, instanceOwner: true, connectedIt: true })),
+      can(action, base('owner', { viaMcp: true, operator: true, instanceOwner: true, connectedIt: true, plan: 'company' })),
       false,
       `${action} survived into an MCP call`,
     )
@@ -367,6 +367,8 @@ test('every action is reachable by somebody', () => {
         can(action, base(role, { isAuthor: true })) ||
         can(action, base(role, { operator: true })) ||
         can(action, base(role, { instanceOwner: true })) ||
+        /* `workspace.domain` only where a plan is said at all. */
+        can(action, base(role, { plan: 'company' })) ||
         can(action, base(role, { agent: true, viaMcp: true, plan: 'team' })),
     )
     assert.ok(anyone, `${action} is granted to no role at all`)
@@ -609,4 +611,21 @@ test('only an agent says what it is doing', () => {
     assert.equal(can('agent.status', base(role, { viaMcp: true, plan: 'team' })), false, `${role} through a token`)
     assert.equal(can('agent.status', base(role, { agent: true, viaMcp: true, plan: 'team' })), true, `${role} agent`)
   }
+})
+
+test('a session made on a workspace’s own domain does nothing that outlives it, whatever its role', () => {
+  // Whoever controls that domain's DNS can read its token.
+  for (const action of NEVER_ON_A_HOST) {
+    assert.equal(
+      can(action, base('owner', { onAHost: true, operator: true, instanceOwner: true, connectedIt: true, plan: 'company' })),
+      false,
+      action,
+    )
+  }
+  // The work itself it still does.
+  assert.equal(can('content.create', base('member', { onAHost: true, inProject: true })), true)
+  // The domain is the owner's, in person, where there are plans.
+  assert.equal(can('workspace.domain', base('owner', { plan: 'company' })), true)
+  assert.equal(can('workspace.domain', base('owner')), false, 'no plan said: the community edition')
+  assert.equal(can('workspace.domain', base('member', { plan: 'company' })), false)
 })

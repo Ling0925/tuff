@@ -4,6 +4,15 @@ import { closeDb, withActor, uuidv7, makeOwner, addPerson, makeProject, bearerFo
 import { get, put, signKey, verifyKey } from '../src/storage.js'
 import { app } from '../src/http/routes.js'
 
+/* A small valid JPEG, for the copy for showing posts: the route asks
+   wholeness of what it stores now, and the twelve header bytes these were
+   are not a picture. */
+const SMALL_JPEG = new Uint8Array(
+  Buffer.from(
+    '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAgDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDgKKKK+eP2E//Z',
+    'base64',
+  ),
+)
 /*
  * The tests' own directory is emptied before a run, by the test script,
  * and not here.
@@ -289,7 +298,7 @@ test('a picture takes a copy for showing from its uploader, and links hand it ou
     f.append('file', new Blob([new Uint8Array(bytes).buffer as ArrayBuffer], { type: 'image/jpeg' }), 'display.jpg')
     return app.request(`/api/files/${id}/display`, { method: 'POST', headers: { authorization: `Bearer ${who}` }, body: f })
   }
-  const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0, 1])
+  const jpeg = SMALL_JPEG
 
   // Not somebody else's picture.
   assert.equal((await send(samToken, jpeg)).status, 403)
@@ -333,11 +342,7 @@ test('a large picture with no copy for showing has no tile in the list, a small 
   assert.equal(t[large], null, 'a large original is not')
 
   const f = new FormData()
-  f.append(
-    'file',
-    new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0, 1]).buffer as ArrayBuffer], { type: 'image/jpeg' }),
-    'display.jpg',
-  )
+  f.append('file', new Blob([SMALL_JPEG.buffer as ArrayBuffer], { type: 'image/jpeg' }), 'display.jpg')
   assert.equal(
     (await app.request(`/api/files/${large}/display`, { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: f })).status,
     204,

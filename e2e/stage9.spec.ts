@@ -385,7 +385,7 @@ test('a link says where it goes, a picture shows in the list, and the list narro
     name,
     mimeType: 'image/png',
     buffer: Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAJ0lEQVR42u3OMQEAAAgDoC251a3gLzRgcrcpAQEBAQEBAQEBAQGBHwtGFgABRpW1ugAAAABJRU5ErkJggg==',
+      'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYklEQVR4nO3PMQ0AIADAMEAI/qUgCxEcDcmqYJtn7/GzpQNeNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaBdQ3UBhOjh6FcAAAAASUVORK5CYII=',
       'base64',
     ),
   })
@@ -4870,7 +4870,7 @@ test('a body is written as a document, and keeps what was written', async ({ pag
     name: `shot-${stamp}.png`,
     mimeType: 'image/png',
     buffer: Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAJ0lEQVR42u3OMQEAAAgDoC251a3gLzRgcrcpAQEBAQEBAQEBAQGBHwtGFgABRpW1ugAAAABJRU5ErkJggg==',
+      'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYklEQVR4nO3PMQ0AIADAMEAI/qUgCxEcDcmqYJtn7/GzpQNeNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaBdQ3UBhOjh6FcAAAAASUVORK5CYII=',
       'base64',
     ),
   })
@@ -4970,7 +4970,7 @@ test('what is put into a body can be selected and taken out again', async ({ pag
     name: `held-${stamp}.png`,
     mimeType: 'image/png',
     buffer: Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAJ0lEQVR42u3OMQEAAAgDoC251a3gLzRgcrcpAQEBAQEBAQEBAQGBHwtGFgABRpW1ugAAAABJRU5ErkJggg==',
+      'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYklEQVR4nO3PMQ0AIADAMEAI/qUgCxEcDcmqYJtn7/GzpQNeNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaBdQ3UBhOjh6FcAAAAASUVORK5CYII=',
       'base64',
     ),
   })
@@ -5802,7 +5802,7 @@ test('a made task clears the field and lands where it can be seen', async ({ pag
 
 /* A 16px PNG: the smallest thing that is genuinely an image to the server. */
 const PIXEL = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAKklEQVR42mP8z8BQz0AEYBxVSFJgFKEB4wEYBxVSFJgFKEB4wEYBxVSFAAAlXwX9eTUBZQAAAABJRU5ErkJggg==',
+  'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAGUlEQVR4nGOUkzvBQApgIkn1qIZRDUNKAwBNywEki0OjxAAAAABJRU5ErkJggg==',
   'base64',
 )
 
@@ -10602,7 +10602,7 @@ test('paging to a task with no body shows nothing of the one before it, and save
     name: `only-${stamp}.png`,
     mimeType: 'image/png',
     buffer: Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAJ0lEQVR42u3OMQEAAAgDoC251a3gLzRgcrcpAQEBAQEBAQEBAQGBHwtGFgABRpW1ugAAAABJRU5ErkJggg==',
+      'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYklEQVR4nO3PMQ0AIADAMEAI/qUgCxEcDcmqYJtn7/GzpQNeNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaBdQ3UBhOjh6FcAAAAASUVORK5CYII=',
       'base64',
     ),
   })
@@ -12854,7 +12854,7 @@ test('a picture in Docs is shown on its own screen, not linked to', async ({ pag
     name,
     mimeType: 'image/png',
     buffer: Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAJ0lEQVR42u3OMQEAAAgDoC251a3gLzRgcrcpAQEBAQEBAQEBAQGBHwtGFgABRpW1ugAAAABJRU5ErkJggg==',
+      'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYklEQVR4nO3PMQ0AIADAMEAI/qUgCxEcDcmqYJtn7/GzpQNeNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaBdQ3UBhOjh6FcAAAAASUVORK5CYII=',
       'base64',
     ),
   })
@@ -13351,7 +13351,7 @@ test('a picture dropped anywhere on a task goes into its description, and a miss
   /* A drag of a picture from outside the page, at a point or at the
      element's corner; answers whether something took it. */
   const PNG =
-    'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAJ0lEQVR42u3OMQEAAAgDoC251a3gLzRgcrcpAQEBAQEBAQEBAQGBHwtGFgABRpW1ugAAAABJRU5ErkJggg=='
+    'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYklEQVR4nO3PMQ0AIADAMEAI/qUgCxEcDcmqYJtn7/GzpQNeNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaBdQ3UBhOjh6FcAAAAASUVORK5CYII='
   const hold = (selector: string, type: 'dragover' | 'drop', where: 'corner' | 'end' = 'corner') =>
     page.evaluate(
       ([sel, kind, png, at]) => {

@@ -1,5 +1,7 @@
+import { edition } from './edition.js'
 import { keyFor, mac, rootSecret, same } from './auth/keys.js'
 import { asWorker } from './db.js'
+import { brandOf, type Brand } from './brand.js'
 import { about, type Due } from './push.js'
 import { send } from './mail.js'
 import { LINES, remind, remindChosen, shortDay } from './notify.js'
@@ -78,12 +80,19 @@ const esc = (s: string) =>
 
 type Item = { workspace: string; title: string; line: string; url: string }
 
-function digestLetter(
+/**
+ * The letter. `brand` is a branded workspace's name, when every note in it
+ * is that workspace's (`brandOfDigest`): it heads the letter and signs it,
+ * the subject says no product, and "more" is in the workspace. Without it,
+ * the letter is Tuff's, as it always was.
+ */
+export function digestLetter(
   name: string,
   items: Item[],
   more: number,
   off: string,
   language: Language = 'en',
+  brand: string | null = null,
 ): { subject: string; text: string; html: string } {
   const w = say(
     {
@@ -92,12 +101,23 @@ function digestLetter(
         (n: number) => (one(n, 'fr') ? 'Un élément vous attend sur Tuff' : `${n} éléments vous attendent sur Tuff`),
         (n: number) => `Tuff 上有 ${n} 项待处理事项`,
       ],
+      /* A workspace's name is never in a subject: it is what anybody who
+         wanted to look like somebody else would choose. */
+      subjectBranded: [
+        (n: number) => (n === 1 ? 'One thing is waiting for you' : `${n} things are waiting for you`),
+        (n: number) => (one(n, 'fr') ? 'Un élément vous attend' : `${n} éléments vous attendent`),
+        (n: number) => `有 ${n} 项待处理事项`,
+      ],
       hi: [
         (name: string) => `Hi ${name}, this is what you haven’t read yet.`,
         (name: string) => `Bonjour ${name}, voici ce que vous n’avez pas encore lu.`,
         (name: string) => `${name}，你好，这是你尚未阅读的内容。`,
       ],
-      more: [(n: number) => `And ${n} more in Tuff.`, (n: number) => `Et ${n} de plus dans Tuff.`, (n: number) => `Tuff 中还有 ${n} 项。`],
+      more: [
+        (n: number, where: string) => `And ${n} more in ${where}.`,
+        (n: number, where: string) => `Et ${n} de plus dans ${where}.`,
+        (n: number, where: string) => `${where} 中还有 ${n} 项。`,
+      ],
       stop: ['Stop these emails', 'Ne plus recevoir ces e-mails', '停止接收这些邮件'],
       colon: [':', ' :', '：'],
       daily: [
@@ -108,22 +128,23 @@ function digestLetter(
     },
     language,
   )
-  const subject = w.subject(items.length + more)
+  const subject = (brand ? w.subjectBranded : w.subject)(items.length + more)
+  const signed = brand ?? 'Tuff'
   const groups = new Map<string, Item[]>()
   for (const i of items) groups.set(i.workspace, [...(groups.get(i.workspace) ?? []), i])
   const text = [
     w.hi(name),
     '',
     ...[...groups].flatMap(([ws, xs]) => [ws, ...xs.map((x) => `- ${x.title} — ${x.line}: ${x.url}`), '']),
-    ...(more ? [w.more(more), ''] : []),
+    ...(more ? [w.more(more, signed), ''] : []),
     `${w.stop}${w.colon} ${off}`,
     '',
-    '— Tuff',
+    `— ${signed}`,
   ].join('\n')
   const html = `<!doctype html><html${language === 'en' ? '' : ` lang="${language}"`}><body style="margin:0;background:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:40px 16px">
 <table width="480" cellpadding="0" cellspacing="0" style="max-width:480px;background:#fff;border-radius:16px;padding:32px">
-<tr><td style="font-size:17px;font-weight:600;color:#1d1d1f;padding-bottom:16px">Tuff</td></tr>
+<tr><td style="font-size:17px;font-weight:600;color:#1d1d1f;padding-bottom:16px">${esc(signed)}</td></tr>
 <tr><td style="font-size:15px;line-height:1.5;color:#3a3a3c;padding-bottom:8px">${esc(w.hi(name))}</td></tr>
 ${[...groups]
   .map(
@@ -137,10 +158,23 @@ ${[...groups]
         .join(''),
   )
   .join('')}
-${more ? `<tr><td style="font-size:13px;color:#8e8e93;padding-top:12px">${esc(w.more(more))}</td></tr>` : ''}
+${more ? `<tr><td style="font-size:13px;color:#8e8e93;padding-top:12px">${esc(w.more(more, signed))}</td></tr>` : ''}
 <tr><td style="font-size:12px;color:#8e8e93;padding-top:24px">${esc(w.daily)} <a href="${esc(off)}" style="color:#8e8e93">${esc(w.stop)}</a>.</td></tr>
 </table></td></tr></table></body></html>`
   return { subject, text, html }
+}
+
+/**
+ * A digest's brand: only when every note it claimed — those it lists and
+ * those it counts as more — is one workspace's, and that workspace wears
+ * its own name. A letter from "Acme" listing another company's work would
+ * be Acme speaking for somebody else.
+ */
+export async function brandOfDigest(workspaceIds: string[]): Promise<Brand | null> {
+  const places = new Set(workspaceIds)
+  if (places.size !== 1) return null
+  const [only] = places
+  return asWorker((tx) => brandOf(tx, only!))
 }
 
 export async function sendDigests(): Promise<number> {
@@ -168,11 +202,18 @@ export async function sendDigests(): Promise<number> {
       }
       if (!items.length) continue
       const off = digestOffLink(person.actor_id)
-      const mail = digestLetter(person.name, items, more, off, language)
+      const brand = await brandOfDigest(notes.map((n) => n.workspace_id))
+      /* Only one workspace's notes, and it wears its own name: its links go
+         to its own domain when it has one. */
+      const own = brand && edition.hosts ? await asWorker((tx) => edition.hosts!.originOf(tx, notes[0]!.workspace_id)) : null
+      if (own) for (const it of items) if (it.url.startsWith(`${env.appUrl}/`)) it.url = own + it.url.slice(env.appUrl.length)
+      const mail = digestLetter(person.name, items, more, off, language, brand?.name ?? null)
+      /* From "Acme" alone, where branded: a digest goes only to the
+         workspace's own members, who chose to be mailed it. */
       /* The mail client's own "Unsubscribe" beside the sender, which it
          presses with a POST — RFC 8058 — rather than opening the link. */
       const headers = { 'List-Unsubscribe': `<${off}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }
-      if (await send({ to: person.email, ...mail, headers })) sent += 1
+      if (await send({ to: person.email, ...mail, headers, ...(brand ? { via: brand.name, bare: true } : {}) })) sent += 1
     } catch (e) {
       console.error('worker: a digest failed', e)
     }

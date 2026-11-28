@@ -523,6 +523,7 @@ function AttachmentView({ node, selected: picked, getPos, editor }: NodeViewProp
             quick={shown}
             name={name}
             from={box.current?.querySelector('img') ?? null}
+            pixels={pw && ph ? { w: pw, h: ph } : null}
             onClose={() => setOpen(false)}
           />,
           document.body,

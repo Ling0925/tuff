@@ -14,6 +14,12 @@ export const WORKSPACE_SETTINGS = say({
   symbol: ['Symbol', 'Symbole', '符号'],
   firstLetter: ['First letter', 'Première lettre', '首字母'],
   colour: ['Colour', 'Couleur', '颜色'],
+  /* On a plan that wears the workspace's own name and mark. */
+  branded: [
+    'Shared documents, feedback pages and emails show this name and picture instead of Tuff.',
+    'Les documents partagés, les pages de retours et les e-mails affichent ce nom et cette image à la place de Tuff.',
+    '共享文档、反馈页面和邮件将显示此名称和图片，而非 Tuff。',
+  ],
 
   creatingProjects: ['Creating projects', 'Création de projets', '创建项目'],
   creatingProjectsHint: [
