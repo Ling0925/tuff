@@ -59,7 +59,7 @@ export { PRIORITIES, PriorityMark, PRIORITY_SAID, PriorityPick } from './kit/pri
 export type { Priority } from './kit/priority.jsx'
 export { DuePick, DateButton, writtenDay, type RepeatField } from './kit/dates.jsx'
 export { RepeatMark } from './kit/repeat.jsx'
-export { CyclePick, Status } from './kit/status.jsx'
+export { CyclePick, Status, ListPick } from './kit/status.jsx'
 export type { Placed } from './kit/status.jsx'
 export { MentionedIn, readLinks } from './kit/links.jsx'
 export { SHOWING, SLIDING, useShown, Popover, Choice, HowLong } from './kit/popover.jsx'

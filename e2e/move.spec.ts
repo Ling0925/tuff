@@ -35,7 +35,21 @@ test('a task is moved to another project', async ({ page }) => {
     .click()
   await expect(dialog.getByTestId('move-task-plan')).toContainText(`The task itself moves to Other ${stamp}`, { timeout: 15_000 })
   await expect(dialog.getByTestId('move-task-plan')).toContainText('repeating chain stay behind')
-  await expect(dialog.getByTestId('move-task-list')).toHaveValue('')
+
+  /* Where in it is the product's own picker: the face says keeping the
+     task's own status, the menu is glass rows, and an answer can be made
+     and taken back. */
+  const listPick = dialog.getByTestId('move-task-list')
+  await expect(listPick).toContainText('Same status')
+  await listPick.click()
+  const statuses = page.locator('[data-list-menu] [data-status-pick]')
+  await expect(statuses.first()).toBeVisible()
+  await statuses.nth(1).click()
+  await expect(listPick).not.toContainText('Same status')
+  await listPick.click()
+  await page.locator('[data-status-pick="none"]').click()
+  await expect(listPick).toContainText('Same status')
+  await expect(dialog.getByTestId('move-task-plan')).toContainText('repeating chain stay behind')
 
   await dialog.getByTestId('move-task-go').click()
   await expect(dialog).toHaveCount(0, { timeout: 15_000 })
