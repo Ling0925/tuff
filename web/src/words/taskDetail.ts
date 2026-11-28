@@ -79,6 +79,38 @@ export const TASK_DETAIL = say({
   copy: ['Copy', 'Copier', '复制'],
   copying: ['Copying…', 'Copie…', '复制中…'],
   couldntCopy: ['Couldn’t copy the task. Try again.', 'Impossible de copier la tâche. Réessayez.', '无法复制任务，请重试。'],
+  /* The task itself in another project. */
+  moveTitle: ['Move to project…', 'Déplacer vers un projet…', '移动到项目…'],
+  moveManyTitle: [
+    (n: number) => `Move ${n} tasks to a project`,
+    (n: number) => `Déplacer ${n} tâches vers un projet`,
+    (n: number) => `移动 ${n} 个任务到项目`,
+  ],
+  moveThere: [
+    (p: string) => `The task itself moves to ${p}.`,
+    (p: string) => `La tâche elle-même est déplacée vers ${p}.`,
+    (p: string) => `任务本身将移动到 ${p}。`,
+  ],
+  moveComments: [
+    (n: number) => `${n === 1 ? '1 comment' : `${n} comments`} move with it.`,
+    (n: number) => `${n} commentaire${n === 1 ? '' : 's'} la suivent.`,
+    (n: number) => `${n} 条评论将一起移动。`,
+  ],
+  moveNotCarried: [
+    'Its sprint and repeating chain stay behind.',
+    'Son sprint et sa chaîne de répétition restent en arrière.',
+    '它的迭代和重复链不会随迁。',
+  ],
+  move: ['Move', 'Déplacer', '移动'],
+  moving: ['Moving…', 'Déplacement…', '移动中…'],
+  couldntMove: ['Couldn’t move the task. Try again.', 'Impossible de déplacer la tâche. Réessayez.', '无法移动任务，请重试。'],
+  moveNowhere: [
+    'There is no other project you can move tasks into.',
+    'Aucun autre projet ne vous permet d’y déplacer des tâches.',
+    '没有其他你有权限移入任务的项目。',
+  ],
+  movePick: ['Choose the project it is moving to.', 'Choisissez le projet de destination.', '选择要移动到的项目。'],
+  moveDefaultList: ['Default list', 'Liste par défaut', '默认列表'],
   /* The facts at the head of the PDF. */
   done: ['Done', 'Terminée', '已完成'],
   assignedTo: [(who: string) => `Assigned to ${who}`, (who: string) => `Attribuée à ${who}`, (who: string) => `已指派给 ${who}`],

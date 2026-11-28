@@ -24,9 +24,12 @@ export function taskMenu({
   setTriageStart,
   duplicate,
   remove,
+  startMove,
 }: Pick<TasksProps, 'projectId'> &
   Pick<TaskData, 'tasks' | 'setOpen' | 'lists' | 'move'> &
-  Pick<TaskActions, 'onTask' | 'setOnTask' | 'setTriageStart' | 'duplicate' | 'remove'>): React.ReactNode {
+  Pick<TaskActions, 'onTask' | 'setOnTask' | 'setTriageStart' | 'duplicate' | 'remove'> & {
+    startMove: (id: string) => void
+  }): React.ReactNode {
   return (
     onTask && (
       <div data-over data-task-menu role="menu" className="fixed z-40" style={{ left: inWindow(onTask.x, 180), top: onTask.y, width: 180 }}>
@@ -96,6 +99,17 @@ export function taskMenu({
               {ACTS.duplicate}
             </button>
           )}
+          <button
+            role="menuitem"
+            data-row
+            data-testid="task-move"
+            onClick={() => startMove(onTask.id)}
+            className="flex w-full items-center gap-3 px-3 text-left text-base text-ink"
+            style={{ height: 'var(--row-h)' }}
+          >
+            <Icon name="chevR" size={16} className="text-ink-2" />
+            {ACTS.moveToProject}
+          </button>
           <button
             role="menuitem"
             data-row

@@ -548,10 +548,46 @@ const WRITINGS = {
 
 /** The two things done to anything: change it, or throw it away. */
 const ACTSES = {
-  en: { edit: 'Edit', delete: 'Delete', duplicate: 'Duplicate', undo: 'Undo', view: 'View', list: 'List', close: 'Close' },
-  es: { edit: 'Editar', delete: 'Eliminar', duplicate: 'Duplicar', undo: 'Deshacer', view: 'Vista', list: 'Lista', close: 'Cerrar' },
-  fr: { edit: 'Modifier', delete: 'Supprimer', duplicate: 'Dupliquer', undo: 'Annuler', view: 'Vue', list: 'Liste', close: 'Fermer' },
-  zh: { edit: '编辑', delete: '删除', duplicate: '复制', undo: '撤销', view: '查看', list: '列表', close: '关闭' },
+  en: {
+    edit: 'Edit',
+    delete: 'Delete',
+    duplicate: 'Duplicate',
+    undo: 'Undo',
+    view: 'View',
+    list: 'List',
+    close: 'Close',
+    moveToProject: 'Move to project…',
+  },
+  es: {
+    edit: 'Editar',
+    delete: 'Eliminar',
+    duplicate: 'Duplicar',
+    undo: 'Deshacer',
+    view: 'Vista',
+    list: 'Lista',
+    close: 'Cerrar',
+    moveToProject: 'Mover al proyecto…',
+  },
+  fr: {
+    edit: 'Modifier',
+    delete: 'Supprimer',
+    duplicate: 'Dupliquer',
+    undo: 'Annuler',
+    view: 'Vue',
+    list: 'Liste',
+    close: 'Fermer',
+    moveToProject: 'Déplacer vers un projet…',
+  },
+  zh: {
+    edit: '编辑',
+    delete: '删除',
+    duplicate: '复制',
+    undo: '撤销',
+    view: '查看',
+    list: '列表',
+    close: '关闭',
+    moveToProject: '移动到项目…',
+  },
 } as const
 
 /**

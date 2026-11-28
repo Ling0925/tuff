@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { ACTS, FACTS, HEADS, MAKE } from '../data/words.js'
 import { TASKS as W } from '../words/tasks.js'
 import { NewButton } from './New.jsx'
@@ -24,6 +24,7 @@ import { useUndoOffer } from '../data/undo.js'
 import { useBoardLayout } from './tasks/useBoardLayout.js'
 import { useBoardMoves } from './tasks/useBoardMoves.js'
 import { useTaskData } from './tasks/useTaskData.js'
+import { MoveTasksDialog } from './MoveTasks.jsx'
 export { given } from './tasks/model.jsx'
 export type { Task } from './tasks/model.jsx'
 export { readShut, readPanel, readFolds, readShows } from './tasks/view.jsx'
@@ -188,6 +189,7 @@ export function Tasks({
     gone,
     back,
   })
+  const [moving, setMoving] = useState<string[] | null>(null)
   const { parts, partsShown, allLabels, setAllLabels, foldKey, shut, bands, walkable, indexOf, at, setAt, take } = useListShape({
     projectId,
     group,
@@ -361,7 +363,22 @@ export function Tasks({
       {/* Where the pointer was, not where the row is: a menu opened by a
           right-click belongs under the hand that opened it. */}
       {onTask && <Over onClose={() => setOnTask(null)} />}
-      {taskMenu({ projectId, tasks, setOpen, lists, move, onTask, setOnTask, setTriageStart, duplicate, remove })}
+      {taskMenu({
+        projectId,
+        tasks,
+        setOpen,
+        lists,
+        move,
+        onTask,
+        setOnTask,
+        setTriageStart,
+        duplicate,
+        remove,
+        startMove: (id) => {
+          setOnTask(null)
+          setMoving([id])
+        },
+      })}
       {/*
         The way back, where a thing that just happened belongs.
         
@@ -370,6 +387,19 @@ export function Tasks({
         carries the title, because "Deleted" alone makes somebody check
         which one — and checking is the thing the toast exists to spare.
       */}
+      {moving && (
+        <MoveTasksDialog
+          taskIds={moving}
+          projectId={projectId}
+          onClose={() => setMoving(null)}
+          onMoved={(ids) => {
+            const goneIds = new Set(ids)
+            setTasks((prev) => (prev ?? []).filter((t) => !goneIds.has(t.id) && !goneIds.has(t.parent_id ?? '')))
+            setTaken(new Set())
+            setMoving(null)
+          }}
+        />
+      )}
       <UndoBar
         offer={undo && !elsewhere ? { key: undo.ids.join(), said: undo.said } : null}
         onUndo={() => void putBack()}
@@ -491,6 +521,7 @@ export function Tasks({
         makeLabel,
         sharedLabels,
         toAll,
+        startMove: (ids) => setMoving(ids),
       })}
 
       {listView({

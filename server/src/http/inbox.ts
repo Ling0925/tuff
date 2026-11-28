@@ -463,9 +463,12 @@ export function feedLines(
              to_char(e.at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as at_key,
              /* A copy says where it came from only to whoever can see
                 that project: its id and number are not the others' to have. */
-             case when e.action = 'task.copy'
+             case when e.action in ('task.copy', 'task.move')
                        and not ((e.meta->>'from_project_id')::uuid in (select visible_projects()))
                   then e.meta - 'from_project_id' - 'from_number' - 'from_task_id'
+                  when e.action = 'task.moved'
+                       and not ((e.meta->>'to_project_id')::uuid in (select visible_projects()))
+                  then e.meta - 'to_project_id' - 'to_number'
                   else e.meta end as meta,
              e.actor_id, a.name as actor_name, a.avatar_key as actor_avatar,
              e.project_id, p.name as project_name,
@@ -487,7 +490,7 @@ export function feedLines(
              /* A thing removed since is named as it was when it went —
                 its own row is gone from the reader's sight; a file deleted
                 forever too. */
-             coalesce(o.title, case when e.action like '%.delete' or e.action = 'file.purge' then e.meta->>'title' end) as object_title,
+             coalesce(o.title, case when e.action like '%.delete' or e.action in ('file.purge', 'task.moved') then e.meta->>'title' end) as object_title,
              o.number as object_number
       from activity_event e
       join actor a on a.id = e.actor_id

@@ -149,6 +149,8 @@ export function alsoSaid(e: Event): string | null {
 
   if (e.action === 'task.copy') parts.push(DETAIL.copiedFrom(handleIn(m.from_project_id, m.from_number)))
   if (e.action === 'task.copied') parts.push(DETAIL.copiedTo(handleIn(m.to_project_id, m.to_number)))
+  if (e.action === 'task.move') parts.push(DETAIL.copiedFrom(handleIn(m.from_project_id, m.from_number)))
+  if (e.action === 'task.moved') parts.push(DETAIL.copiedTo(handleIn(m.to_project_id, m.to_number)))
   /* The next one of a series names the one it came after, and its date. */
   if (e.action === 'task.repeat') {
     if (typeof m.from_number === 'number') parts.push(DETAIL.repeatedFrom(handleIn(e.project_id, m.from_number)))
@@ -156,7 +158,7 @@ export function alsoSaid(e: Event): string | null {
   }
   if (e.action === 'task.update' && m.repeat && typeof m.repeat === 'object') parts.push(repeatSaid(m.repeat as Repeat))
   if (said(m.moved_to)) {
-    parts.push(said(m.moved_from) ? DETAIL.movedFromTo(said(m.moved_to)!, said(m.moved_from)!) : DETAIL.movedTo(said(m.moved_to)!))
+    parts.push(said(m.moved_from) ? DETAIL.movedFromTo(said(m.moved_to)!, said(m.moved_from)!) : DETAIL.copiedTo(said(m.moved_to)!))
   }
   if (typeof m.nested_under === 'number') parts.push(DETAIL.under(handleIn(e.project_id, m.nested_under)))
   else if (typeof m.nested_from === 'number') parts.push(DETAIL.outOf(handleIn(e.project_id, m.nested_from)))
