@@ -11,6 +11,28 @@ import { readPanel, PANEL_KEY, readShows, type Shows, showsKey, readFolds, readS
 import { type TasksProps } from '../Tasks.jsx'
 
 /**
+ * Which drawing the address asks for, at this width.
+ *
+ * The list, the board, or the board with a column per member. The board's
+ * columns are its grouping, so the one answer to "grouped by what" decides
+ * them: grouped by assignee (`?group=who`), the board's columns are the
+ * members. On a desk only: a narrower window draws the lists for it and
+ * leaves the address as it is — widen the window and the members come back.
+ *
+ * The labels board is a drawing of its own, not a way of grouping the
+ * board, and it is drawn at every width. Its columns scroll sideways
+ * exactly as the status board's do, which the narrow spec already promises
+ * of the board (`docs/specs/narrow.md`); holding it to a desk meant
+ * pressing Labels on a phone changed the address and nothing else — the
+ * screen under it stayed the list, and the switch read as broken.
+ */
+export function viewOf(mode: string, group: string, wide: boolean): 'list' | 'board' | 'people' | 'labels' {
+  if (mode === 'labels') return 'labels'
+  if (mode === 'board') return group === 'who' && wide ? 'people' : 'board'
+  return 'list'
+}
+
+/**
  * What the screen reads and how it is being looked at: the tasks, people,
  * lists and cycles; the view, the panel, what a row shows, which groups and
  * columns are folded, which task is open; and the filters that decide which
@@ -36,17 +58,8 @@ export function useTaskData({
      from the last answer, so coming back to this tab is not a cold start —
      see `data/memory.ts`. */
   const [tasks, setTasks] = useState<Task[] | null>(() => recall(`tasks:${projectId}`))
-  /*
-   * Which drawing: the list, the board, or the board with a column per
-   * member. The board's columns are its
-   * grouping, so the one answer to "grouped by what" decides them: grouped
-   * by assignee (`?group=who`), the board's columns are the members. On a
-   * desk only: a narrower window draws the lists for it and leaves the
-   * address as it is — widen the window and the members come back.
-   */
   const wide = useWide()
-  const view: 'list' | 'board' | 'people' | 'labels' =
-    mode === 'labels' && wide ? 'labels' : mode === 'board' ? (group === 'who' && wide ? 'people' : 'board') : 'list'
+  const view = viewOf(mode, group, wide)
   /* What a row or a card shows is kept for the list and the board; the
      people view draws the board's cards, so it shares the board's answers. */
   const drawing = view === 'list' ? 'list' : 'board'

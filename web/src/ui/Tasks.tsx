@@ -422,6 +422,13 @@ export function Tasks({
           and Board; a board of members stays a way of drawing the board, chosen
           in its View menu.
         */}
+        {/*
+          Glyphs below 640, the open one keeping its word. Three segments with
+          their words beside the tab menu and the view button are wider than
+          a phone's bar — the third word was the one that tipped it over —
+          and the bar's own rule is marks without words there
+          (`docs/specs/tool-bar.md`), as the Docs filter already does.
+        */}
         <Segments
           items={[
             { key: 'list', label: ACTS.list, icon: 'list' as const, testId: 'view-list-mode' },
@@ -430,6 +437,7 @@ export function Tasks({
           ]}
           value={view === 'list' ? 'list' : view === 'labels' ? 'labels' : 'board'}
           onPick={(k) => onNavigate({ mode: k })}
+          glyphsWhenNarrow
         />
         <View
           on={view}
