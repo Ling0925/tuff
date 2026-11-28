@@ -5,7 +5,8 @@ import { TASK_DETAIL as W } from '../words/taskDetail.js'
 import { TASKS } from '../words/tasks.js'
 import { api } from '../data/api.js'
 import { recall } from '../data/memory.js'
-import { Button, Dialog, Dot, ProjectPick, Select } from './kit.jsx'
+import { Button, Dialog, Dot, ListPick, ProjectPick } from './kit.jsx'
+import { Icon, type IconName, ProjectMark as Mark, markOf } from './icons.jsx'
 
 type TaskList = { id: string; name: string; finishes: boolean; intake: boolean; icon: string; color?: string | null }
 type Moved = TaskMoved
@@ -115,21 +116,34 @@ export function MoveTasksDialog({
   }
 
   const names = (people: { name: string }[]) => people.map((p) => p.name).join(', ')
-  const lines =
+  /* The plan as rows rather than as bare sentences: at each line's head
+     the mark of what it is about — the project's own for where the task
+     goes, the status's ring for where it lands, a small glyph for the
+     rest — and what the move does not carry in the quieter ink, so the
+     panel reads as what happens and then what does not. */
+  type PlanRow = { mark: React.ReactNode; text: string; tone?: 'strong' | 'dim' }
+  const glyph = (name: IconName) => <Icon name={name} size={14} className="text-ink-3" />
+  const planRows: PlanRow[] =
     target && plan && plan !== 'failed'
-      ? [
-          W.moveThere(target.name),
-          plan.list_name ? W.copyList(plan.list_name) : null,
-          plan.list_created ? W.moveStatusCreated(plan.list_name ?? '') : null,
-          plan.subtasks > 0 ? W.copyParts(plan.subtasks) : null,
-          plan.comments > 0 ? W.moveComments(plan.comments) : null,
-          plan.files > 0 ? W.copyFiles(plan.files) : null,
-          plan.labels_created.length ? W.moveLabelsCreated(plan.labels_created.join(', ')) : null,
-          plan.labels_dropped.length ? W.copyLabels(plan.labels_dropped.join(', ')) : null,
-          plan.assignees_dropped.length ? W.copyUnassigned(names(plan.assignees_dropped), target.name) : null,
-          W.moveNotCarried,
-          plan.github_to ? W.copyGithubTo(target.name) : null,
-        ].filter((l): l is string => Boolean(l))
+      ? (
+          [
+            { mark: <Mark {...markOf(target)} size={16} />, text: W.moveThere(target.name), tone: 'strong' },
+            plan.list_name ? { mark: <Dot icon={plan.list_icon} color={plan.list_color} />, text: W.copyList(plan.list_name) } : null,
+            plan.list_created
+              ? { mark: <Dot icon={plan.list_icon} color={plan.list_color} />, text: W.moveStatusCreated(plan.list_name ?? '') }
+              : null,
+            plan.subtasks > 0 ? { mark: glyph('list'), text: W.copyParts(plan.subtasks) } : null,
+            plan.comments > 0 ? { mark: glyph('bubble'), text: W.moveComments(plan.comments) } : null,
+            plan.files > 0 ? { mark: glyph('clip'), text: W.copyFiles(plan.files) } : null,
+            plan.labels_created.length ? { mark: glyph('tag'), text: W.moveLabelsCreated(plan.labels_created.join(', ')) } : null,
+            plan.labels_dropped.length ? { mark: glyph('tag'), text: W.copyLabels(plan.labels_dropped.join(', ')), tone: 'dim' } : null,
+            plan.assignees_dropped.length
+              ? { mark: glyph('person'), text: W.copyUnassigned(names(plan.assignees_dropped), target.name), tone: 'dim' }
+              : null,
+            { mark: glyph('repeat'), text: W.moveNotCarried, tone: 'dim' },
+            plan.github_to ? { mark: glyph('github'), text: W.copyGithubTo(target.name) } : null,
+          ] as (PlanRow | null)[]
+        ).filter((r): r is PlanRow => Boolean(r))
       : []
 
   const shownList = listId
@@ -173,17 +187,15 @@ export function MoveTasksDialog({
             {target && (
               <>
                 <span className="text-sm text-ink-2">{TASKS.columnsLists}</span>
-                <div className="flex min-w-px items-center gap-1.5">
-                  <Dot icon={statusIcon} color={statusColor} />
-                  <Select
+                <div className="flex min-w-px items-center">
+                  <ListPick
                     testId="move-task-list"
-                    label={TASKS.columnsLists}
-                    value={listId ?? ''}
-                    onPick={(id) => setListId(id || null)}
-                    options={[
-                      { id: '', label: W.moveSameStatus },
-                      ...lists.filter((l) => !l.intake).map((l) => ({ id: l.id, label: l.name })),
-                    ]}
+                    lists={lists.filter((l) => !l.intake)}
+                    value={listId}
+                    noneLabel={W.moveSameStatus}
+                    faceIcon={statusIcon}
+                    faceColor={statusColor}
+                    onPick={(id) => setListId(id)}
                   />
                 </div>
               </>
@@ -191,7 +203,7 @@ export function MoveTasksDialog({
           </div>
           {/* What the server says the first move will be. This grows with
               what there is to say rather than keeping a blank panel open. */}
-          <div data-testid="move-task-plan" className="flex flex-col gap-1 border-t border-line pt-3 text-sm leading-5 text-ink-2">
+          <div data-testid="move-task-plan" className="flex flex-col border-t border-line pt-3 text-sm leading-5 text-ink-2">
             {!target ? (
               <p className="text-ink-3">{W.movePick}</p>
             ) : plan === 'failed' ? (
@@ -199,7 +211,23 @@ export function MoveTasksDialog({
             ) : !plan ? (
               <p className="text-ink-3">{W.moveReading}</p>
             ) : (
-              lines.map((l) => <p key={l}>{l}</p>)
+              /* One ground for the whole of it, the grey a group of rows is
+                 printed on: read as a panel rather than as lines left
+                  hanging under the hairline. */
+              <div className="flex flex-col gap-1.5 px-3 py-2.5 bg-panel" style={{ borderRadius: 'var(--r-card)' }}>
+                {planRows.map((r) => (
+                  <div key={r.text} className="flex items-start gap-2.5">
+                    {/* A column of marks the width of the widest of them, so
+                        the sentences start on one line whatever they are
+                        about; centred on the first line of the sentence,
+                        which is where the eye looks for it. */}
+                    <span aria-hidden className="flex h-5 w-[18px] shrink-0 items-center justify-center">
+                      {r.mark}
+                    </span>
+                    <p className={`min-w-px flex-1 ${r.tone === 'dim' ? 'text-ink-3' : r.tone === 'strong' ? 'text-ink' : ''}`}>{r.text}</p>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>

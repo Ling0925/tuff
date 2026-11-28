@@ -274,3 +274,141 @@ export function Status({
     </>
   )
 }
+
+/**
+ * Where the work will land, chosen from a chip that already says it.
+ *
+ * The ring on a task's row opens this same menu; here the answer is one
+ * half of a question — which project, and where in it — so the face is a
+ * pill beside the project's, dot and name and the two-sided arrow, and the
+ * two read as a pair. It was the platform's own select: shut, a quiet
+ * pill; open, the operating system's rectangle over a glass product, with
+ * the corners nothing else here has.
+ */
+export function ListPick({
+  lists,
+  value,
+  noneLabel,
+  faceIcon,
+  faceColor,
+  onPick,
+  testId,
+}: {
+  lists: Placed[]
+  /** The chosen list, or null for the answer that chooses nothing. */
+  value: string | null
+  /** What choosing nothing is called — the first row, and the face's word
+      for it. Left out, there is no such row. */
+  noneLabel?: string
+  /* What the face's dot draws while nothing is chosen: the status the work
+     would land in, which the rows cannot say — the one it lands in may not
+     exist yet. A choice made, the dot is the chosen list's own. */
+  faceIcon: string | null
+  faceColor?: string | null
+  onPick: (id: string | null) => void
+  testId?: string
+}) {
+  const [at, setAt] = useState<{ x: number; y: number; r: number } | null>(null)
+  const face = useRef<HTMLButtonElement>(null)
+  /* Choosing nothing first, so the digit that takes a choice back is
+     always 1 — the order the assignee menu's Nobody keeps, and for the
+     same reason. */
+  const rows: (Placed | null)[] = noneLabel ? [null, ...lists] : lists
+  const chosen = lists.find((l) => l.id === value) ?? null
+  const text = chosen?.name ?? noneLabel ?? ''
+
+  useEffect(() => {
+    if (!at) return
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') return setAt(null)
+      /* The digits are the shortcut for the menu as it stands — `WhoPick`. */
+      const n = Number(e.key)
+      if (!Number.isInteger(n) || n < 1 || n > Math.min(rows.length, 9)) return
+      e.preventDefault()
+      setAt(null)
+      onPick(rows[n - 1]?.id ?? null)
+    }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  })
+
+  return (
+    <>
+      <button
+        ref={face}
+        type="button"
+        data-testid={testId}
+        data-list-pick={value ?? ''}
+        /* The answer is in the name, as the project chip's is: a native
+           select says what is chosen when it is read out, and this is
+           what stands in for one. */
+        aria-label={W.statusIs(text)}
+        aria-haspopup="menu"
+        aria-expanded={at !== null}
+        data-control
+        onClick={() => {
+          if (at) return setAt(null)
+          const box = face.current?.getBoundingClientRect()
+          if (box) setAt({ x: box.left, y: box.bottom, r: box.right })
+        }}
+        className="flex h-7 max-w-[280px] min-w-px shrink items-center gap-2 pr-2 pl-1 text-sm font-medium bg-track text-ink"
+        style={{
+          /* A round end round a round mark, as the project chip's corner
+             runs parallel to its square one. */
+          borderRadius: 'var(--r-pill)',
+          letterSpacing: 'var(--track-body)',
+        }}
+      >
+        <Dot icon={chosen?.icon ?? faceIcon} color={chosen ? chosen.color : faceColor} />
+        <span className="truncate">{text}</span>
+        <Icon name="updown" size={12} className="shrink-0 text-ink-3" />
+      </button>
+      {/* The screen is the menu's while it is open — `Over`. Laid down
+          before the menu, so the menu is the one thing above it. */}
+      {at && <Over onClose={() => setAt(null)} />}
+      {at && (
+        <div
+          data-over
+          data-list-menu
+          role="menu"
+          className="fixed z-40"
+          style={{
+            left: inWindow(at.x, 220, at.r),
+            top: at.y + 6 + rows.length * 36 > window.innerHeight ? undefined : at.y + 6,
+            bottom: at.y + 6 + rows.length * 36 > window.innerHeight ? window.innerHeight - at.y + 26 : undefined,
+            width: 220,
+          }}
+        >
+          {/* Glass, like the status menu and for the same reason: `glass.md`
+              names floating panels among the places it goes. */}
+          <Glass data-fluid data-menu radius={16} className="overflow-hidden py-1">
+            <Fluid />
+            {rows.map((l, i) => (
+              <button
+                key={l?.id ?? 'none'}
+                type="button"
+                role="menuitemradio"
+                data-row
+                data-status-pick={l?.id ?? 'none'}
+                aria-checked={(l?.id ?? null) === value}
+                onClick={() => {
+                  setAt(null)
+                  onPick(l?.id ?? null)
+                }}
+                className="flex w-full items-center gap-3 px-3 text-left text-base"
+                style={{ height: 'var(--row-h)', color: l ? 'var(--ink)' : 'var(--ink-2)' }}
+              >
+                {/* Choosing nothing has no mark: it is the absence of a
+                    choice, drawn as the space a choice would fill. */}
+                {l ? <Dot icon={l.icon} color={l.color} /> : <span className="w-[18px]" />}
+                <span className="min-w-px flex-1 truncate">{l?.name ?? noneLabel}</span>
+                {(l?.id ?? null) === value && <Icon name="tasks" size={14} className="text-ink-2" />}
+                {i < 9 && <span className="shrink-0 text-sm text-ink-3">{i + 1}</span>}
+              </button>
+            ))}
+          </Glass>
+        </div>
+      )}
+    </>
+  )
+}

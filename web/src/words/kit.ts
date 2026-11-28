@@ -68,6 +68,7 @@ export const KIT = say({
   ],
   agentNotYet: ['Agent · not connected yet', 'Agent · pas encore connecté', '代理 · 尚未连接'],
   projectIs: [(name: string) => `Project: ${name}`, (name: string) => `Projet : ${name}`, (name: string) => `项目：${name}`],
+  statusIs: [(name: string) => `Status: ${name}`, (name: string) => `Statut : ${name}`, (name: string) => `状态：${name}`],
   chooseAProject: ['Choose a project', 'Choisir un projet', '选择项目'],
   findAProject: ['Find a project', 'Trouver un projet', '查找项目'],
   noMatchingProjects: ['No matching projects.', 'Aucun projet correspondant.', '没有匹配的项目。'],
