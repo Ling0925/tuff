@@ -128,11 +128,13 @@ export function MoveTasksDialog({
       ? (
           [
             { mark: <Mark {...markOf(target)} size={16} />, text: W.moveThere(target.name), tone: 'strong' },
-            plan.list_name ? { mark: <Dot icon={plan.list_icon} color={plan.list_color} />, text: W.copyList(plan.list_name) } : null,
-            plan.list_created
-              ? { mark: <Dot icon={plan.list_icon} color={plan.list_color} />, text: W.moveStatusCreated(plan.list_name ?? '') }
+            plan.list_name
+              ? {
+                  mark: <Dot icon={plan.list_icon} color={plan.list_color} />,
+                  text: plan.list_created ? W.moveStatusCreated(plan.list_name) : W.copyList(plan.list_name),
+                }
               : null,
-            plan.subtasks > 0 ? { mark: glyph('list'), text: W.copyParts(plan.subtasks) } : null,
+            plan.subtasks > 0 ? { mark: glyph('list'), text: W.moveParts(plan.subtasks) } : null,
             plan.comments > 0 ? { mark: glyph('bubble'), text: W.moveComments(plan.comments) } : null,
             plan.files > 0 ? { mark: glyph('clip'), text: W.copyFiles(plan.files) } : null,
             plan.labels_created.length ? { mark: glyph('tag'), text: W.moveLabelsCreated(plan.labels_created.join(', ')) } : null,
