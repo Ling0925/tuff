@@ -118,7 +118,11 @@ export function rowRenderer({
           if (taken.size > 0) return setTaken(new Set())
           setOpen(t.id)
         }}
-        className="group relative flex items-center gap-3 py-3 pr-4"
+        /* The ring and the facts belong with the title. Centre them in a
+           row whose excerpt wraps and they stand halfway down the words it
+           added; rows with no excerpt hold only that line, where start and
+           centre are the same. */
+        className="group relative flex items-start gap-3 py-3 pr-4"
         style={{
           // Indented by the width of the ring and its gap, so a part's title
           // starts where its parent's title starts and the column of titles
@@ -197,7 +201,7 @@ export function rowRenderer({
               data-task-excerpt
               data-text
               title={t.excerpt}
-              className="mt-0.5 truncate text-sm leading-5"
+              className="mt-0.5 line-clamp-2 text-sm leading-5 [overflow-wrap:anywhere]"
               style={{ color: t.completed_at ? 'var(--ink-3)' : 'var(--ink-2)', letterSpacing: 'var(--track-body)' }}
             >
               {t.excerpt}
