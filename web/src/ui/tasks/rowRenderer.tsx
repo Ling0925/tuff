@@ -118,7 +118,11 @@ export function rowRenderer({
           if (taken.size > 0) return setTaken(new Set())
           setOpen(t.id)
         }}
-        className="group relative flex items-center gap-3 py-3 pr-4"
+        /* The ring and the facts belong with the title. Centre them in a
+           row whose excerpt wraps and they stand halfway down the words it
+           added; rows with no excerpt hold only that line, where start and
+           centre are the same. */
+        className="group relative flex items-start gap-3 py-3 pr-4"
         style={{
           // Indented by the width of the ring and its gap, so a part's title
           // starts where its parent's title starts and the column of titles
@@ -134,36 +138,37 @@ export function rowRenderer({
         {/* The ring shows where it is and sets it. The list is the status,
             so the thing that draws it is the thing that changes it. */}
         <Status lists={lists} value={t.list_id} said={t.title} disabled={!canWrite} onPick={(into) => move(t, into)} />
-        <span className="flex min-w-px flex-1 items-center gap-2">
-          <button
-            data-open-task
-            /* A modifier means the row is being taken, not opened — and the
+        <span className="flex min-w-px flex-1 flex-col justify-center">
+          <span className="flex min-w-px items-center gap-2">
+            <button
+              data-open-task
+              /* A modifier means the row is being taken, not opened — and the
                title is most of the row, so this is where most of those
                presses land. The row above does the taking.
                `docs/specs/many-at-once.md`. */
-            onClick={(e) => {
-              if (e.metaKey || e.ctrlKey || e.shiftKey) return
-              setOpen(t.id)
-            }}
-            /* Finished work is quieter, never struck out. A line through a
+              onClick={(e) => {
+                if (e.metaKey || e.ctrlKey || e.shiftKey) return
+                setOpen(t.id)
+              }}
+              /* Finished work is quieter, never struck out. A line through a
                title is drawn over the words themselves — the one thing on
                the row somebody might still be reading — and it says
                "cancelled" as readily as it says "done". The ring beside it
                has already said which, and the grey says it again. */
-            /* A title is content, not a label: it is the one thing on this
+              /* A title is content, not a label: it is the one thing on this
                row somebody copies — into a branch name, a message, a
                commit. The row is a link, so without this it would lose
                selection with the rest of the chrome. */
-            data-text
-            className="min-w-px truncate text-left text-base"
-            style={{
-              color: t.completed_at ? 'var(--ink-3)' : 'var(--ink)',
-              letterSpacing: 'var(--track-body)',
-            }}
-          >
-            {t.title}
-          </button>
-          {/*
+              data-text
+              className="min-w-px truncate text-left text-base"
+              style={{
+                color: t.completed_at ? 'var(--ink-3)' : 'var(--ink)',
+                letterSpacing: 'var(--track-body)',
+              }}
+            >
+              {t.title}
+            </button>
+            {/*
             How much of it is done, against the title rather than out in the
             columns.
             
@@ -172,24 +177,36 @@ export function rowRenderer({
             fact filed next to a date. Out on the right it needed a column
             of its own that most rows had nothing to put in.
           */}
-          {mine.length > 0 && (
-            <span data-parts className="shrink-0 text-base tabular-nums text-ink-3">
-              {closed}/{mine.length}
-            </span>
-          )}
-          {/* What it waits on, against the title for the reason the count
+            {mine.length > 0 && (
+              <span data-parts className="shrink-0 text-base tabular-nums text-ink-3">
+                {closed}/{mine.length}
+              </span>
+            )}
+            {/* What it waits on, against the title for the reason the count
               is: it is about whether this can be started, which is part of
               reading what it is. It gives way
               before the title does. */}
-          {waitingSaid(t) && (
-            <span className="flex min-w-0 shrink-[4]">
-              <Waiting said={waitingSaid(t)!} />
-            </span>
-          )}
-          {/* What an agent says it is doing on it, after the title and
+            {waitingSaid(t) && (
+              <span className="flex min-w-0 shrink-[4]">
+                <Waiting said={waitingSaid(t)!} />
+              </span>
+            )}
+            {/* What an agent says it is doing on it, after the title and
               giving way before it does — one line, so the row is the same
               height with it and without it. */}
-          <AgentDoing taskId={t.id} people={people} className="shrink-[4]" />
+            <AgentDoing taskId={t.id} people={people} className="shrink-[4]" />
+          </span>
+          {t.excerpt && (
+            <span
+              data-task-excerpt
+              data-text
+              title={t.excerpt}
+              className="mt-0.5 line-clamp-2 text-sm leading-5 [overflow-wrap:anywhere]"
+              style={{ color: t.completed_at ? 'var(--ink-3)' : 'var(--ink-2)', letterSpacing: 'var(--track-body)' }}
+            >
+              {t.excerpt}
+            </span>
+          )}
         </span>
 
         {/*

@@ -4152,6 +4152,7 @@ data class TaskInProject (
     @SerialName("ends_at")
     val endsAt: String? = null,
 
+    val excerpt: String? = null,
     val id: String,
     val labels: List<LabelOnTask>? = null,
 

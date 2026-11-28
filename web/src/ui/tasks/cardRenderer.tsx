@@ -196,6 +196,21 @@ export function cardRenderer({
           </div>
         )}
 
+        {t.excerpt && (
+          /* In full, as supporting text: the row read already bounds it at
+             two hundred and forty characters, and two lines cut most of the
+             words the card is there to say. */
+          <span
+            data-task-excerpt
+            data-text
+            title={t.excerpt}
+            className="mt-1.5 block text-sm leading-5 [overflow-wrap:anywhere]"
+            style={{ color: t.completed_at ? 'var(--ink-3)' : 'var(--ink-2)', letterSpacing: 'var(--track-body)' }}
+          >
+            {t.excerpt}
+          </span>
+        )}
+
         {/*
           What is true about it, as chips.
           
